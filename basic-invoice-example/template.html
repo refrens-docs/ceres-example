@@ -10,7 +10,7 @@
     <div class="info-section invoice-details">
       <h3>Invoice Details</h3>
       <p>
-        <span class="meta-label">{{customLabels.invoiceNumber}}:</span>
+        <span class="meta-label">{{customLabels.invoiceNumber}}</span>
         <strong>{{invoiceNumber}}</strong>
       </p>
       <p>
@@ -33,7 +33,7 @@
       <h3>{{customLabels.billedBy}}</h3>
       <p><strong>{{billedBy.name}}</strong></p>
       <p>
-        {{billedBy.street}}<br />{{billedBy.city}}, {{billedBy.state}} -
+        {{billedBy.street}}<br />{{billedBy.city}}, {{billedBy.state}}
         {{billedBy.pincode}}<br />{{billedBy.country}}
       </p>
       {{#billedBy.vatNumber}}
@@ -48,7 +48,7 @@
       <h3>{{customLabels.billedTo}}</h3>
       <p><strong>{{billedTo.name}}</strong></p>
       <p>
-        {{billedTo.street}}<br />{{billedTo.city}}, {{billedTo.state}} -
+        {{billedTo.street}}<br />{{billedTo.city}}, {{billedTo.state}} 
         {{billedTo.pincode}}<br />{{billedTo.country}}
       </p>
       {{#billedTo.gstin}}
@@ -119,7 +119,8 @@
       <h3>{{customLabels.notes}}</h3>
       <p>{{notes}}</p>
     </div>
-    {{/notes}} {{#terms}}
+    {{/notes}}
+    {{#terms.length}}
     <div class="terms-modern-block">
       <h3>{{customLabels.terms}}</h3>
       <ul>
@@ -128,7 +129,7 @@
         {{/terms}}
       </ul>
     </div>
-    {{/terms}}
+    {{/terms.length}}
   </div>
 
   <div class="invoice-footer-modern">
