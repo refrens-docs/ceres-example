@@ -7,7 +7,6 @@ function decodeBase64(encodedString) {
     // The original URL should be a valid URL string *before* Base64 encoding.
     return atob(encodedString);
   } catch (e) {
-    console.error("Failed to decode Base64 string:", e);
     return null;
   }
 }
@@ -148,8 +147,8 @@ const mapDataToTemplateModel = (apiData) => {
     notes: apiData.notes || "",
     terms:
       Array.isArray(apiData.terms) &&
-        apiData.terms[0] &&
-        Array.isArray(apiData.terms[0].terms)
+      apiData.terms[0] &&
+      Array.isArray(apiData.terms[0].terms)
         ? apiData.terms[0].terms
         : [],
 
@@ -167,28 +166,18 @@ async function renderDocument() {
 
   const outputDiv = document.getElementById("documentOutput");
 
-  console.log("Attempting to render document...");
-  console.log("Template Path from URL:", templatePath);
-  console.log("Encoded API URL from URL:", encodedApiUrl);
-
   if (!templatePath) {
     outputDiv.innerHTML = `<div class="error-message">Error: 'template' query parameter is missing. Please specify a template directory (e.g., ?template=basic-invoice-example).</div>`;
-    console.error("Validation Error: 'template' query parameter is missing.");
     return;
   }
 
   if (!allowedTemplates.includes(templatePath)) {
     outputDiv.innerHTML = `<div class="error-message">Error: Invalid or unpermitted template specified.</div>`;
-    console.error(
-      "Validation Error: Invalid or unpermitted template:",
-      templatePath,
-    );
     return;
   }
 
   if (!encodedApiUrl) {
     outputDiv.innerHTML = `<div class="error-message">Error: 'apiUrl' query parameter is missing or empty. Please provide a Base64 encoded API URL.</div>`;
-    console.error("Validation Error: 'apiUrl' query parameter is missing.");
     return;
   }
 
@@ -196,12 +185,10 @@ async function renderDocument() {
 
   if (!API_ENDPOINT) {
     outputDiv.innerHTML = `<div class="error-message">Error: Could not decode API URL from 'apiUrl' parameter.</div>`;
-    console.error("Validation Error: Could not decode API URL.");
     return;
   }
 
   try {
-    console.log(`Fetching template from: ${templatePath}/template.html`); // 1. Load the template HTML
     const templateResponse = await fetch(`${templatePath}/template.html`);
     if (!templateResponse.ok) {
       const errorText = await templateResponse.text();
@@ -210,9 +197,7 @@ async function renderDocument() {
       );
     }
     const templateHtml = await templateResponse.text();
-    console.log("Template HTML fetched successfully.");
 
-    console.log(`Attempting to load stylesheet: ${templatePath}/styles.css`); // 2. Load and apply the stylesheet
     const existingStyleLink = document.querySelector(
       `link[href="${templatePath}/styles.css"]`,
     );
@@ -221,12 +206,7 @@ async function renderDocument() {
       styleLink.rel = "stylesheet";
       styleLink.href = `${templatePath}/styles.css`;
       document.head.appendChild(styleLink);
-      console.log("Stylesheet link added.");
-    } else {
-      console.log("Stylesheet link already exists, skipping addition.");
     }
-
-    console.log(`Fetching API data from: ${API_ENDPOINT}`); // THIS LOG WILL NOW SHOW THE CORRECT, DECODED URL
     // 3. Fetch the data from the API
     const apiResponse = await fetch(API_ENDPOINT);
     if (!apiResponse.ok) {
@@ -236,15 +216,11 @@ async function renderDocument() {
       );
     }
     const apiData = await apiResponse.json();
-    console.log("API data fetched successfully:", apiData); // 4. Map the API data to the template model
 
     const dataForTemplate = mapDataToTemplateModel(apiData);
-    console.log("Data mapped for template:", dataForTemplate); // 5. Render the document
 
     outputDiv.innerHTML = Mustache.render(templateHtml, dataForTemplate);
-    console.log("Document rendered successfully!");
   } catch (error) {
-    console.error("Error fetching or rendering document:", error);
     outputDiv.innerHTML = `<div class="error-message">Error loading document: ${error.message}.</div>`;
   }
 }
