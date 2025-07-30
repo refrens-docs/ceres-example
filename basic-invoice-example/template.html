@@ -1,0 +1,138 @@
+<div class="invoice-modern-container">
+  <div class="invoice-header-modern">
+    <div class="logo-section">
+      <h1>INVOICE</h1>
+      <p>For Professional Services</p>
+    </div>
+  </div>
+
+  <div class="info-block-modern">
+    <div class="info-section invoice-details">
+      <h3>Invoice Details</h3>
+      <p>
+        <span class="meta-label">{{customLabels.invoiceNumber}}:</span>
+        <strong>{{invoiceNumber}}</strong>
+      </p>
+      <p>
+        <span class="meta-label">{{customLabels.invoiceDate}}:</span>
+        {{invoiceDateUserInput}}
+      </p>
+      <p>
+        <span class="meta-label">{{customLabels.dueDate}}:</span>
+        <strong>{{formattedDueDate}}</strong>
+      </p>
+      {{#purchaseOrderNumber}}
+      <p>
+        <span class="meta-label">{{customLabels.purchaseOrderNumber}}:</span>
+        {{purchaseOrderNumber}}
+      </p>
+      {{/purchaseOrderNumber}}
+    </div>
+
+    <div class="info-section billed-by">
+      <h3>{{customLabels.billedBy}}</h3>
+      <p><strong>{{billedBy.name}}</strong></p>
+      <p>
+        {{billedBy.street}}<br />{{billedBy.city}}, {{billedBy.state}} -
+        {{billedBy.pincode}}<br />{{billedBy.country}}
+      </p>
+      {{#billedBy.vatNumber}}
+      <p>
+        <span class="vat-number-label">{{billedBy.vatLabel}}:</span>
+        {{billedBy.vatNumber}}
+      </p>
+      {{/billedBy.vatNumber}}
+    </div>
+
+    <div class="info-section billed-to">
+      <h3>{{customLabels.billedTo}}</h3>
+      <p><strong>{{billedTo.name}}</strong></p>
+      <p>
+        {{billedTo.street}}<br />{{billedTo.city}}, {{billedTo.state}} -
+        {{billedTo.pincode}}<br />{{billedTo.country}}
+      </p>
+      {{#billedTo.gstin}}
+      <p>GSTIN: {{billedTo.gstin}}</p>
+      {{/billedTo.gstin}}
+    </div>
+  </div>
+
+  <table class="item-table-modern">
+    <thead>
+      <tr>
+        <th class="description-col">Service Description</th>
+        <th class="text-right">QTY</th>
+        <th class="text-right">Rate</th>
+        <th class="text-right">VAT Rate</th>
+        <th class="text-right">Amount</th>
+        <th class="text-right">VAT</th>
+        <th class="text-right">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#items}}
+      <tr>
+        <td>
+          <span class="item-name">{{name}}</span>
+          {{#description}}<br /><span class="item-desc">{{description}}</span
+          >{{/description}}
+        </td>
+        <td class="text-right">{{quantity}}</td>
+        <td class="text-right">{{formattedRate}}</td>
+        <td class="text-right">{{gstRate}}%</td>
+        <td class="text-right">{{formattedAmount}}</td>
+        <td class="text-right">{{formattedIgst}}</td>
+        <td class="text-right"><strong>{{formattedTotal}}</strong></td>
+      </tr>
+      {{/items}}
+    </tbody>
+  </table>
+
+  <div class="totals-full-width-section">
+    <div class="total-line">
+      <span class="label">{{customLabels.subTotal}}:</span>
+      <span class="value">{{formattedSubTotal}}</span>
+    </div>
+    {{#totals.discount}}
+    <div class="total-line">
+      <span class="label">Discount:</span>
+      <span class="value">- {{formattedDiscount}}</span>
+    </div>
+    {{/totals.discount}}
+    <div class="total-line">
+      <span class="label">Total VAT:</span>
+      <span class="value">{{formattedIgst}}</span>
+    </div>
+    <div class="total-line grand">
+      <span class="label">{{customLabels.total}}:</span>
+      <span class="value">{{formattedTotal}}</span>
+    </div>
+    <div class="total-in-words">
+      <span>{{customLabels.totalInWords}}:</span>
+      <span>{{customLabels.totalInWordsValue}}</span>
+    </div>
+  </div>
+
+  <div class="notes-terms-modern-section">
+    {{#notes}}
+    <div class="notes-modern-block">
+      <h3>{{customLabels.notes}}</h3>
+      <p>{{notes}}</p>
+    </div>
+    {{/notes}} {{#terms}}
+    <div class="terms-modern-block">
+      <h3>{{customLabels.terms}}</h3>
+      <ul>
+        {{#terms}}
+        <li>{{.}}</li>
+        {{/terms}}
+      </ul>
+    </div>
+    {{/terms}}
+  </div>
+
+  <div class="invoice-footer-modern">
+    <p>&copy; 2025 {{billedBy.name}}. All rights reserved.</p>
+    <p>Powered by Refrens.com</p>
+  </div>
+</div>
