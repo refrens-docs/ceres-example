@@ -4,13 +4,36 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ceres - Custom Document Renderer</title>
-    <script src="https://unpkg.com/handlebars@4.7.8/dist/handlebars.min.js"></script>
+    <script src="https://unpkg.com/handlebars@4.7.8/dist/handlebars.runtime.min.js"></script>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <div id="documentOutput" class="loading-message">
       Trying to load document...
     </div>
-    <script src="./app.js"></script>
+    <script>
+      // Simple bootstrap to load hashed renderer from system manifest
+      fetch('dist/system-manifest.json')
+        .then(r => {
+          if (!r.ok) throw new Error('Failed to fetch system manifest: ' + r.status);
+          return r.json();
+        })
+        .then(manifest => {
+          const rendererAsset = manifest['main-renderer/renderer'];
+          if (!rendererAsset || !rendererAsset.js) {
+            throw new Error('Renderer asset not found in system manifest');
+          }
+          
+          const script = document.createElement('script');
+          script.src = 'dist/' + rendererAsset.js;
+          script.onerror = () => {
+            document.getElementById('documentOutput').innerHTML = 'Error: Failed to load renderer script';
+          };
+          document.head.appendChild(script);
+        })
+        .catch(err => {
+          document.getElementById('documentOutput').innerHTML = 'Error: ' + err.message;
+        });
+    </script>
   </body>
 </html>
