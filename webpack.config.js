@@ -13,8 +13,12 @@ const ONLY_TEMPLATE = process.env.TEMPLATE; // npm run build:template --template
 function getTemplateEntries() {
   const base = path.join(__dirname, "src/templates");
   if (!fs.existsSync(base)) return {};
-  const dirs = fs.readdirSync(base).filter(d => fs.statSync(path.join(base, d)).isDirectory());
-  const filtered = ONLY_TEMPLATE ? dirs.filter(d => d === ONLY_TEMPLATE) : dirs;
+  const dirs = fs
+    .readdirSync(base)
+    .filter((d) => fs.statSync(path.join(base, d)).isDirectory());
+  const filtered = ONLY_TEMPLATE
+    ? dirs.filter((d) => d === ONLY_TEMPLATE)
+    : dirs;
 
   return filtered.reduce((acc, dir) => {
     const entry = path.join(base, dir, "index.ts");
@@ -27,10 +31,12 @@ function getTemplateEntries() {
 
 const templateEntries = ONLY_SYSTEM ? {} : getTemplateEntries();
 
-const systemEntries = ONLY_TEMPLATES ? {} : {
-  "main-renderer/renderer": "./src/main/index.ts",
-  "widgets/index": "./src/widgets/index.ts"
-};
+const systemEntries = ONLY_TEMPLATES
+  ? {}
+  : {
+    "main-renderer/renderer": "./src/main/index.ts",
+    "widgets/index": "./src/widgets/index.ts",
+  };
 
 // Final entries
 const entries = Object.assign({}, systemEntries, templateEntries);
@@ -41,29 +47,40 @@ const buildHash = Date.now().toString(36); // Base36 for shorter hash
 // Simple plugin to generate asset manifest
 class AssetManifestPlugin {
   apply(compiler) {
-    compiler.hooks.emit.tapAsync('AssetManifestPlugin', (compilation, callback) => {
-      const manifest = {};
-      
-      // Map entry names to their hashed filenames
-      Object.keys(compilation.assets).forEach(filename => {
-        const match = filename.match(/^(.+)\.([a-z0-9]+)\.(js|css)$/);
-        if (match) {
-          const [, entryName, hash, extension] = match;
-          if (!manifest[entryName]) manifest[entryName] = {};
-          manifest[entryName][extension] = filename;
-        }
-      });
+    compiler.hooks.emit.tapAsync(
+      "AssetManifestPlugin",
+      (compilation, callback) => {
+        const manifest = {};
 
-      // Generate manifest based on build type
-      const manifestName = ONLY_SYSTEM ? 'system-manifest.json' : 'template-manifest.json';
-      const manifestContent = JSON.stringify(manifest, null, 2);
-      compilation.assets[manifestName] = {
-        source: () => manifestContent,
-        size: () => manifestContent.length
-      };
-      
-      callback();
-    });
+        // Map entry names to their hashed filenames
+        Object.keys(compilation.assets).forEach((filename) => {
+          const match = filename.match(/^(.+)\.([a-z0-9]+)\.(js|css)$/);
+          if (match) {
+            const [, entryName, hash, extension] = match;
+            if (!manifest[entryName]) manifest[entryName] = {};
+            manifest[entryName][extension] = filename;
+          }
+        });
+
+        // Generate appropriate manifest name based on build type
+        let manifestName;
+        if (ONLY_SYSTEM) {
+          manifestName = "system-manifest.json";
+        } else if (ONLY_TEMPLATES || ONLY_TEMPLATE) {
+          manifestName = "template-manifest.json";
+        } else {
+          manifestName = "system-manifest.json"; // system build
+        }
+
+        const manifestContent = JSON.stringify(manifest, null, 2);
+        compilation.assets[manifestName] = {
+          source: () => manifestContent,
+          size: () => manifestContent.length,
+        };
+
+        callback();
+      },
+    );
   }
 }
 
@@ -73,8 +90,8 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: `[name].${buildHash}.js`,
-    iife: true,            // smaller, self-invoking bundles
-    clean: false           // Don't auto-clean; use npm run clean when needed
+    iife: true, // smaller, self-invoking bundles
+    clean: false, // Don't auto-clean; use npm run clean when needed
   },
   module: {
     rules: [
@@ -82,14 +99,14 @@ module.exports = {
         test: /\.ts$/,
         use: [
           {
-            loader: "babel-loader"
-          }
+            loader: "babel-loader",
+          },
         ],
-        exclude: /node_modules/
+        exclude: /node_modules/,
       },
       {
         test: /\.css$/,
-        use: [MiniCssExtractPlugin.loader, "css-loader"]
+        use: [MiniCssExtractPlugin.loader, "css-loader"],
       },
       {
         test: /\.hbs$/,
@@ -98,24 +115,24 @@ module.exports = {
           // Precompile with runtime import; keep runtime external for lean bundles
           runtime: "handlebars/runtime",
           precompileOptions: {
-            knownHelpersOnly: false
-          }
-        }
-      }
-    ]
+            knownHelpersOnly: false,
+          },
+        },
+      },
+    ],
   },
   resolve: {
     extensions: [".ts", ".js"],
-    fallback: {} // avoid polyfilling Node builtins
+    fallback: {}, // avoid polyfilling Node builtins
   },
   externals: {
-    "handlebars": "Handlebars",
-    "handlebars/runtime": "Handlebars"
+    handlebars: "Handlebars",
+    "handlebars/runtime": "Handlebars",
   },
   plugins: [
     new MiniCssExtractPlugin({ filename: `[name].${buildHash}.css` }),
     new ForkTsCheckerWebpackPlugin(),
-    new AssetManifestPlugin()
+    new AssetManifestPlugin(),
   ],
   optimization: {
     usedExports: true,
@@ -126,8 +143,8 @@ module.exports = {
     minimize: true,
     minimizer: [
       "...", // Terser
-      new CssMinimizerPlugin()
-    ]
+      new CssMinimizerPlugin(),
+    ],
   },
-  devtool: false
+  devtool: false,
 };
