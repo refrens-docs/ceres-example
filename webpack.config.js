@@ -3,6 +3,7 @@ const fs = require("fs");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const CssMinimizerPlugin = require("css-minimizer-webpack-plugin");
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
+const { RawSource } = require("webpack").sources;
 
 // Env switches
 const ONLY_SYSTEM = process.env.BUILD_SYSTEM_ONLY === "1";
@@ -34,9 +35,9 @@ const templateEntries = ONLY_SYSTEM ? {} : getTemplateEntries();
 const systemEntries = ONLY_TEMPLATES
   ? {}
   : {
-    "main-renderer/renderer": "./src/main/index.ts",
-    "widgets/index": "./src/widgets/index.ts",
-  };
+      "main-renderer/renderer": "./src/main/index.ts",
+      "widgets/index": "./src/widgets/index.ts",
+    };
 
 // Final entries
 const entries = Object.assign({}, systemEntries, templateEntries);
@@ -47,40 +48,42 @@ const buildHash = Date.now().toString(36); // Base36 for shorter hash
 // Simple plugin to generate asset manifest
 class AssetManifestPlugin {
   apply(compiler) {
-    compiler.hooks.emit.tapAsync(
-      "AssetManifestPlugin",
-      (compilation, callback) => {
-        const manifest = {};
+    compiler.hooks.thisCompilation.tap("AssetManifestPlugin", (compilation) => {
+      compilation.hooks.processAssets.tap(
+        {
+          name: "AssetManifestPlugin",
+          stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONS,
+        },
+        () => {
+          const manifest = {};
 
-        // Map entry names to their hashed filenames
-        Object.keys(compilation.assets).forEach((filename) => {
-          const match = filename.match(/^(.+)\.([a-z0-9]+)\.(js|css)$/);
-          if (match) {
-            const [, entryName, hash, extension] = match;
-            if (!manifest[entryName]) manifest[entryName] = {};
-            manifest[entryName][extension] = filename;
+          // Map entry names to their hashed filenames
+          for (const filename of Object.keys(compilation.assets)) {
+            const match = filename.match(/^(.+)\.([a-z0-9]+)\.(js|css)$/);
+            if (match) {
+              const [, entryName, hash, extension] = match;
+              if (!manifest[entryName]) manifest[entryName] = {};
+              manifest[entryName][extension] = filename;
+            }
           }
-        });
 
-        // Generate appropriate manifest name based on build type
-        let manifestName;
-        if (ONLY_SYSTEM) {
-          manifestName = "system-manifest.json";
-        } else if (ONLY_TEMPLATES || ONLY_TEMPLATE) {
-          manifestName = "template-manifest.json";
-        } else {
-          manifestName = "system-manifest.json"; // system build
-        }
+          // Generate manifest name
+          let manifestName;
+          if (ONLY_SYSTEM) {
+            manifestName = "system-manifest.json";
+          } else if (ONLY_TEMPLATES || ONLY_TEMPLATE) {
+            manifestName = "template-manifest.json";
+          } else {
+            manifestName = "system-manifest.json";
+          }
 
-        const manifestContent = JSON.stringify(manifest, null, 2);
-        compilation.assets[manifestName] = {
-          source: () => manifestContent,
-          size: () => manifestContent.length,
-        };
+          const manifestContent = JSON.stringify(manifest, null, 2);
 
-        callback();
-      },
-    );
+          //  Proper way to emit assets in Webpack 5
+          compilation.emitAsset(manifestName, new RawSource(manifestContent));
+        },
+      );
+    });
   }
 }
 
