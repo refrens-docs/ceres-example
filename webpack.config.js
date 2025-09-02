@@ -55,32 +55,46 @@ class AssetManifestPlugin {
           stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONS,
         },
         () => {
-          const manifest = {};
+          // Build maps for each manifest
+          const systemManifest = {};
+          const templateManifest = {};
 
-          // Map entry names to their hashed filenames
-          for (const filename of Object.keys(compilation.assets)) {
-            const match = filename.match(/^(.+)\.([a-z0-9]+)\.(js|css)$/);
-            if (match) {
-              const [, entryName, hash, extension] = match;
-              if (!manifest[entryName]) manifest[entryName] = {};
-              manifest[entryName][extension] = filename;
+          // Use compilation.entrypoints to reliably map entry names -> files
+          for (const [entryName, entrypoint] of compilation.entrypoints) {
+            // getFiles returns CSS/JS/etc emitted by this entrypoint (honors ordering)
+            const files = entrypoint
+              .getFiles()
+              .filter((f) => /\.(js|css)$/.test(f));
+            if (!files.length) continue;
+
+            // Choose which manifest to put this entry into.
+            // We assume template entries are named with 'templates/' prefix per your config.
+            const target = entryName.startsWith("templates/")
+              ? templateManifest
+              : systemManifest;
+
+            // Map extension -> file (if multiple JS/CSS per entry, prefer the first seen for each ext)
+            target[entryName] = target[entryName] || {};
+            for (const file of files) {
+              if (file.endsWith(".js") && !target[entryName].js)
+                target[entryName].js = file;
+              if (file.endsWith(".css") && !target[entryName].css)
+                target[entryName].css = file;
             }
           }
 
-          // Generate manifest name
-          let manifestName;
-          if (ONLY_SYSTEM) {
-            manifestName = "system-manifest.json";
-          } else if (ONLY_TEMPLATES || ONLY_TEMPLATE) {
-            manifestName = "template-manifest.json";
-          } else {
-            manifestName = "system-manifest.json";
+          // Emit manifests only if non-empty
+          if (Object.keys(systemManifest).length) {
+            const name = "system-manifest.json";
+            const content = JSON.stringify(systemManifest, null, 2);
+            compilation.emitAsset(name, new RawSource(content));
           }
 
-          const manifestContent = JSON.stringify(manifest, null, 2);
-
-          //  Proper way to emit assets in Webpack 5
-          compilation.emitAsset(manifestName, new RawSource(manifestContent));
+          if (Object.keys(templateManifest).length) {
+            const name = "template-manifest.json";
+            const content = JSON.stringify(templateManifest, null, 2);
+            compilation.emitAsset(name, new RawSource(content));
+          }
         },
       );
     });

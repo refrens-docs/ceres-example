@@ -10,7 +10,7 @@
     "build:clean": "npm run clean && webpack --config webpack.config.js",
     "build:system": "cross-env BUILD_SYSTEM_ONLY=1 webpack --config webpack.config.js",
     "build:templates": "cross-env BUILD_TEMPLATES_ONLY=1 webpack --config webpack.config.js",
-    "build:template": "cross-env TEMPLATE=$npm_config_template webpack --config webpack.config.js",
+    "build:template": "cross-env BUILD_TEMPLATES_ONLY=1 TEMPLATE=$npm_config_template webpack --config webpack.config.js",
     "test": "jest"
   },
   "browserslist": [
