@@ -1,11 +1,3 @@
-// ES5-safe global types
-declare global {
-  interface Window {
-    CeresTemplates?: Record<string, (ctx: any) => string>;
-    Widgets?: any;
-  }
-}
-
 (function () {
   // Simple base64 decoder
   function decodeBase64(encoded: any) {
@@ -81,27 +73,27 @@ declare global {
       return;
     }
 
-    // Load template manifest to get hashed filenames
-    const templateResp = await fetch("dist/template-manifest.json");
-    if (!templateResp.ok) {
+    // NEW: Fetch per-template manifest (was global template-manifest.json)
+    let manifest;
+    try {
+      const resp = await fetch(`dist/templates/${templateName}/manifest.json`);
+      if (!resp.ok) throw new Error("manifest fetch failed");
+      manifest = await resp.json(); // { js, css }
+    } catch (e) {
       outputDiv && (outputDiv.innerHTML = "Error: could not load template manifest");
       return;
     }
-    const templateManifest = await templateResp.json();
-    
-    const templateAssetKey = `templates/${templateName}/bundle`;
-    const templateAssets = templateManifest[templateAssetKey];
-    if (!templateAssets) {
-      outputDiv && (outputDiv.innerHTML = "Error: template assets not found in manifest");
+
+    if (!manifest || !manifest.js) {
+      outputDiv && (outputDiv.innerHTML = "Error: invalid template manifest");
       return;
     }
 
     // load handlebars runtime + the chosen template bundle (self-contained)
     await ensureHandlebarsRuntime();
-    await Promise.all([
-      loadScript(`dist/${templateAssets.js}`),
-      loadCSS(`dist/${templateAssets.css}`)
-    ]);
+    const loaders = [loadScript(`dist/${manifest.js}`)];
+    if (manifest.css) loaders.push(loadCSS(`dist/${manifest.css}`));
+    await Promise.all(loaders);
 
     // fetch data
     const resp = await fetch(API_ENDPOINT);
@@ -111,7 +103,6 @@ declare global {
     }
     const data = await resp.json();
 
-    // render via template function
     window.CeresTemplates = window.CeresTemplates || {};
     const tmpl = window.CeresTemplates[templateName];
     if (!tmpl) {

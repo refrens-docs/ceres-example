@@ -12,23 +12,20 @@
       Trying to load document...
     </div>
     <script>
-      // Simple bootstrap to load hashed renderer from system manifest
-      fetch('dist/system-manifest.json')
-        .then(r => {
-          if (!r.ok) throw new Error('Failed to fetch system manifest: ' + r.status);
-          return r.json();
-        })
+      // Updated bootstrap: load hashed renderer via main-manifest.json (flat { js, css })
+      fetch('dist/main-manifest.json')
+        .then(r => { if (!r.ok) throw new Error('Failed to fetch main manifest: ' + r.status); return r.json(); })
         .then(manifest => {
-          const rendererAsset = manifest['main-renderer/renderer'];
-          if (!rendererAsset || !rendererAsset.js) {
-            throw new Error('Renderer asset not found in system manifest');
+          if (!manifest.js) throw new Error('Renderer JS not found in main manifest');
+          if (manifest.css) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'dist/' + manifest.css;
+            document.head.appendChild(link);
           }
-          
           const script = document.createElement('script');
-          script.src = 'dist/' + rendererAsset.js;
-          script.onerror = () => {
-            document.getElementById('documentOutput').innerHTML = 'Error: Failed to load renderer script';
-          };
+          script.src = 'dist/' + manifest.js;
+          script.onerror = () => { document.getElementById('documentOutput').innerHTML = 'Error: Failed to load renderer script'; };
           document.head.appendChild(script);
         })
         .catch(err => {

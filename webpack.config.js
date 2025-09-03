@@ -5,10 +5,12 @@ const CssMinimizerPlugin = require("css-minimizer-webpack-plugin");
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
 const { RawSource } = require("webpack").sources;
 
-// Env switches
-const ONLY_SYSTEM = process.env.BUILD_SYSTEM_ONLY === "1";
-const ONLY_TEMPLATES = process.env.BUILD_TEMPLATES_ONLY === "1";
-const ONLY_TEMPLATE = process.env.TEMPLATE; // npm run build:template --template=invoice
+// Env switches (simplified)
+// Removed BUILD_SYSTEM_ONLY legacy flag
+const ONLY_TEMPLATES = process.env.BUILD_TEMPLATES_ONLY === "1"; // build only templates
+const ONLY_MAIN = process.env.BUILD_MAIN_ONLY === "1"; // build just main renderer
+const ONLY_WIDGETS = process.env.BUILD_WIDGETS_ONLY === "1"; // build just widgets
+const ONLY_TEMPLATE = process.env.TEMPLATE; // npm run build:template --template=<name>
 
 // Discover template entry points
 function getTemplateEntries() {
@@ -17,33 +19,69 @@ function getTemplateEntries() {
   const dirs = fs
     .readdirSync(base)
     .filter((d) => fs.statSync(path.join(base, d)).isDirectory());
-  const filtered = ONLY_TEMPLATE
-    ? dirs.filter((d) => d === ONLY_TEMPLATE)
-    : dirs;
-
+  const filtered = ONLY_TEMPLATE ? dirs.filter((d) => d === ONLY_TEMPLATE) : dirs;
   return filtered.reduce((acc, dir) => {
     const entry = path.join(base, dir, "index.ts");
-    if (fs.existsSync(entry)) {
-      acc[`templates/${dir}/bundle`] = entry;
-    }
+    if (fs.existsSync(entry)) acc[`templates/${dir}/bundle`] = entry;
     return acc;
   }, {});
 }
 
-const templateEntries = ONLY_SYSTEM ? {} : getTemplateEntries();
+// Decide template entries
+let templateEntries = {};
+if (ONLY_TEMPLATES || ONLY_TEMPLATE) {
+  templateEntries = getTemplateEntries();
+} else if (ONLY_MAIN || ONLY_WIDGETS) {
+  templateEntries = {}; // skip templates
+} else {
+  // full build (everything)
+  templateEntries = getTemplateEntries();
+}
 
-const systemEntries = ONLY_TEMPLATES
-  ? {}
-  : {
-      "main-renderer/renderer": "./src/main/index.ts",
-      "widgets/index": "./src/widgets/index.ts",
-    };
+// Decide system entries
+let systemEntries = {};
+if (ONLY_TEMPLATES || ONLY_TEMPLATE) {
+  systemEntries = {}; // no system code
+} else if (ONLY_MAIN) {
+  systemEntries = { "main-renderer/renderer": "./src/main/index.ts" };
+} else if (ONLY_WIDGETS) {
+  systemEntries = { "widgets/index": "./src/widgets/index.ts" };
+} else {
+  // full build (main + widgets)
+  systemEntries = {
+    "main-renderer/renderer": "./src/main/index.ts",
+    "widgets/index": "./src/widgets/index.ts",
+  };
+}
 
 // Final entries
-const entries = Object.assign({}, systemEntries, templateEntries);
+const entries = { ...systemEntries, ...templateEntries };
 
 // Generate a hash based on current timestamp for cache busting
 const buildHash = Date.now().toString(36); // Base36 for shorter hash
+
+// Selective purge of older hashed assets per entry (keep caching, avoid buildup)
+(function purgeOldHashedAssets() {
+  const outputDir = path.resolve(__dirname, 'dist');
+  if (!fs.existsSync(outputDir)) return;
+  Object.keys(entries).forEach((entryName) => {
+    const dirRel = path.dirname(entryName);
+    const dirAbs = dirRel === '.' ? outputDir : path.join(outputDir, dirRel);
+    if (!fs.existsSync(dirAbs)) return;
+    const base = path.basename(entryName); // e.g. bundle
+    try {
+      for (const file of fs.readdirSync(dirAbs)) {
+        if (!file.startsWith(base + '.')) continue; // different base
+        if (!/\.(js|css)$/.test(file)) continue;
+        if (file.includes(`.${buildHash}.`)) continue; // current build hash (unlikely pre-existing)
+        // Remove old hashed asset
+        fs.unlinkSync(path.join(dirAbs, file));
+      }
+    } catch (e) {
+      // swallow errors to not break build
+    }
+  });
+})();
 
 // Simple plugin to generate asset manifest
 class AssetManifestPlugin {
@@ -55,46 +93,35 @@ class AssetManifestPlugin {
           stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONS,
         },
         () => {
-          // Build maps for each manifest
-          const systemManifest = {};
-          const templateManifest = {};
-
-          // Use compilation.entrypoints to reliably map entry names -> files
+          const MAIN_ENTRY = "main-renderer/renderer";
+          const WIDGETS_ENTRY = "widgets/index";
+          let mainManifest = null;
+          let widgetsManifest = null;
+          const templateManifests = {};
           for (const [entryName, entrypoint] of compilation.entrypoints) {
-            // getFiles returns CSS/JS/etc emitted by this entrypoint (honors ordering)
-            const files = entrypoint
-              .getFiles()
-              .filter((f) => /\.(js|css)$/.test(f));
+            const files = entrypoint.getFiles().filter((f) => /\.(js|css)$/.test(f));
             if (!files.length) continue;
-
-            // Choose which manifest to put this entry into.
-            // We assume template entries are named with 'templates/' prefix per your config.
-            const target = entryName.startsWith("templates/")
-              ? templateManifest
-              : systemManifest;
-
-            // Map extension -> file (if multiple JS/CSS per entry, prefer the first seen for each ext)
-            target[entryName] = target[entryName] || {};
+            const assetRecord = {};
             for (const file of files) {
-              if (file.endsWith(".js") && !target[entryName].js)
-                target[entryName].js = file;
-              if (file.endsWith(".css") && !target[entryName].css)
-                target[entryName].css = file;
+              if (file.endsWith(".js") && !assetRecord.js) assetRecord.js = file;
+              if (file.endsWith(".css") && !assetRecord.css) assetRecord.css = file;
+            }
+            if (entryName === MAIN_ENTRY) mainManifest = assetRecord;
+            else if (entryName === WIDGETS_ENTRY) widgetsManifest = assetRecord;
+            else if (entryName.startsWith("templates/")) {
+              const parts = entryName.split("/");
+              if (parts.length >= 3) {
+                const templateName = parts[1];
+                templateManifests[templateName] = assetRecord;
+              }
             }
           }
-
-          // Emit manifests only if non-empty
-          if (Object.keys(systemManifest).length) {
-            const name = "system-manifest.json";
-            const content = JSON.stringify(systemManifest, null, 2);
-            compilation.emitAsset(name, new RawSource(content));
-          }
-
-          if (Object.keys(templateManifest).length) {
-            const name = "template-manifest.json";
-            const content = JSON.stringify(templateManifest, null, 2);
-            compilation.emitAsset(name, new RawSource(content));
-          }
+          const emitJSON = (name, obj) => {
+            compilation.emitAsset(name, new RawSource(JSON.stringify(obj, null, 2)));
+          };
+          if (mainManifest) emitJSON("main-manifest.json", mainManifest);
+            if (widgetsManifest) emitJSON("widgets-manifest.json", widgetsManifest);
+            for (const [tpl, rec] of Object.entries(templateManifests)) emitJSON(`templates/${tpl}/manifest.json`, rec);
         },
       );
     });
@@ -107,45 +134,18 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: `[name].${buildHash}.js`,
-    iife: true, // smaller, self-invoking bundles
-    clean: false, // Don't auto-clean; use npm run clean when needed
+    iife: true,
+    clean: false,
   },
   module: {
     rules: [
-      {
-        test: /\.ts$/,
-        use: [
-          {
-            loader: "babel-loader",
-          },
-        ],
-        exclude: /node_modules/,
-      },
-      {
-        test: /\.css$/,
-        use: [MiniCssExtractPlugin.loader, "css-loader"],
-      },
-      {
-        test: /\.hbs$/,
-        loader: "handlebars-loader",
-        options: {
-          // Precompile with runtime import; keep runtime external for lean bundles
-          runtime: "handlebars/runtime",
-          precompileOptions: {
-            knownHelpersOnly: false,
-          },
-        },
-      },
+      { test: /\.ts$/, use: [{ loader: "babel-loader" }], exclude: /node_modules/ },
+      { test: /\.css$/, use: [MiniCssExtractPlugin.loader, "css-loader"] },
+      { test: /\.hbs$/, loader: "handlebars-loader", options: { runtime: "handlebars/runtime", precompileOptions: { knownHelpersOnly: false } } },
     ],
   },
-  resolve: {
-    extensions: [".ts", ".js"],
-    fallback: {}, // avoid polyfilling Node builtins
-  },
-  externals: {
-    handlebars: "Handlebars",
-    "handlebars/runtime": "Handlebars",
-  },
+  resolve: { extensions: [".ts", ".js"], fallback: {} },
+  externals: { handlebars: "Handlebars", "handlebars/runtime": "Handlebars" },
   plugins: [
     new MiniCssExtractPlugin({ filename: `[name].${buildHash}.css` }),
     new ForkTsCheckerWebpackPlugin(),
@@ -155,13 +155,10 @@ module.exports = {
     usedExports: true,
     sideEffects: true,
     concatenateModules: true,
-    splitChunks: false, // critical: keep bundles fully standalone for CDN/iframe
+    splitChunks: false,
     runtimeChunk: false,
     minimize: true,
-    minimizer: [
-      "...", // Terser
-      new CssMinimizerPlugin(),
-    ],
+    minimizer: ["...", new CssMinimizerPlugin()],
   },
   devtool: false,
 };
