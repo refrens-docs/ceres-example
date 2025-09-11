@@ -1,7 +1,11 @@
-(function () {
+(function() {
   // Simple base64 decoder
   function decodeBase64(encoded: any) {
-    try { return atob(encoded); } catch (e) { return null; }
+    try {
+      return atob(encoded);
+    } catch (e) {
+      return null;
+    }
   }
 
   function getQueryParam(key: any) {
@@ -10,43 +14,111 @@
   }
 
   function loadScript(src: any) {
-    return new Promise(function (resolve, reject) {
+    return new Promise(function(resolve, reject) {
       const s = document.createElement("script");
       s.src = src;
-      s.onload = function () { resolve(null); };
-      s.onerror = function () { reject(new Error("Failed to load " + src)); };
+      s.onload = function() {
+        resolve(null);
+      };
+      s.onerror = function() {
+        reject(new Error("Failed to load " + src));
+      };
       document.head.appendChild(s);
     });
   }
 
   function loadCSS(href: any) {
-    return new Promise(function (resolve, reject) {
+    return new Promise(function(resolve, reject) {
       // Check if CSS is already loaded
       const existing = document.querySelector('link[href="' + href + '"]');
       if (existing) {
         resolve(null);
         return;
       }
-      
+
       const link = document.createElement("link");
       link.rel = "stylesheet";
       link.href = href;
-      link.onload = function () { resolve(null); };
-      link.onerror = function () { reject(new Error("Failed to load CSS: " + href)); };
+      link.onload = function() {
+        resolve(null);
+      };
+      link.onerror = function() {
+        reject(new Error("Failed to load CSS: " + href));
+      };
       document.head.appendChild(link);
     });
   }
 
-  function ensureHandlebarsRuntime() {
-    return new Promise(function (resolve, reject) {
-      if ((window as any).Handlebars) return resolve(null);
-      const s = document.createElement("script");
-      // CDN for Handlebars runtime (UMD)
-      s.src = "https://cdn.jsdelivr.net/npm/handlebars@4.7.8/dist/handlebars.runtime.min.js";
-      s.onload = function () { resolve(null); };
-      s.onerror = function () { reject(new Error("Failed to load Handlebars runtime")); };
-      document.head.appendChild(s);
-    });
+  function getDistBase(): string {
+    return "dist/";
+  }
+
+  // Try a list of possible manifest filenames within a template folder
+  async function fetchTemplateManifest(templateDir: string): Promise<any> {
+    const MANIFEST_PATH = "manifest.json";
+    try {
+      const r = await fetch(templateDir + MANIFEST_PATH);
+      if (r && r.ok) return r.json();
+    } catch (_) {
+      /* continue */
+    }
+    throw new Error("No template manifest found in " + templateDir);
+  }
+
+  // Find first .js and .css strings anywhere within a manifest object/array/string
+  function findAssetPaths(man: any): { js?: string; css?: string } {
+    let js: string | undefined;
+    let css: string | undefined;
+
+    function scan(v: any) {
+      if (js && css) return; // early exit when both found
+      if (!v) return;
+      const t = typeof v;
+      if (t === "string") {
+        if (!js && /\.js($|\?)/.test(v)) js = v;
+        else if (!css && /\.css($|\?)/.test(v)) css = v;
+        return;
+      }
+      if (Array.isArray(v)) {
+        for (let i = 0; i < v.length; i++) {
+          scan(v[i]);
+          if (js && css) break;
+        }
+        return;
+      }
+      if (t === "object") {
+        // Common direct shapes first
+        if (!js && typeof v.js === "string") js = v.js;
+        if (!css && typeof v.css === "string") css = v.css;
+        // Then scan all values
+        const keys = Object.keys(v);
+        for (let i = 0; i < keys.length; i++) {
+          const k = keys[i];
+          scan(v[k]);
+          if (js && css) break;
+        }
+      }
+    }
+
+    scan(man);
+    return { js, css };
+  }
+
+  // Make a possibly-relative asset path absolute using dist base and template dir
+  function toAbsoluteAssetPath(
+    pathLike: string,
+    distBase: string,
+    templateDir: string,
+  ): string {
+    if (!pathLike) return pathLike;
+    // Absolute URL
+    if (/^https?:\/\//i.test(pathLike)) return pathLike;
+    // If it already points into dist/templates/, keep relative to dist base
+    if (pathLike.startsWith("templates/")) return distBase + pathLike;
+    // If it looks already rooted within dist/ (rare), also prefix dist base
+    if (pathLike.startsWith("/")) return distBase + pathLike.replace(/^\//, "");
+    // Otherwise, assume it's a file within the template folder (e.g., bundle.hash.js)
+    return templateDir + pathLike;
   }
 
   async function renderDocument() {
@@ -73,38 +145,59 @@
       return;
     }
 
-    // NEW: Fetch per-template manifest (was global template-manifest.json)
-    let manifest;
+    const distBase = getDistBase();
+
+    // Per-template manifest: dist/templates/{templateName}/<manifest>.json
+    const templateDir = distBase + `templates/${templateName}/`;
+    let templateManifest: any;
     try {
-      const resp = await fetch(`dist/templates/${templateName}/manifest.json`);
-      if (!resp.ok) throw new Error("manifest fetch failed");
-      manifest = await resp.json(); // { js, css }
-    } catch (e) {
-      outputDiv && (outputDiv.innerHTML = "Error: could not load template manifest");
+      templateManifest = await fetchTemplateManifest(templateDir);
+    } catch (e: any) {
+      outputDiv &&
+        (outputDiv.innerHTML =
+          "Error: " +
+          (e && e.message ? e.message : "template manifest not found"));
       return;
     }
 
-    if (!manifest || !manifest.js) {
-      outputDiv && (outputDiv.innerHTML = "Error: invalid template manifest");
+    // Extract js/css from whatever structure the manifest uses
+    const found = findAssetPaths(templateManifest);
+    if (!found.js) {
+      const preview = JSON.stringify(templateManifest).slice(0, 200);
+      outputDiv &&
+        (outputDiv.innerHTML =
+          "Error: could not find JS in template manifest. Preview: " +
+          preview +
+          "...");
       return;
     }
+
+    const jsUrl = toAbsoluteAssetPath(found.js, distBase, templateDir);
+    const cssUrl = found.css
+      ? toAbsoluteAssetPath(found.css, distBase, templateDir)
+      : undefined;
 
     // load handlebars runtime + the chosen template bundle (self-contained)
-    await ensureHandlebarsRuntime();
-    const loaders = [loadScript(`dist/${manifest.js}`)];
-    if (manifest.css) loaders.push(loadCSS(`dist/${manifest.css}`));
-    await Promise.all(loaders);
+    // await ensureHandlebarsRuntime();
+    (window as any).CeresCurrentTemplateBundle = jsUrl;
+    await Promise.all([
+      loadScript(jsUrl),
+      cssUrl ? loadCSS(cssUrl) : Promise.resolve(null),
+    ]);
 
     // fetch data
     const resp = await fetch(API_ENDPOINT);
     if (!resp.ok) {
-      outputDiv && (outputDiv.innerHTML = "Error fetching data: " + resp.status);
+      outputDiv &&
+        (outputDiv.innerHTML = "Error fetching data: " + resp.status);
       return;
     }
     const data = await resp.json();
 
     window.CeresTemplates = window.CeresTemplates || {};
+    console.log("CeresTemplates", window.CeresTemplates);
     const tmpl = window.CeresTemplates[templateName];
+    console.log({ tmpl });
     if (!tmpl) {
       outputDiv && (outputDiv.innerHTML = "Error: template not loaded");
       return;
@@ -116,4 +209,4 @@
   renderDocument();
 })();
 
-export {};
+export { };

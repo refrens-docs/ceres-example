@@ -13,23 +13,32 @@
     </div>
     <script>
       // Updated bootstrap: load hashed renderer via main-manifest.json (flat { js, css })
-      fetch('dist/main-manifest.json')
-        .then(r => { if (!r.ok) throw new Error('Failed to fetch main manifest: ' + r.status); return r.json(); })
-        .then(manifest => {
-          if (!manifest.js) throw new Error('Renderer JS not found in main manifest');
+      fetch("dist/main-manifest.json")
+        .then((r) => {
+          if (!r.ok)
+            throw new Error("Failed to fetch main manifest: " + r.status);
+          return r.json();
+        })
+        .then((manifest) => {
+          if (!manifest.js)
+            throw new Error("Renderer JS not found in main manifest");
           if (manifest.css) {
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = 'dist/' + manifest.css;
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = "dist/" + manifest.css;
             document.head.appendChild(link);
           }
-          const script = document.createElement('script');
-          script.src = 'dist/' + manifest.js;
-          script.onerror = () => { document.getElementById('documentOutput').innerHTML = 'Error: Failed to load renderer script'; };
+          const script = document.createElement("script");
+          script.src = "dist/" + manifest.js;
+          script.onerror = () => {
+            document.getElementById("documentOutput").innerHTML =
+              "Error: Failed to load renderer script";
+          };
           document.head.appendChild(script);
         })
-        .catch(err => {
-          document.getElementById('documentOutput').innerHTML = 'Error: ' + err.message;
+        .catch((err) => {
+          document.getElementById("documentOutput").innerHTML =
+            "Error: " + err.message;
         });
     </script>
   </body>
