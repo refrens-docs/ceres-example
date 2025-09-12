@@ -12,6 +12,7 @@
     "build:template": "cross-env BUILD_TEMPLATES_ONLY=1 TEMPLATE=$npm_config_template webpack --config webpack.config.js",
     "build:main": "cross-env BUILD_MAIN_ONLY=1 webpack --config webpack.config.js",
     "build:widgets": "cross-env BUILD_WIDGETS_ONLY=1 webpack --config webpack.config.js",
+    "build:widget": "cross-env BUILD_WIDGETS_ONLY=1 WIDGET=$npm_config_widget webpack --config webpack.config.js",
     "test": "jest"
   },
   "browserslist": [
@@ -19,7 +20,8 @@
     "last 2 versions"
   ],
   "sideEffects": [
-    "*.css"
+    "*.css",
+    "src/widgets/**"
   ],
   "devDependencies": {
     "@babel/core": "^7.25.0",

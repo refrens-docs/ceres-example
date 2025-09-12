@@ -1,0 +1,15 @@
+// @ts-ignore - compiled via handlebars-loader
+import template from './DemoBadge.hbs';
+import './styles.css';
+
+(function(){
+  function getHB(): any { return (window as any).Handlebars }
+  function register(){
+    const HB = getHB();
+    if(!HB) return;
+    HB.registerPartial('DemoBadge', template);
+  }
+  try{ register(); }catch(_){ /* noop */ }
+})();
+
+export {};

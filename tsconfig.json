@@ -11,7 +11,8 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {},
-    "noEmit": true
+    "noEmit": true,
+    "allowArbitraryExtensions": true
   },
-  "include": ["src", "tests"]
+  "include": ["src", "src/types"]
 }

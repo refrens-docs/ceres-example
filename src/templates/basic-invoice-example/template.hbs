@@ -3,6 +3,7 @@
     <div class="logo-section">
       <h1>INVOICE</h1>
       <p>For Professional Services</p>
+      <div style="margin-top:8px">{{> DemoBadge }}</div>
     </div>
   </div>
 
@@ -20,6 +21,11 @@
       <p>
         <span class="meta-label">{{customLabels.dueDate}}:</span>
         <strong>{{formattedDueDate}}</strong>
+      </p>
+      {{!-- Status tag using the minimal InvoiceStatus widget --}}
+      <p>
+        <span class="meta-label">Status:</span>
+        {{> InvoiceStatus }}
       </p>
       {{#if purchaseOrderNumber}}
       <p>

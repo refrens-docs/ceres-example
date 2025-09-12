@@ -1,0 +1,8 @@
+{{!-- InvoiceStatus partial (no delegation) --}}
+{{#with (computeInvoiceStatus this) as |ctx|}}
+  {{#each ctx.tags}}
+    {{#if @first}}
+      <span class="{{finalClass}}">{{text}}</span>
+    {{/if}}
+  {{/each}}
+{{/with}}
