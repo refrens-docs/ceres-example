@@ -5,16 +5,6 @@
     break-inside: avoid;
   }
 }
-/* --- Modern Edge Template Styles --- */
-body {
-  font-family: "Roboto", sans-serif; /* A modern, clean font */
-  margin: 0;
-  padding: 30px;
-  background-color: #eef2f5;
-  color: #333;
-  -webkit-print-color-adjust: exact;
-  color-adjust: exact;
-}
 
 .invoice-modern-container {
   max-width: 1000px;
@@ -22,8 +12,6 @@ body {
   background-color: #ffffff;
   border-radius: 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  padding: 40px;
 }
 
 /* Header & Main Info Section */

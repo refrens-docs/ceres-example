@@ -2,21 +2,10 @@
 
 body {
   font-family: Arial, sans-serif;
-  margin: 0;
-  padding: 20px;
-  background-color: #f8f8f8;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start; /* Align to top */
-  min-height: 100vh;
-}
-
-@media print {
-  body {
-    padding: 0px !important;
-    margin: 0px !important;
-    height: fit-content !important;
-  }
+  padding: 0px !important;
+  margin: 0px !important;
+  /* This is a very very important property please do not touch it */
+  width: 100%;
 }
 
 .error-message {

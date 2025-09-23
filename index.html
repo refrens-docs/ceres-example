@@ -12,7 +12,6 @@
       Trying to load document...
     </div>
     <script>
-      // Updated bootstrap: load hashed renderer via main-manifest.json (flat { js, css })
       fetch("dist/main-manifest.json")
         .then((r) => {
           if (!r.ok)
@@ -40,6 +39,123 @@
           document.getElementById("documentOutput").innerHTML =
             "Error: " + err.message;
         });
+
+      // ---- Dynamic iframe height communication ----
+      let lastHeight = 0;
+      let lastPrintHeight = 0;
+      let resizeTimeout;
+
+      function sendHeight(isPrint = false) {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          const height = isPrint ? calculatePrintHeight() : calculateWebHeight();
+          const messageType = isPrint ? 'setPrintHeight' : 'setHeight';
+          const lastUsedHeight = isPrint ? lastPrintHeight : lastHeight;
+          
+          if (height !== lastUsedHeight) {
+            if (isPrint) {
+              lastPrintHeight = height;
+            } else {
+              lastHeight = height;
+            }
+            
+            window.parent.postMessage({ 
+              type: messageType, 
+              height,
+              ...(isPrint && { printMode: true })
+            }, "*");
+          }
+        }, 50);
+      }
+
+      function calculateWebHeight() {
+        const BUFFER = 64;
+        return document.documentElement.scrollHeight + BUFFER;
+      }
+
+      function calculatePrintHeight() {
+        // Get actual computed styles from the document
+        const body = document.body;
+        const computedStyle = window.getComputedStyle(body);
+        const documentOutput = document.getElementById('documentOutput');
+        const contentStyle = documentOutput ? window.getComputedStyle(documentOutput) : computedStyle;
+        
+        // Extract real values from the template
+        const actualFontSize = contentStyle.fontSize || '12pt';
+        const actualLineHeight = contentStyle.lineHeight || '1.4';
+        const actualFontFamily = contentStyle.fontFamily || 'Arial, sans-serif';
+        
+        // Detect paper size from CSS @page or use A4 as fallback
+        const printWidth = getPrintWidth() || '210mm';
+        
+        // Create off-screen print simulator with REAL template values
+        const measurer = document.createElement('div');
+        measurer.style.cssText = `
+          position: absolute; top: -9999px; left: -9999px; visibility: hidden;
+          width: ${printWidth}; 
+          font-size: ${actualFontSize}; 
+          line-height: ${actualLineHeight};
+          font-family: ${actualFontFamily};
+          padding: 20mm; margin: 0; box-sizing: border-box; 
+          background: white; color: black;
+        `;
+        
+        const content = document.getElementById('documentOutput') || document.body;
+        measurer.innerHTML = content.innerHTML;
+        document.body.appendChild(measurer);
+        
+        // Force layout and measure
+        measurer.offsetHeight;
+        const printHeight = measurer.scrollHeight + 300; // Generous buffer for print safety
+        
+        document.body.removeChild(measurer);
+        return printHeight;
+      }
+
+      function getPrintWidth() {
+        // Try to detect @page size from CSS
+        try {
+          const sheets = document.styleSheets;
+          
+          for (let i = 0; i < sheets.length; i++) {
+            const sheet = sheets[i];
+            
+            try {
+              const rules = sheet.cssRules || sheet.rules;
+              
+              for (let j = 0; j < rules.length; j++) {
+                const rule = rules[j];
+                if (rule.type === CSSRule.PAGE_RULE) {
+                  const width = rule.style.width || rule.style.size;
+                  if (width) {
+                    return width;
+                  }
+                }
+              }
+            } catch (e) {
+              // Cross-origin stylesheet, skip
+            }
+          }
+        } catch (e) {
+          // Error accessing stylesheets
+        }
+        
+        return '210mm'; // A4 width
+      }
+
+      // Event listeners
+      window.addEventListener("load", () => sendHeight(false));
+      
+      const observer = new ResizeObserver(() => sendHeight(false));
+      observer.observe(document.body);
+      
+      window.addEventListener("message", (event) => {
+        const { type } = event.data || {};
+        if (type === "requestHeight") sendHeight(false);
+        if (type === "requestPrintHeight") sendHeight(true);
+      });
+      
+      window.addEventListener("beforeprint", () => sendHeight(true));
     </script>
   </body>
 </html>
