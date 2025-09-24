@@ -6,14 +6,24 @@
   }
 }
 /* --- Modern Edge Template Styles --- */
+@import url("https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Noto+Sans+Arabic:wght@100..900&display=swap");
+
 body {
-  font-family: "Roboto", sans-serif; /* A modern, clean font */
+  font-family: "Funnel Display", sans-serif;
   margin: 0;
   padding: 30px;
   background-color: #eef2f5;
   color: #333;
   -webkit-print-color-adjust: exact;
   color-adjust: exact;
+}
+
+@media print {
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: none;
+  }
 }
 
 .invoice-modern-container {

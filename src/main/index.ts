@@ -49,92 +49,11 @@
     });
   }
 
-  function getDistBase(): string {
-    return "dist/";
-  }
-
-  // Try a list of possible manifest filenames within a template folder
-  async function fetchTemplateManifest(templateDir: string): Promise<any> {
-    const MANIFEST_PATH = "manifest.json";
-    try {
-      const r = await fetch(templateDir + MANIFEST_PATH);
-      if (r && r.ok) return r.json();
-    } catch (_) {
-      /* continue */
-    }
-    throw new Error("No template manifest found in " + templateDir);
-  }
-
-  // Find first .js and .css strings anywhere within a manifest object/array/string
-  function findAssetPaths(man: any): { js?: string; css?: string } {
-    let js: string | undefined;
-    let css: string | undefined;
-
-    function scan(v: any) {
-      if (js && css) return; // early exit when both found
-      if (!v) return;
-      const t = typeof v;
-      if (t === "string") {
-        if (!js && /\.js($|\?)/.test(v)) js = v;
-        else if (!css && /\.css($|\?)/.test(v)) css = v;
-        return;
-      }
-      if (Array.isArray(v)) {
-        for (let i = 0; i < v.length; i++) {
-          scan(v[i]);
-          if (js && css) break;
-        }
-        return;
-      }
-      if (t === "object") {
-        // Common direct shapes first
-        if (!js && typeof v.js === "string") js = v.js;
-        if (!css && typeof v.css === "string") css = v.css;
-        // Then scan all values
-        const keys = Object.keys(v);
-        for (let i = 0; i < keys.length; i++) {
-          const k = keys[i];
-          scan(v[k]);
-          if (js && css) break;
-        }
-      }
-    }
-
-    scan(man);
-    return { js, css };
-  }
-
-  // Make a possibly-relative asset path absolute using dist base and template dir
-  function toAbsoluteAssetPath(
-    pathLike: string,
-    distBase: string,
-    templateDir: string,
-  ): string {
-    if (!pathLike) return pathLike;
-    // Absolute URL
-    if (/^https?:\/\//i.test(pathLike)) return pathLike;
-    // If it already points into dist/templates/, keep relative to dist base
-    if (pathLike.startsWith("templates/")) return distBase + pathLike;
-    // If it looks already rooted within dist/ (rare), also prefix dist base
-    if (pathLike.startsWith("/")) return distBase + pathLike.replace(/^\//, "");
-    // Otherwise, assume it's a file within the template folder (e.g., bundle.hash.js)
-    return templateDir + pathLike;
-  }
 
   async function renderDocument() {
-    const allowedTemplates = ["invoice", "basic-invoice-example"]; // extend as you add templates
-    const templateName = getQueryParam("template");
     const encodedApiUrl = getQueryParam("apiUrl");
     const outputDiv = document.getElementById("documentOutput");
 
-    if (!templateName) {
-      outputDiv && (outputDiv.innerHTML = "Error: missing ?template=");
-      return;
-    }
-    if (!allowedTemplates.includes(templateName)) {
-      outputDiv && (outputDiv.innerHTML = "Error: invalid template");
-      return;
-    }
     if (!encodedApiUrl) {
       outputDiv && (outputDiv.innerHTML = "Error: missing ?apiUrl=");
       return;
@@ -145,24 +64,18 @@
       return;
     }
 
-    const distBase = getDistBase();
-
-    // Per-template manifest: dist/templates/{templateName}/<manifest>.json
-    const templateDir = distBase + `templates/${templateName}/`;
-    let templateManifest: any;
-    try {
-      templateManifest = await fetchTemplateManifest(templateDir);
-    } catch (e: any) {
-      outputDiv &&
-        (outputDiv.innerHTML =
-          "Error: " +
-          (e && e.message ? e.message : "template manifest not found"));
+    // Get the template manifest from the global variable set by index.html
+    const templateManifest = (window as any).CeresTemplateManifest;
+    const templateManifestUrl = (window as any).CeresTemplateManifestUrl;
+    
+    if (!templateManifest || !templateManifestUrl) {
+      outputDiv && (outputDiv.innerHTML = "Error: no template manifest loaded");
       return;
     }
 
-    // Extract js/css from whatever structure the manifest uses
-    const found = findAssetPaths(templateManifest);
-    if (!found.js) {
+    // Extract assets directly from the root template manifest (no need for second fetch)
+    const assets = templateManifest.assets;
+    if (!assets || !assets.js) {
       const preview = JSON.stringify(templateManifest).slice(0, 200);
       outputDiv &&
         (outputDiv.innerHTML =
@@ -172,38 +85,59 @@
       return;
     }
 
-    const jsUrl = toAbsoluteAssetPath(found.js, distBase, templateDir);
-    const cssUrl = found.css
-      ? toAbsoluteAssetPath(found.css, distBase, templateDir)
-      : undefined;
+    // Build absolute URLs for the assets using the template manifest URL as base
+    let jsUrl: string;
+    let cssUrl: string | undefined;
+    
+    if (templateManifestUrl.startsWith('http://') || templateManifestUrl.startsWith('https://')) {
+      // Absolute URL - use new URL() constructor
+      jsUrl = new URL(assets.js, templateManifestUrl).href;
+      cssUrl = assets.css ? new URL(assets.css, templateManifestUrl).href : undefined;
+    } else {
+      // Relative URL - construct manually
+      const templateBaseUrl = templateManifestUrl.replace('/manifest.json', '/');
+      jsUrl = templateBaseUrl + assets.js.replace('./', '');
+      cssUrl = assets.css ? templateBaseUrl + assets.css.replace('./', '') : undefined;
+    }
 
     // load handlebars runtime + the chosen template bundle (self-contained)
-    // await ensureHandlebarsRuntime();
     (window as any).CeresCurrentTemplateBundle = jsUrl;
-    await Promise.all([
-      loadScript(jsUrl),
-      cssUrl ? loadCSS(cssUrl) : Promise.resolve(null),
-    ]);
+    
+    try {
+      await Promise.all([
+        loadScript(jsUrl),
+        cssUrl ? loadCSS(cssUrl) : Promise.resolve(null),
+      ]);
+    } catch (error: any) {
+      outputDiv && (outputDiv.innerHTML = "Error loading template assets: " + error.message);
+      return;
+    }
 
     // fetch data
-    const resp = await fetch(API_ENDPOINT);
-    if (!resp.ok) {
-      outputDiv &&
-        (outputDiv.innerHTML = "Error fetching data: " + resp.status);
-      return;
-    }
-    const data = await resp.json();
+    try {
+      const resp = await fetch(API_ENDPOINT);
+      if (!resp.ok) {
+        outputDiv &&
+          (outputDiv.innerHTML = "Error fetching data: " + resp.status);
+        return;
+      }
+      const data = await resp.json();
 
-    window.CeresTemplates = window.CeresTemplates || {};
-    console.log("CeresTemplates", window.CeresTemplates);
-    const tmpl = window.CeresTemplates[templateName];
-    console.log({ tmpl });
-    if (!tmpl) {
-      outputDiv && (outputDiv.innerHTML = "Error: template not loaded");
-      return;
+      // Extract template name from the manifest URL for template lookup
+      const templateNameMatch = templateManifestUrl.match(/templates\/([^\/]+)\/manifest\.json/);
+      const templateName = templateNameMatch ? templateNameMatch[1] : 'unknown';
+
+      (window as any).CeresTemplates = (window as any).CeresTemplates || {};
+      const tmpl = (window as any).CeresTemplates[templateName];
+      if (!tmpl) {
+        outputDiv && (outputDiv.innerHTML = "Error: template not loaded");
+        return;
+      }
+      const html = tmpl(data);
+      if (outputDiv) outputDiv.innerHTML = html;
+    } catch (error: any) {
+      outputDiv && (outputDiv.innerHTML = "Error: " + error.message);
     }
-    const html = tmpl(data);
-    if (outputDiv) outputDiv.innerHTML = html;
   }
 
   renderDocument();
