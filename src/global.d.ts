@@ -11,7 +11,7 @@ declare module "*.css" {
 declare global {
   interface Window {
     Handlebars?: any;
-    CeresTemplates?: Record<string, (data: any) => string>;
+    CeresTemplate?: (data: any) => string; // Currently loaded template function
     CeresWidgets?: any;
   }
 }

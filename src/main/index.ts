@@ -13,29 +13,59 @@
     return params.get(key);
   }
 
+  // Resolve template manifest URL from encoded query parameter
+  function resolveTemplateManifestUrl(encodedValue: any) {
+    if (!encodedValue) return null;
+    
+    const decoded = decodeBase64(encodedValue);
+    if (!decoded) return null;
+    
+    // Check if it's a full URL or template name
+    if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+      return decoded; // Full URL
+    } else {
+      // Template name - construct local path
+      return './templates/' + decoded + '/manifest.json';
+    }
+  }
+
+  // Load template manifest from URL
+  async function loadTemplateManifest() {
+    // Try templateManifest param first, then template param
+    const encodedManifestUrl = getQueryParam('templateManifest') || getQueryParam('template');
+    
+    // Resolve the manifest URL
+    const manifestUrl = resolveTemplateManifestUrl(encodedManifestUrl);
+    
+    if (!manifestUrl) {
+      throw new Error(
+        'No template specified. Please provide ?template=<name> or ?templateManifest=<base64-url>'
+      );
+    }
+    
+    const response = await fetch(manifestUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch template manifest from ${manifestUrl}: ${response.status}`);
+    }
+    
+    const manifest = await response.json();
+    return { manifest: manifest, url: manifestUrl };
+  }
+
   function loadScript(src: any) {
     return new Promise(function(resolve, reject) {
-      const s = document.createElement("script");
-      s.src = src;
-      s.onload = function() {
-        resolve(null);
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = function() {
+        reject(new Error("Failed to load script: " + src));
       };
-      s.onerror = function() {
-        reject(new Error("Failed to load " + src));
-      };
-      document.head.appendChild(s);
+      document.head.appendChild(script);
     });
   }
 
   function loadCSS(href: any) {
     return new Promise(function(resolve, reject) {
-      // Check if CSS is already loaded
-      const existing = document.querySelector('link[href="' + href + '"]');
-      if (existing) {
-        resolve(null);
-        return;
-      }
-
       const link = document.createElement("link");
       link.rel = "stylesheet";
       link.href = href;
@@ -49,94 +79,73 @@
     });
   }
 
-
   async function renderDocument() {
-    const encodedApiUrl = getQueryParam("apiUrl");
     const outputDiv = document.getElementById("documentOutput");
 
-    if (!encodedApiUrl) {
-      outputDiv && (outputDiv.innerHTML = "Error: missing ?apiUrl=");
-      return;
-    }
-    const API_ENDPOINT = decodeBase64(encodedApiUrl);
-    if (!API_ENDPOINT) {
-      outputDiv && (outputDiv.innerHTML = "Error: could not decode apiUrl");
-      return;
-    }
-
-    // Get the template manifest from the global variable set by index.html
-    const templateManifest = (window as any).CeresTemplateManifest;
-    const templateManifestUrl = (window as any).CeresTemplateManifestUrl;
-    
-    if (!templateManifest || !templateManifestUrl) {
-      outputDiv && (outputDiv.innerHTML = "Error: no template manifest loaded");
-      return;
-    }
-
-    // Extract assets directly from the root template manifest (no need for second fetch)
-    const assets = templateManifest.assets;
-    if (!assets || !assets.js) {
-      const preview = JSON.stringify(templateManifest).slice(0, 200);
-      outputDiv &&
-        (outputDiv.innerHTML =
-          "Error: could not find JS in template manifest. Preview: " +
-          preview +
-          "...");
-      return;
-    }
-
-    // Build absolute URLs for the assets using the template manifest URL as base
-    let jsUrl: string;
-    let cssUrl: string | undefined;
-    
-    if (templateManifestUrl.startsWith('http://') || templateManifestUrl.startsWith('https://')) {
-      // Absolute URL - use new URL() constructor
-      jsUrl = new URL(assets.js, templateManifestUrl).href;
-      cssUrl = assets.css ? new URL(assets.css, templateManifestUrl).href : undefined;
-    } else {
-      // Relative URL - construct manually
-      const templateBaseUrl = templateManifestUrl.replace('/manifest.json', '/');
-      jsUrl = templateBaseUrl + assets.js.replace('./', '');
-      cssUrl = assets.css ? templateBaseUrl + assets.css.replace('./', '') : undefined;
-    }
-
-    // load handlebars runtime + the chosen template bundle (self-contained)
-    (window as any).CeresCurrentTemplateBundle = jsUrl;
-    
     try {
+      // Step 1: Load template manifest
+      const { manifest: templateManifest, url: templateManifestUrl } = 
+        await loadTemplateManifest();
+
+      // Step 2: Get and decode API URL
+      const encodedApiUrl = getQueryParam("apiUrl");
+      if (!encodedApiUrl) {
+        throw new Error("Missing required parameter: ?apiUrl=<base64-encoded-url>");
+      }
+      
+      const API_ENDPOINT = decodeBase64(encodedApiUrl);
+      if (!API_ENDPOINT) {
+        throw new Error("Could not decode apiUrl parameter");
+      }
+
+      // Step 3: Extract and validate template assets
+      const assets = templateManifest.assets;
+      if (!assets || !assets.js) {
+        throw new Error(
+          "Template manifest does not contain required 'assets.js' field"
+        );
+      }
+
+      // Step 4: Build absolute URLs for template assets
+      const manifestBaseUrl = templateManifestUrl.substring(
+        0,
+        templateManifestUrl.lastIndexOf("/")
+      );
+      const jsUrl = manifestBaseUrl + "/" + assets.js;
+      const cssUrl = assets.css ? manifestBaseUrl + "/" + assets.css : null;
+
+      // Step 5: Load template bundle (JS + CSS if present)
       await Promise.all([
         loadScript(jsUrl),
         cssUrl ? loadCSS(cssUrl) : Promise.resolve(null),
       ]);
-    } catch (error: any) {
-      outputDiv && (outputDiv.innerHTML = "Error loading template assets: " + error.message);
-      return;
-    }
 
-    // fetch data
-    try {
-      const resp = await fetch(API_ENDPOINT);
-      if (!resp.ok) {
-        outputDiv &&
-          (outputDiv.innerHTML = "Error fetching data: " + resp.status);
-        return;
+      // Step 6: Fetch API data
+      const response = await fetch(API_ENDPOINT);
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
       }
-      const data = await resp.json();
+      const data = await response.json();
 
-      // Extract template name from the manifest URL for template lookup
-      const templateNameMatch = templateManifestUrl.match(/templates\/([^\/]+)\/manifest\.json/);
-      const templateName = templateNameMatch ? templateNameMatch[1] : 'unknown';
-
-      (window as any).CeresTemplates = (window as any).CeresTemplates || {};
-      const tmpl = (window as any).CeresTemplates[templateName];
-      if (!tmpl) {
-        outputDiv && (outputDiv.innerHTML = "Error: template not loaded");
-        return;
+      // Step 7: Get the loaded template and render
+      const template = (window as any).CeresTemplate;
+      if (!template) {
+        throw new Error(
+          "Template bundle did not export window.CeresTemplate. " +
+            "The template bundle may have failed to load or initialize properly."
+        );
       }
-      const html = tmpl(data);
-      if (outputDiv) outputDiv.innerHTML = html;
+      
+      const html = template(data);
+      if (outputDiv) {
+        outputDiv.innerHTML = html;
+      }
+      
     } catch (error: any) {
-      outputDiv && (outputDiv.innerHTML = "Error: " + error.message);
+      console.error("Error rendering document:", error);
+      if (outputDiv) {
+        outputDiv.innerHTML = `<div class="error-message">Error: ${error.message}</div>`;
+      }
     }
   }
 
