@@ -1,8 +1,10 @@
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const CssMinimizerPlugin = require("css-minimizer-webpack-plugin");
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
+const HtmlWebpackPlugin = require("html-webpack-plugin");
 const { RawSource } = require("webpack").sources;
 
 // Env switches (simplified)
@@ -197,14 +199,46 @@ class AssetManifestPlugin {
         },
         () => {
           const MAIN_ENTRY = "main-renderer/renderer";
-          const templateManifests = {}; // tplName -> { js, css }
+          const templateManifests = {}; // tplName -> { version, js, css, jsHash, cssHash }
           const widgetManifests = {}; // widgetName -> { js, css }
+          const globalTemplatesManifest = {}; // Global template manifest
+
+          // Helper to calculate file hash
+          const getFileHash = (filePath) => {
+            try {
+              const asset = compilation.getAsset(filePath);
+              if (asset && asset.source) {
+                const content = asset.source.source();
+                return crypto.createHash('md5').update(content).digest('hex').substring(0, 8);
+              }
+            } catch (e) {
+              // Fallback: no hash
+            }
+            return null;
+          };
+
+          // Helper to copy thumbnail if exists
+          const copyThumbnail = (templateName, version) => {
+            const srcPath = path.join(__dirname, "src", "templates", templateName, "thumbnail.png");
+            if (fs.existsSync(srcPath)) {
+              try {
+                const thumbnailContent = fs.readFileSync(srcPath);
+                const thumbnailAssetPath = `templates/${templateName}/${version}/thumbnail.png`;
+                compilation.emitAsset(thumbnailAssetPath, new RawSource(thumbnailContent));
+                return "thumbnail.png";
+              } catch (e) {
+                console.warn(`Failed to copy thumbnail for ${templateName}:`, e.message);
+              }
+            }
+            return null;
+          };
 
           for (const [entryName, entrypoint] of compilation.entrypoints) {
             const files = entrypoint
               .getFiles()
               .filter((f) => /\.(js|css)$/.test(f));
             if (!files.length) continue;
+            
             const assetRecord = {};
             for (const file of files) {
               if (file.endsWith(".js") && !assetRecord.js)
@@ -212,6 +246,7 @@ class AssetManifestPlugin {
               if (file.endsWith(".css") && !assetRecord.css)
                 assetRecord.css = file;
             }
+
             if (entryName === MAIN_ENTRY) {
               // Emit flat main manifest
               compilation.emitAsset(
@@ -220,14 +255,56 @@ class AssetManifestPlugin {
               );
               continue;
             }
+
             if (entryName.startsWith("templates/")) {
               const parts = entryName.split("/");
               if (parts.length >= 3) {
                 const templateName = parts[1];
-                templateManifests[templateName] = assetRecord;
+                const version = templateVersionMap[templateName];
+                
+                // Copy thumbnail to version directory
+                const thumbnailPath = copyThumbnail(templateName, version);
+                
+                // Create versioned manifest structure
+                const assets = {
+                  js: "bundle.js",
+                  css: "bundle.css"
+                };
+                if (thumbnailPath) {
+                  assets.thumbnail = thumbnailPath;
+                }
+
+                const digest = {
+                  js: getFileHash(assetRecord.js),
+                  css: getFileHash(assetRecord.css)
+                };
+
+                const versionedManifest = {
+                  version,
+                  assets,
+                  digest
+                };
+
+                // Emit per-version manifest
+                compilation.emitAsset(
+                  `templates/${templateName}/${version}/manifest.json`,
+                  new RawSource(JSON.stringify(versionedManifest, null, 2))
+                );
+
+                // Store for per-template root manifest with direct asset URLs
+                globalTemplatesManifest[templateName] = {
+                  manifest: `./${version}/manifest.json`,
+                  version: version,
+                  assets: {
+                    js: `./${version}/bundle.js`,
+                    css: `./${version}/bundle.css`,
+                    ...(thumbnailPath && { thumbnail: `./${version}/thumbnail.png` })
+                  }
+                };
               }
               continue;
             }
+
             if (entryName.startsWith("widgets/")) {
               const parts = entryName.split("/");
               if (parts.length >= 3) {
@@ -244,12 +321,11 @@ class AssetManifestPlugin {
               new RawSource(JSON.stringify(obj, null, 2)),
             );
 
-          // Template manifests with version + assets wrapper
-          for (const [tpl, rec] of Object.entries(templateManifests)) {
-            const version = templateVersionMap[tpl] || null;
-            emitJSON(`templates/${tpl}/manifest.json`, {
-              version,
-              assets: { [`templates/${tpl}/bundle`]: rec },
+          // Emit per-template root manifests instead of global manifest
+          if (Object.keys(globalTemplatesManifest).length) {
+            Object.keys(globalTemplatesManifest).forEach(templateName => {
+              const templateManifest = globalTemplatesManifest[templateName];
+              emitJSON(`templates/${templateName}/manifest.json`, templateManifest);
             });
           }
 
@@ -272,36 +348,45 @@ class AssetManifestPlugin {
             const distRoot = compiler.options.output.path;
             const DEBUG = process.env.PURGE_OLD_DEBUG === "1";
 
-            // Purge templates
+            // Purge templates - now purge entire version folders
             for (const tpl of Object.keys(templateVersionMap)) {
               const currentVersion = templateVersionMap[tpl];
-              const dir = path.join(distRoot, "templates", tpl);
-              if (!fs.existsSync(dir)) continue;
+              const templateDir = path.join(distRoot, "templates", tpl);
+              if (!fs.existsSync(templateDir)) continue;
               try {
-                const anyPattern = /^bundle\.([^.]+\.[^.]+\.[^.]+|[^.]+)\.(js|css)$/;
-                for (const f of fs.readdirSync(dir)) {
-                  const m = anyPattern.exec(f);
-                  if (!m) continue;
-                  const token = m[1];
-                  const isSemVer = /^\d+\.\d+\.\d+$/.test(token);
-                  const keep = isSemVer ? token === currentVersion : false;
-                  if (keep) { if (DEBUG) console.log("[purge] keep tpl", tpl, f); continue; }
-                  const abs = path.join(dir, f);
+                const versionDirs = fs.readdirSync(templateDir)
+                  .filter(d => fs.statSync(path.join(templateDir, d)).isDirectory() && /^\d+\.\d+\.\d+$/.test(d));
+                
+                for (const versionDir of versionDirs) {
+                  if (versionDir === currentVersion) {
+                    if (DEBUG) console.log("[purge] keep template version", tpl, versionDir);
+                    continue;
+                  }
+                  
+                  const versionPath = path.join(templateDir, versionDir);
                   try {
-                    const relAssetKey = path.relative(distRoot, abs).split(path.sep).join("/");
-                    if (compilation.getAsset(relAssetKey)) compilation.deleteAsset(relAssetKey);
-                    fs.unlinkSync(abs);
-                    if (DEBUG) console.log("[purge] removed old tpl", tpl, f);
+                    // Remove all files in the version directory
+                    const files = fs.readdirSync(versionPath);
+                    for (const file of files) {
+                      const filePath = path.join(versionPath, file);
+                      const relAssetKey = path.relative(distRoot, filePath).split(path.sep).join("/");
+                      if (compilation.getAsset(relAssetKey)) {
+                        compilation.deleteAsset(relAssetKey);
+                      }
+                      fs.unlinkSync(filePath);
+                    }
+                    fs.rmdirSync(versionPath);
+                    if (DEBUG) console.log("[purge] removed old template version", tpl, versionDir);
                   } catch (err) {
-                    if (DEBUG) console.warn("[purge] failed remove tpl", f, err && err.message);
+                    if (DEBUG) console.warn("[purge] failed remove template version", tpl, versionDir, err && err.message);
                   }
                 }
               } catch (e) {
-                if (DEBUG) console.warn("[purge] error scanning tpl", tpl, e && e.message);
+                if (DEBUG) console.warn("[purge] error scanning template", tpl, e && e.message);
               }
             }
 
-            // Purge widgets
+            // Purge widgets (existing logic)
             for (const w of Object.keys(widgetVersionMap)) {
               const currentVersion = widgetVersionMap[w];
               const dir = path.join(distRoot, "widgets", w);
@@ -351,7 +436,7 @@ module.exports = {
   entry: entries,
   output: {
     path: path.resolve(__dirname, "dist"),
-    // Dynamic filename: templates use semver; widgets & system bundles use contenthash for cache busting
+    // Dynamic filename: templates use semver in versioned folders; widgets & system bundles use contenthash for cache busting
     filename: (pathData) => {
       const name =
         pathData.chunk && pathData.chunk.name ? pathData.chunk.name : "[name]";
@@ -359,7 +444,7 @@ module.exports = {
         const parts = name.split("/");
         const tpl = parts[1];
         const version = templateVersionMap[tpl];
-        return `${name}.${version}.js`;
+        return `templates/${tpl}/${version}/bundle.js`;
       }
       if (name.startsWith("widgets/")) {
         const parts = name.split("/");
@@ -404,7 +489,7 @@ module.exports = {
           const parts = name.split("/");
           const tpl = parts[1];
           const version = templateVersionMap[tpl];
-          return `${name}.${version}.css`;
+          return `templates/${tpl}/${version}/bundle.css`;
         }
         if (name.startsWith("widgets/")) {
           const parts = name.split("/");
@@ -416,6 +501,12 @@ module.exports = {
       },
     }),
     new ForkTsCheckerWebpackPlugin(),
+    new HtmlWebpackPlugin({
+      template: "index.html",
+      filename: "index.html",
+      inject: false, // We handle script/CSS injection manually
+      minify: false,
+    }),
     new AssetManifestPlugin(),
   ],
   optimization: {
