@@ -70,31 +70,60 @@
         });
 
       // ---- Dynamic iframe height communication ----
-      let lastHeight = 0;
-      let lastPrintHeight = 0;
-      let resizeTimeout;
+      let lastWebHeight = null;
+      let lastPrintHeight = null;
+      let debounceTimer;
 
-      function sendHeight(isPrint = false) {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(() => {
+      function postHeight({ type, height, printMode = false }) {
+        window.parent.postMessage(
+          {
+            type,
+            height,
+            ...(printMode ? { printMode: true } : {}),
+          },
+          '*',
+        );
+      }
+
+      function sendHeight({ variant = 'web' } = {}) {
+        clearTimeout(debounceTimer);
+
+        debounceTimer = setTimeout(() => {
+          const isPrint = variant === 'print';
           const height = isPrint ? calculatePrintHeight() : calculateWebHeight();
-          const messageType = isPrint ? 'setPrintHeight' : 'setHeight';
-          const lastUsedHeight = isPrint ? lastPrintHeight : lastHeight;
-          
-          if (height !== lastUsedHeight) {
-            if (isPrint) {
-              lastPrintHeight = height;
-            } else {
-              lastHeight = height;
-            }
-            
-            window.parent.postMessage({ 
-              type: messageType, 
-              height,
-              ...(isPrint && { printMode: true })
-            }, "*");
+
+          if (!Number.isFinite(height) || height <= 0) {
+            return;
           }
+
+          const lastHeight = isPrint ? lastPrintHeight : lastWebHeight;
+          const isDifferent =
+            lastHeight === null || Math.abs(height - lastHeight) > 1;
+
+          if (!isDifferent) {
+            return;
+          }
+
+          if (isPrint) {
+            lastPrintHeight = height;
+          } else {
+            lastWebHeight = height;
+          }
+
+          postHeight({
+            type: isPrint ? 'setPrintHeight' : 'setHeight',
+            height,
+            printMode: isPrint,
+          });
         }, 50);
+      }
+
+      function sendPrintHeight() {
+        sendHeight({ variant: 'print' });
+      }
+
+      function sendWebHeight() {
+        sendHeight({ variant: 'web' });
       }
 
       function calculateWebHeight() {
@@ -128,7 +157,6 @@
           padding: 20mm; margin: 0; box-sizing: border-box; 
           background: white; color: black;
         `;
-        
         const content = document.getElementById('documentOutput') || document.body;
         measurer.innerHTML = content.innerHTML;
         document.body.appendChild(measurer);
@@ -173,18 +201,22 @@
       }
 
       // Event listeners
-      window.addEventListener("load", () => sendHeight(false));
-      
-      const observer = new ResizeObserver(() => sendHeight(false));
-      observer.observe(document.body);
-      
+      window.addEventListener('load', sendWebHeight);
+    window.addEventListener('beforeprint', sendPrintHeight);
+
+    const resizeObserver = new ResizeObserver(() => sendWebHeight());
+    const observedNode = document.getElementById('documentOutput') || document.body;
+    resizeObserver.observe(observedNode);
+
       window.addEventListener("message", (event) => {
         const { type } = event.data || {};
-        if (type === "requestHeight") sendHeight(false);
-        if (type === "requestPrintHeight") sendHeight(true);
+        if (type === "requestHeight") {
+          sendWebHeight();
+        }
+        if (type === "requestPrintHeight") {
+          sendPrintHeight();
+        }
       });
-      
-      window.addEventListener("beforeprint", () => sendHeight(true));
     </script>
   </body>
 </html>
