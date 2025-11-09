@@ -16,11 +16,18 @@
       }
 
       @media print {
+        html,
         body {
-          padding: 0px !important;
-          margin: 0px !important;
-          height: fit-content !important;
-          background-color: none !important;
+          min-height: auto !important;
+          overflow: visible !important;
+        }
+
+        body {
+          padding: 0 !important;
+          margin: 0 !important;
+          background-color: transparent !important;
+          display: block !important;
+          align-items: stretch !important;
         }
       }
 
@@ -67,160 +74,6 @@
             "Error: " + err.message;
         });
 
-      // ---- Dynamic iframe height communication ----
-      let lastWebHeight = null;
-      let lastPrintHeight = null;
-      let debounceTimer;
-
-      function postHeight({ type, height, printMode = false }) {
-        window.parent.postMessage(
-          {
-            type,
-            height,
-            ...(printMode ? { printMode: true } : {}),
-          },
-          "*",
-        );
-      }
-
-      function sendHeight({ variant = "web" } = {}) {
-        clearTimeout(debounceTimer);
-
-        debounceTimer = setTimeout(() => {
-          const isPrint = variant === "print";
-          const height = isPrint
-            ? calculatePrintHeight()
-            : calculateWebHeight();
-
-          if (!Number.isFinite(height) || height <= 0) {
-            return;
-          }
-
-          const lastHeight = isPrint ? lastPrintHeight : lastWebHeight;
-          const isDifferent =
-            lastHeight === null || Math.abs(height - lastHeight) > 1;
-
-          if (!isDifferent) {
-            return;
-          }
-
-          if (isPrint) {
-            lastPrintHeight = height;
-          } else {
-            lastWebHeight = height;
-          }
-
-          postHeight({
-            type: isPrint ? "setPrintHeight" : "setHeight",
-            height,
-            printMode: isPrint,
-          });
-        }, 50);
-      }
-
-      function sendPrintHeight() {
-        sendHeight({ variant: "print" });
-      }
-
-      function sendWebHeight() {
-        sendHeight({ variant: "web" });
-      }
-
-      function calculateWebHeight() {
-        const BUFFER = 64;
-        return document.documentElement.scrollHeight + BUFFER;
-      }
-
-      function calculatePrintHeight() {
-        // Get actual computed styles from the document
-        const body = document.body;
-        const computedStyle = window.getComputedStyle(body);
-        const documentOutput = document.getElementById("documentOutput");
-        const contentStyle = documentOutput
-          ? window.getComputedStyle(documentOutput)
-          : computedStyle;
-
-        // Extract real values from the template
-        const actualFontSize = contentStyle.fontSize || "12pt";
-        const actualLineHeight = contentStyle.lineHeight || "1.4";
-        const actualFontFamily = contentStyle.fontFamily || "Arial, sans-serif";
-
-        // Detect paper size from CSS @page or use A4 as fallback
-        const printWidth = getPrintWidth() || "210mm";
-
-        // Create off-screen print simulator with REAL template values
-        const measurer = document.createElement("div");
-        measurer.style.cssText = `
-          position: absolute; top: -9999px; left: -9999px; visibility: hidden;
-          width: ${printWidth}; 
-          font-size: ${actualFontSize}; 
-          line-height: ${actualLineHeight};
-          font-family: ${actualFontFamily};
-          padding: 20mm; margin: 0; box-sizing: border-box; 
-          background: white; color: black;
-        `;
-        const content =
-          document.getElementById("documentOutput") || document.body;
-        measurer.innerHTML = content.innerHTML;
-        document.body.appendChild(measurer);
-
-        // Force layout and measure
-        measurer.offsetHeight;
-        const printHeight = measurer.scrollHeight + 300; // Generous buffer for print safety
-
-        document.body.removeChild(measurer);
-        return printHeight;
-      }
-
-      function getPrintWidth() {
-        // Try to detect @page size from CSS
-        try {
-          const sheets = document.styleSheets;
-
-          for (let i = 0; i < sheets.length; i++) {
-            const sheet = sheets[i];
-
-            try {
-              const rules = sheet.cssRules || sheet.rules;
-
-              for (let j = 0; j < rules.length; j++) {
-                const rule = rules[j];
-                if (rule.type === CSSRule.PAGE_RULE) {
-                  const width = rule.style.width || rule.style.size;
-                  if (width) {
-                    return width;
-                  }
-                }
-              }
-            } catch (e) {
-              // Cross-origin stylesheet, skip
-            }
-          }
-        } catch (e) {
-          // Error accessing stylesheets
-        }
-
-        return "210mm"; // A4 width
-      }
-
-      // Event listeners
-      window.addEventListener("load", sendWebHeight);
-      window.addEventListener("beforeprint", sendPrintHeight);
-
-      const resizeObserver = new ResizeObserver(() => sendWebHeight());
-      const observedNode =
-        document.getElementById("documentOutput") || document.body;
-      resizeObserver.observe(observedNode);
-
-      window.addEventListener("message", (event) => {
-        const { type } = event.data || {};
-        if (type === "requestHeight") {
-          sendWebHeight();
-        }
-        if (type === "requestPrintHeight") {
-          sendPrintHeight();
-        }
-      });
     </script>
   </body>
 </html>
