@@ -1,4 +1,11 @@
-<div class="invoice-modern-container">
+<div class="invoice-modern-shell">
+  {{#if letterHead}}
+  <div class="invoice-letterhead">
+    <img src="{{letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
+  </div>
+  {{/if}}
+
+  <div class="invoice-modern-container">
   <div class="invoice-header-modern">
     <div class="logo-section">
       <h1>{{ invoiceTitle }}</h1>
@@ -168,4 +175,12 @@
     <p>&copy; 2025 {{billedBy.name}}. All rights reserved.</p>
     <p>Powered by Refrens.com</p>
   </div>
+
+  </div>
+
+  {{#if letterHeadFooter}}
+  <div class="invoice-letterhead-footer">
+    <img src="{{letterHeadFooter}}" alt="Letterhead footer"  data-ceres-height="letterhead-footer" />
+  </div>
+  {{/if}}
 </div>
