@@ -27,45 +27,92 @@ function safeReadJSON(fp) {
     return null;
   }
 }
+// Compute a stable hash of a directory (used for templates & widgets source digest)
+function hashDirectory(dir, { ignoreFiles = [], ignoreDirs = [] } = {}) {
+  const hash = crypto.createHash("md5");
+
+  function walk(currentDir) {
+    const entries = fs.readdirSync(currentDir).sort(); // sort = stable order
+    for (const entry of entries) {
+      if (ignoreDirs.includes(entry)) continue;
+      if (ignoreFiles.includes(entry)) continue;
+
+      const fullPath = path.join(currentDir, entry);
+      const stat = fs.statSync(fullPath);
+
+      if (stat.isDirectory()) {
+        walk(fullPath);
+      } else if (stat.isFile()) {
+        const relPath = path.relative(dir, fullPath);
+        hash.update(relPath);
+        hash.update(fs.readFileSync(fullPath));
+      }
+    }
+  }
+
+  if (fs.existsSync(dir)) {
+    walk(dir);
+  }
+
+  return hash.digest("hex").substring(0, 8);
+}
+
 function readVersionFile(filePath) {
   const data = safeReadJSON(filePath);
   if (!data || typeof data.version !== "string") return null;
   return /^\d+\.\d+\.\d+$/.test(data.version) ? data.version : null;
 }
-function writeVersionFile(filePath, version) {
+
+// New: template meta helpers (version + digest)
+function getTemplateVersionFile(templateName) {
+  return path.join(__dirname, "src", "templates", templateName, "version.json");
+}
+
+function readTemplateVersionMeta(templateName) {
+  const versionFile = getTemplateVersionFile(templateName);
+  const data = safeReadJSON(versionFile) || {};
+  let version = "1.0.0";
+
+  if (
+    typeof data.version === "string" &&
+    /^\d+\.\d+\.\d+$/.test(data.version)
+  ) {
+    version = data.version;
+  }
+
+  return {
+    versionFile,
+    version,
+    digest: typeof data.digest === "string" ? data.digest : null,
+  };
+}
+
+function writeTemplateVersionMeta(templateName, version, digest) {
+  const versionFile = getTemplateVersionFile(templateName);
   try {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify({ version }, null, 2));
+    fs.mkdirSync(path.dirname(versionFile), { recursive: true });
+    fs.writeFileSync(versionFile, JSON.stringify({ version, digest }, null, 2));
   } catch (e) {
     // Non-fatal: build continues; version will still be used in-memory
   }
 }
+
+function computeTemplateSourceDigest(templateName) {
+  const baseDir = path.join(__dirname, "src", "templates", templateName);
+  // Ignore version.json so bumping version doesn't change digest
+  return hashDirectory(baseDir, {
+    ignoreFiles: ["version.json"],
+    ignoreDirs: ["node_modules", "dist"],
+  });
+}
+
 function bumpPatchVersion(v) {
   const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v || "");
   if (!m) return "1.0.1"; // initialize sequence if corrupt
   return `${m[1]}.${m[2]}.${parseInt(m[3], 10) + 1}`;
 }
-function ensureAndMaybeInit(templateName) {
-  const versionFile = path.join(
-    __dirname,
-    "src",
-    "templates",
-    templateName,
-    "version.json",
-  );
-  let current = readVersionFile(versionFile);
-  if (!current) {
-    current = "1.0.0";
-    writeVersionFile(versionFile, current);
-  }
-  return { versionFile, current };
-}
-function bumpTemplate(templateName) {
-  const meta = ensureAndMaybeInit(templateName);
-  const next = bumpPatchVersion(meta.current);
-  writeVersionFile(meta.versionFile, next);
-  return next;
-}
+
+// Only bump template semver when digest changes
 function computeTemplateVersionMap(templateEntryNames) {
   const map = {};
   templateEntryNames.forEach((entryKey) => {
@@ -76,35 +123,69 @@ function computeTemplateVersionMap(templateEntryNames) {
     const templateName = parts[1];
     if (!isValidTemplateName(templateName)) return;
     if (map[templateName]) return; // guard duplicate
-    map[templateName] = bumpTemplate(templateName);
+
+    const newDigest = computeTemplateSourceDigest(templateName);
+    const meta = readTemplateVersionMeta(templateName);
+
+    let nextVersion = meta.version;
+    // If we already have a digest and it changed, bump
+    if (meta.digest && meta.digest !== newDigest) {
+      nextVersion = bumpPatchVersion(meta.version);
+    }
+    // If there was no digest, just record it without bumping
+    writeTemplateVersionMeta(templateName, nextVersion, newDigest);
+
+    map[templateName] = nextVersion;
   });
   return map;
 }
+
 let templateVersionMap = {}; // populated only if templates are built
 // --------------------------------------------------------------------------------------
 
 // --- Widget SemVer Helpers (new) -----------------------------------------------------
-function ensureAndMaybeInitWidget(widgetName) {
-  const versionFile = path.join(
-    __dirname,
-    "src",
-    "widgets",
-    widgetName,
-    "version.json",
-  );
-  let current = readVersionFile(versionFile);
-  if (!current) {
-    current = "1.0.0";
-    writeVersionFile(versionFile, current);
+// --- Widget SemVer Helpers (digest + semver-on-change) ------------------------------
+function getWidgetVersionFile(widgetName) {
+  return path.join(__dirname, "src", "widgets", widgetName, "version.json");
+}
+
+function readWidgetVersionMeta(widgetName) {
+  const versionFile = getWidgetVersionFile(widgetName);
+  const data = safeReadJSON(versionFile) || {};
+  let version = "1.0.0";
+
+  if (
+    typeof data.version === "string" &&
+    /^\d+\.\d+\.\d+$/.test(data.version)
+  ) {
+    version = data.version;
   }
-  return { versionFile, current };
+
+  return {
+    versionFile,
+    version,
+    digest: typeof data.digest === "string" ? data.digest : null,
+  };
 }
-function bumpWidget(widgetName) {
-  const meta = ensureAndMaybeInitWidget(widgetName);
-  const next = bumpPatchVersion(meta.current);
-  writeVersionFile(meta.versionFile, next);
-  return next;
+
+function writeWidgetVersionMeta(widgetName, version, digest) {
+  const versionFile = getWidgetVersionFile(widgetName);
+  try {
+    fs.mkdirSync(path.dirname(versionFile), { recursive: true });
+    fs.writeFileSync(versionFile, JSON.stringify({ version, digest }, null, 2));
+  } catch (e) {
+    // Non-fatal
+  }
 }
+
+function computeWidgetSourceDigest(widgetName) {
+  const baseDir = path.join(__dirname, "src", "widgets", widgetName);
+  return hashDirectory(baseDir, {
+    ignoreFiles: ["version.json"],
+    ignoreDirs: ["node_modules", "dist"],
+  });
+}
+
 function computeWidgetVersionMap(widgetEntryNames) {
   const map = {};
   widgetEntryNames.forEach((entryKey) => {
@@ -115,7 +196,17 @@ function computeWidgetVersionMap(widgetEntryNames) {
     const widgetName = parts[1];
     if (!isValidTemplateName(widgetName)) return;
     if (map[widgetName]) return; // guard duplicate
-    map[widgetName] = bumpWidget(widgetName);
+
+    const newDigest = computeWidgetSourceDigest(widgetName);
+    const meta = readWidgetVersionMeta(widgetName);
+
+    let nextVersion = meta.version;
+    if (meta.digest && meta.digest !== newDigest) {
+      nextVersion = bumpPatchVersion(meta.version);
+    }
+    writeWidgetVersionMeta(widgetName, nextVersion, newDigest);
+
+    map[widgetName] = nextVersion;
   });
   return map;
 }
@@ -209,7 +300,11 @@ class AssetManifestPlugin {
               const asset = compilation.getAsset(filePath);
               if (asset && asset.source) {
                 const content = asset.source.source();
-                return crypto.createHash('md5').update(content).digest('hex').substring(0, 8);
+                return crypto
+                  .createHash("md5")
+                  .update(content)
+                  .digest("hex")
+                  .substring(0, 8);
               }
             } catch (e) {
               // Fallback: no hash
@@ -219,15 +314,27 @@ class AssetManifestPlugin {
 
           // Helper to copy thumbnail if exists
           const copyThumbnail = (templateName, version) => {
-            const srcPath = path.join(__dirname, "src", "templates", templateName, "thumbnail.png");
+            const srcPath = path.join(
+              __dirname,
+              "src",
+              "templates",
+              templateName,
+              "thumbnail.png",
+            );
             if (fs.existsSync(srcPath)) {
               try {
                 const thumbnailContent = fs.readFileSync(srcPath);
                 const thumbnailAssetPath = `templates/${templateName}/${version}/thumbnail.png`;
-                compilation.emitAsset(thumbnailAssetPath, new RawSource(thumbnailContent));
+                compilation.emitAsset(
+                  thumbnailAssetPath,
+                  new RawSource(thumbnailContent),
+                );
                 return "thumbnail.png";
               } catch (e) {
-                console.warn(`Failed to copy thumbnail for ${templateName}:`, e.message);
+                console.warn(
+                  `Failed to copy thumbnail for ${templateName}:`,
+                  e.message,
+                );
               }
             }
             return null;
@@ -238,7 +345,7 @@ class AssetManifestPlugin {
               .getFiles()
               .filter((f) => /\.(js|css)$/.test(f));
             if (!files.length) continue;
-            
+
             const assetRecord = {};
             for (const file of files) {
               if (file.endsWith(".js") && !assetRecord.js)
@@ -261,14 +368,14 @@ class AssetManifestPlugin {
               if (parts.length >= 3) {
                 const templateName = parts[1];
                 const version = templateVersionMap[templateName];
-                
+
                 // Copy thumbnail to version directory
                 const thumbnailPath = copyThumbnail(templateName, version);
-                
+
                 // Create versioned manifest structure
                 const assets = {
                   js: "bundle.js",
-                  css: "bundle.css"
+                  css: "bundle.css",
                 };
                 if (thumbnailPath) {
                   assets.thumbnail = thumbnailPath;
@@ -276,19 +383,19 @@ class AssetManifestPlugin {
 
                 const digest = {
                   js: getFileHash(assetRecord.js),
-                  css: getFileHash(assetRecord.css)
+                  css: getFileHash(assetRecord.css),
                 };
 
                 const versionedManifest = {
                   version,
                   assets,
-                  digest
+                  digest,
                 };
 
                 // Emit per-version manifest
                 compilation.emitAsset(
                   `templates/${templateName}/${version}/manifest.json`,
-                  new RawSource(JSON.stringify(versionedManifest, null, 2))
+                  new RawSource(JSON.stringify(versionedManifest, null, 2)),
                 );
 
                 // Store for per-template root manifest with direct asset URLs
@@ -298,8 +405,10 @@ class AssetManifestPlugin {
                   assets: {
                     js: `./${version}/bundle.js`,
                     css: `./${version}/bundle.css`,
-                    ...(thumbnailPath && { thumbnail: `./${version}/thumbnail.png` })
-                  }
+                    ...(thumbnailPath && {
+                      thumbnail: `./${version}/thumbnail.png`,
+                    }),
+                  },
                 };
               }
               continue;
@@ -323,9 +432,12 @@ class AssetManifestPlugin {
 
           // Emit per-template root manifests instead of global manifest
           if (Object.keys(globalTemplatesManifest).length) {
-            Object.keys(globalTemplatesManifest).forEach(templateName => {
+            Object.keys(globalTemplatesManifest).forEach((templateName) => {
               const templateManifest = globalTemplatesManifest[templateName];
-              emitJSON(`templates/${templateName}/manifest.json`, templateManifest);
+              emitJSON(
+                `templates/${templateName}/manifest.json`,
+                templateManifest,
+              );
             });
           }
 
@@ -344,7 +456,11 @@ class AssetManifestPlugin {
           }
 
           // Optional purge of old template and widget versions
-          if (PURGE_OLD && (Object.keys(templateVersionMap).length || Object.keys(widgetVersionMap).length)) {
+          if (
+            PURGE_OLD &&
+            (Object.keys(templateVersionMap).length ||
+              Object.keys(widgetVersionMap).length)
+          ) {
             const distRoot = compiler.options.output.path;
             const DEBUG = process.env.PURGE_OLD_DEBUG === "1";
 
@@ -354,35 +470,64 @@ class AssetManifestPlugin {
               const templateDir = path.join(distRoot, "templates", tpl);
               if (!fs.existsSync(templateDir)) continue;
               try {
-                const versionDirs = fs.readdirSync(templateDir)
-                  .filter(d => fs.statSync(path.join(templateDir, d)).isDirectory() && /^\d+\.\d+\.\d+$/.test(d));
-                
+                const versionDirs = fs
+                  .readdirSync(templateDir)
+                  .filter(
+                    (d) =>
+                      fs.statSync(path.join(templateDir, d)).isDirectory() &&
+                      /^\d+\.\d+\.\d+$/.test(d),
+                  );
+
                 for (const versionDir of versionDirs) {
                   if (versionDir === currentVersion) {
-                    if (DEBUG) console.log("[purge] keep template version", tpl, versionDir);
+                    if (DEBUG)
+                      console.log(
+                        "[purge] keep template version",
+                        tpl,
+                        versionDir,
+                      );
                     continue;
                   }
-                  
+
                   const versionPath = path.join(templateDir, versionDir);
                   try {
                     // Remove all files in the version directory
                     const files = fs.readdirSync(versionPath);
                     for (const file of files) {
                       const filePath = path.join(versionPath, file);
-                      const relAssetKey = path.relative(distRoot, filePath).split(path.sep).join("/");
+                      const relAssetKey = path
+                        .relative(distRoot, filePath)
+                        .split(path.sep)
+                        .join("/");
                       if (compilation.getAsset(relAssetKey)) {
                         compilation.deleteAsset(relAssetKey);
                       }
                       fs.unlinkSync(filePath);
                     }
                     fs.rmdirSync(versionPath);
-                    if (DEBUG) console.log("[purge] removed old template version", tpl, versionDir);
+                    if (DEBUG)
+                      console.log(
+                        "[purge] removed old template version",
+                        tpl,
+                        versionDir,
+                      );
                   } catch (err) {
-                    if (DEBUG) console.warn("[purge] failed remove template version", tpl, versionDir, err && err.message);
+                    if (DEBUG)
+                      console.warn(
+                        "[purge] failed remove template version",
+                        tpl,
+                        versionDir,
+                        err && err.message,
+                      );
                   }
                 }
               } catch (e) {
-                if (DEBUG) console.warn("[purge] error scanning template", tpl, e && e.message);
+                if (DEBUG)
+                  console.warn(
+                    "[purge] error scanning template",
+                    tpl,
+                    e && e.message,
+                  );
               }
             }
 
@@ -392,26 +537,44 @@ class AssetManifestPlugin {
               const dir = path.join(distRoot, "widgets", w);
               if (!fs.existsSync(dir)) continue;
               try {
-                const anyPattern = /^bundle\.([^.]+\.[^.]+\.[^.]+|[^.]+)\.(js|css)$/;
+                const anyPattern =
+                  /^bundle\.([^.]+\.[^.]+\.[^.]+|[^.]+)\.(js|css)$/;
                 for (const f of fs.readdirSync(dir)) {
                   const m = anyPattern.exec(f);
                   if (!m) continue;
                   const token = m[1];
                   const isSemVer = /^\d+\.\d+\.\d+$/.test(token);
                   const keep = isSemVer ? token === currentVersion : false;
-                  if (keep) { if (DEBUG) console.log("[purge] keep widget", w, f); continue; }
+                  if (keep) {
+                    if (DEBUG) console.log("[purge] keep widget", w, f);
+                    continue;
+                  }
                   const abs = path.join(dir, f);
                   try {
-                    const relAssetKey = path.relative(distRoot, abs).split(path.sep).join("/");
-                    if (compilation.getAsset(relAssetKey)) compilation.deleteAsset(relAssetKey);
+                    const relAssetKey = path
+                      .relative(distRoot, abs)
+                      .split(path.sep)
+                      .join("/");
+                    if (compilation.getAsset(relAssetKey))
+                      compilation.deleteAsset(relAssetKey);
                     fs.unlinkSync(abs);
                     if (DEBUG) console.log("[purge] removed old widget", w, f);
                   } catch (err) {
-                    if (DEBUG) console.warn("[purge] failed remove widget", f, err && err.message);
+                    if (DEBUG)
+                      console.warn(
+                        "[purge] failed remove widget",
+                        f,
+                        err && err.message,
+                      );
                   }
                 }
               } catch (e) {
-                if (DEBUG) console.warn("[purge] error scanning widget", w, e && e.message);
+                if (DEBUG)
+                  console.warn(
+                    "[purge] error scanning widget",
+                    w,
+                    e && e.message,
+                  );
               }
             }
           }
