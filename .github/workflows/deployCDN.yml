@@ -1,0 +1,65 @@
+name: Ceres Deployment
+on: [deployment]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+run-name: Deploy - ${{ github.event.deployment.environment }} ${{ github.event.deployment.payload.version }}
+
+jobs:
+  deploy:
+    runs-on: [ubuntu-latest]
+    environment:
+      name: ${{ github.event.deployment.environment }}
+    env:
+      AZURE_CREDENTIALS: ${{ secrets[format('AZURE_CREDENTIALS_{0}', github.event.deployment.environment)] }}
+      AZURE_RESOURCE_GROUP: ${{ vars[format('AZURE_RESOURCE_GROUP_{0}', github.event.deployment.environment)] }}
+      LYDIA_STORAGE_ACCOUNT: ${{ vars[format('LYDIA_STORAGE_ACCOUNT_{0}', github.event.deployment.environment)] }}
+      LSTATIC_CDN_ENDPOINT: ${{ vars[format('LSTATIC_CDN_ENDPOINT_{0}', github.event.deployment.environment)] }}
+      WWW_CDN_PROFILE: ${{ vars[format('WWW_CDN_PROFILE_{0}', github.event.deployment.environment)] }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "22"
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: install deps
+        run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        run: npm run build
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ env.AZURE_CREDENTIALS }}
+
+      - name: Upload to blob storage
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            az storage blob upload-batch \
+              --account-name ${{ env.LYDIA_STORAGE_ACCOUNT }} \
+              --auth-mode key \
+              -d '$web/ceres' \
+              -s ./dist \
+              --overwrite
+
+      - name: Purge CDN endpoint
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            az afd endpoint purge --content-paths "/ceres/*" --profile-name "${{ env.WWW_CDN_PROFILE }}" --endpoint-name "${{ env.LSTATIC_CDN_ENDPOINT }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
