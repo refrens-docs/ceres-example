@@ -4,13 +4,70 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ceres - Custom Document Renderer</title>
-    <script src="https://unpkg.com/handlebars@4.7.8/dist/handlebars.min.js"></script>
-    <link rel="stylesheet" href="./style.css" />
+    <script src="https://unpkg.com/handlebars@4.7.8/dist/handlebars.runtime.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f8f8f8;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start; /* Align to top */
+        min-height: 100vh;
+      }
+
+      @media print {
+        body {
+          padding: 0px !important;
+          margin: 0px !important;
+          height: fit-content !important;
+          background-color: none !important;
+        }
+      }
+
+      .error-message {
+        color: red;
+        text-align: center;
+      }
+
+      .loading-message {
+        text-align: center;
+        color: #555;
+      }
+    </style>
   </head>
   <body>
     <div id="documentOutput" class="loading-message">
       Trying to load document...
     </div>
-    <script src="./app.js"></script>
+    <script>
+      // Minimal bootstrap: Load main renderer and let it handle everything else
+      fetch("./main-manifest.json")
+        .then(function (r) {
+          if (!r.ok) {
+            throw new Error("Failed to fetch main manifest: " + r.status);
+          }
+          return r.json();
+        })
+        .then(function (manifest) {
+          if (!manifest.js) {
+            throw new Error("Renderer JS not found in main manifest");
+          }
+
+          // Load main renderer JS
+          var script = document.createElement("script");
+          script.src = "./" + manifest.js;
+          script.onerror = function () {
+            document.getElementById("documentOutput").innerHTML =
+              "Error: Failed to load renderer script";
+          };
+          document.head.appendChild(script);
+        })
+        .catch(function (err) {
+          document.getElementById("documentOutput").innerHTML =
+            "Error: " + err.message;
+        });
+    </script>
   </body>
 </html>
