@@ -6,7 +6,7 @@
 
 - **Dynamic Template Loading:** Load different HTML templates based on a URL parameter.
 - **API Data Integration:** Fetch and consume JSON data from any specified external API endpoint.
-- **Mustache.js Templating:** Utilizes the powerful Mustache.js library for efficient and logic-less data binding to HTML templates.
+- **Handlebars Templating:** Utilizes the powerful Handlebars library for efficient templating with helpers and enhanced logic support.
 - **Client-Side Rendering:** All rendering occurs in the user's browser, reducing server load and improving responsiveness.
 - **Base64 Encoded API URLs:** Securely pass API endpoints via URL parameters using Base64 encoding.
 - **Customizable Data Mapping:** A flexible `mapDataToTemplateModel` function allows you to transform raw API responses into a structured model perfectly suited for your templates.
@@ -82,7 +82,7 @@ Follow these steps to set up and run Ceres locally.
 
     ```javascript
     btoa(
-      "[https://api.refrens.com/invoices/66d6801b41c663befb2c7492?_at=rndici6UoMcyC6TKbd&copy&populateBusiness=true](https://api.refrens.com/invoices/66d6801b41c663befb2c7492?_at=rndici6UoMcyC6TKbd&copy&populateBusiness=true)",
+      "[https://api.refrens.com/invoices/66d6801b41c663befb2c7492?_at=rndici6UoMcyC6TKbd&copy&populateBusiness=true](https://api.refrens.com/invoices/66d6801b41c663befb2c7492?_at=rndici6UoMcyC6TKbd&copy&populateBusiness=true)"
     );
     // This will output something like: "aHR0cHMlM0ElMkYlMkZhcGkucmVmcmVucy5jb20lMkZpbnZvaWNlcyUyRjY2ZDY4MDFiNDFjNjYzYmVmYjJjNzQ5MiUzRn9hdCUzRHJuZGljaTZVb01jeUM2VEtiZCUyNnNjb3B5JTI2cG9wdWxhdGVCdXNpbmVzcyUzRHRydWU="
     ```

@@ -21,12 +21,12 @@
         <span class="meta-label">{{customLabels.dueDate}}:</span>
         <strong>{{formattedDueDate}}</strong>
       </p>
-      {{#purchaseOrderNumber}}
+      {{#if purchaseOrderNumber}}
       <p>
         <span class="meta-label">{{customLabels.purchaseOrderNumber}}:</span>
         {{purchaseOrderNumber}}
       </p>
-      {{/purchaseOrderNumber}}
+      {{/if}}
     </div>
 
     <div class="info-section billed-by">
@@ -36,12 +36,12 @@
         {{billedBy.street}}<br />{{billedBy.city}}, {{billedBy.state}}
         {{billedBy.pincode}}<br />{{billedBy.country}}
       </p>
-      {{#billedBy.vatNumber}}
+      {{#if billedBy.vatNumber}}
       <p>
         <span class="vat-number-label">{{billedBy.vatLabel}}:</span>
         {{billedBy.vatNumber}}
       </p>
-      {{/billedBy.vatNumber}}
+      {{/if}}
     </div>
 
     <div class="info-section billed-to">
@@ -51,9 +51,9 @@
         {{billedTo.street}}<br />{{billedTo.city}}, {{billedTo.state}}
         {{billedTo.pincode}}<br />{{billedTo.country}}
       </p>
-      {{#billedTo.gstin}}
+      {{#if billedTo.gstin}}
       <p>GSTIN: {{billedTo.gstin}}</p>
-      {{/billedTo.gstin}}
+      {{/if}}
     </div>
   </div>
 
@@ -70,12 +70,12 @@
       </tr>
     </thead>
     <tbody>
-      {{#items}}
+      {{#each items}}
       <tr>
         <td>
           <span class="item-name">{{name}}</span>
-          {{#sku}}<span class="item-sku"> (SKU: {{sku}})</span>{{/sku}}
-          {{#description}}<br /><span class="item-desc">{{description}}</span>{{/description}}
+          {{#if sku}}<span class="item-sku"> (SKU: {{sku}})</span>{{/if}}
+          {{#if description}}<br /><span class="item-desc">{{description}}</span>{{/if}}
         </td>
         <td class="text-right">{{quantity}}</td>
         <td class="text-right">{{rate}}</td>
@@ -84,7 +84,7 @@
         <td class="text-right">{{igst}}</td>
         <td class="text-right"><strong>{{total}}</strong></td>
       </tr>
-      {{/items}}
+      {{/each}}
     </tbody>
   </table>
 
@@ -93,42 +93,42 @@
       <span class="label">{{customLabels.subTotal}}:</span>
       <span class="value">{{totals.subTotal}}</span>
     </div>
-    {{#totals.discount}}
+    {{#if totals.discount}}
     <div class="total-line">
       <span class="label">Discount:</span>
       <span class="value">- {{totals.discount}}</span>
     </div>
-    {{/totals.discount}}
-    {{#totals.igst}}
+    {{/if}}
+    {{#if totals.igst}}
     <div class="total-line">
       <span class="label">IGST:</span>
       <span class="value">{{totals.igst}}</span>
     </div>
-    {{/totals.igst}}
-    {{#totals.cgst}}
+    {{/if}}
+    {{#if totals.cgst}}
     <div class="total-line">
       <span class="label">CGST:</span>
       <span class="value">{{totals.cgst}}</span>
     </div>
-    {{/totals.cgst}}
-    {{#totals.sgst}}
+    {{/if}}
+    {{#if totals.sgst}}
     <div class="total-line">
       <span class="label">SGST:</span>
       <span class="value">{{totals.sgst}}</span>
     </div>
-    {{/totals.sgst}}
-    {{#totals.amountRoundOff}}
+    {{/if}}
+    {{#if totals.amountRoundOff}}
     <div class="total-line">
       <span class="label">Amount Round Off:</span>
       <span class="value">{{totals.amountRoundOff}}</span>
     </div>
-    {{/totals.amountRoundOff}}
-    {{#totals.totalRoundOff}}
+    {{/if}}
+    {{#if totals.totalRoundOff}}
     <div class="total-line">
       <span class="label">Total Round Off:</span>
       <span class="value">{{totals.totalRoundOff}}</span>
     </div>
-    {{/totals.totalRoundOff}}
+    {{/if}}
     <div class="total-line grand">
       <span class="label">{{customLabels.total}}:</span>
       <span class="value">{{totals.total}}</span>
@@ -140,22 +140,22 @@
   </div>
 
   <div class="notes-terms-modern-section">
-    {{#notes}}
+    {{#if notes}}
     <div class="notes-modern-block">
       <h3>{{customLabels.notes}}</h3>
       <p>{{notes}}</p>
     </div>
-    {{/notes}}
-    {{#terms.0.terms.length}}
+    {{/if}}
+    {{#if terms.0.terms.length}}
     <div class="terms-modern-block">
       <h3>{{customLabels.terms}}</h3>
       <ul>
-        {{#terms.0.terms}}
-        <li>{{.}}</li>
-        {{/terms.0.terms}}
+        {{#each terms.0.terms}}
+        <li>{{this}}</li>
+        {{/each}}
       </ul>
     </div>
-    {{/terms.0.terms.length}}
+    {{/if}}
   </div>
 
   <div class="invoice-footer-modern">

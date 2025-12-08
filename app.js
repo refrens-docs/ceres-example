@@ -69,7 +69,10 @@ async function renderDocument() {
       );
     }
     const apiData = await apiResponse.json();
-    outputDiv.innerHTML = Mustache.render(templateHtml, apiData);
+    
+    // Compile the Handlebars template
+    const template = Handlebars.compile(templateHtml);
+    outputDiv.innerHTML = template(apiData);
   } catch (error) {
     outputDiv.innerHTML = `<div class="error-message">Error loading document: ${error.message}.</div>`;
   }
