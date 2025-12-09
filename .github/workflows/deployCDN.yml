@@ -60,6 +60,7 @@ jobs:
 
       - name: Purge CDN endpoint
         uses: azure/CLI@v1
+        if: false
         with:
           inlineScript: |
             az afd endpoint purge --content-paths "/ceres/*" --profile-name "${{ env.WWW_CDN_PROFILE }}" --endpoint-name "${{ env.LSTATIC_CDN_ENDPOINT }}" --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
