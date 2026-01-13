@@ -134,7 +134,7 @@ function renderFallback(
   };
 
   try {
-    container.innerHTML = marked.parse(markdown, { renderer });
+    container.innerHTML = marked(markdown, { renderer });
   } catch {
     container.innerText = markdown;
   }
@@ -297,7 +297,7 @@ function register(): void {
 
   HB.registerHelper(
     "prepareMarkdownViewerData",
-    function (content: string, options: any) {
+    function(content: string, options: any) {
       const safeContent = content || "";
 
       const payload: MarkdownViewerPayload = {
@@ -333,4 +333,4 @@ try {
   console.error("MarkdownViewer registration failed:", error);
 }
 
-export {};
+export { };
