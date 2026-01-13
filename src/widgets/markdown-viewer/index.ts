@@ -51,19 +51,34 @@ const TOAST_UI_JS =
   "https://uicdn.toast.com/editor/latest/toastui-editor-viewer.min.js";
 const MARKED_JS = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
 
-let dependenciesLoaded = false;
+let dependenciesPromise: Promise<void> | null = null;
 
-function loadDependencies(): void {
-  if (dependenciesLoaded) return;
+function loadScript(src: string, globalName: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if ((window as any)[globalName]) {
+      resolve();
+      return;
+    }
 
-  if (
-    !(window as any).DOMPurify &&
-    !document.querySelector(`script[src="${DOMPURIFY_JS}"]`)
-  ) {
-    const script = document.createElement("script");
-    script.src = DOMPURIFY_JS;
-    document.head.appendChild(script);
-  }
+    const selector = `script[src="${src}"]`;
+    let script = document.querySelector(selector) as HTMLScriptElement;
+
+    if (!script) {
+      script = document.createElement("script");
+      script.src = src;
+      script.async = true;
+      document.head.appendChild(script);
+    }
+
+    script.addEventListener("load", () => resolve());
+    script.addEventListener("error", () =>
+      reject(new Error(`Failed to load ${src}`)),
+    );
+  });
+}
+
+function loadDependencies(): Promise<void> {
+  if (dependenciesPromise) return dependenciesPromise;
 
   if (!document.querySelector(`link[href="${TOAST_UI_CSS}"]`)) {
     const link = document.createElement("link");
@@ -72,25 +87,19 @@ function loadDependencies(): void {
     document.head.appendChild(link);
   }
 
-  if (
-    !(window as any).toastui &&
-    !document.querySelector(`script[src="${TOAST_UI_JS}"]`)
-  ) {
-    const script = document.createElement("script");
-    script.src = TOAST_UI_JS;
-    document.head.appendChild(script);
-  }
+  dependenciesPromise = Promise.all([
+    loadScript(DOMPURIFY_JS, "DOMPurify"),
+    loadScript(TOAST_UI_JS, "toastui"),
+  ]).then(() => undefined);
 
-  if (
-    !(window as any).marked &&
-    !document.querySelector(`script[src="${MARKED_JS}"]`)
-  ) {
-    const script = document.createElement("script");
-    script.src = MARKED_JS;
-    document.head.appendChild(script);
-  }
+  return dependenciesPromise;
+}
 
-  dependenciesLoaded = true;
+function loadFallbackDependency(): Promise<void> {
+  return Promise.all([
+    loadScript(DOMPURIFY_JS, "DOMPurify"),
+    loadScript(MARKED_JS, "marked"),
+  ]).then(() => undefined);
 }
 
 /* =========================================================
@@ -139,18 +148,35 @@ function initViewer(
   container: HTMLElement,
   payload: MarkdownViewerPayload,
 ): void {
-  if (container.dataset.mvInitialized) return;
+  // If fully initialized, skip
+  if (container.dataset.mvInitialized === "true") return;
 
   const toastui = (window as any).toastui;
   const forceFallback = payload.forceFallbackRenderer;
+  const canUpgrade = !forceFallback && toastui && toastui.Editor;
 
-  if (forceFallback || !toastui || !toastui.Editor) {
-    container.dataset.mvInitialized = "true";
-    renderFallback(
-      container,
-      payload.fallbackMarkdown,
-      payload.customLinkProps,
-    );
+  if (!canUpgrade) {
+    // If forced fallback, ensure marked is loaded
+    if (forceFallback && !(window as any).marked) {
+      loadFallbackDependency().then(() => {
+        renderFallback(
+          container,
+          payload.fallbackMarkdown,
+          payload.customLinkProps,
+        );
+      });
+    }
+
+    // Only render fallback if not yet initialized at all
+    if (!container.dataset.mvInitialized) {
+      renderFallback(
+        container,
+        payload.fallbackMarkdown,
+        payload.customLinkProps,
+      );
+      // Mark as potential for upgrade unless forced
+      container.dataset.mvInitialized = forceFallback ? "true" : "fallback";
+    }
     return;
   }
 
@@ -177,13 +203,15 @@ function initViewer(
     });
 
     container.dataset.mvInitialized = "true";
-  } catch {
-    container.dataset.mvInitialized = "true";
+  } catch (err) {
+    console.error("MarkdownViewer init failed", err);
+    // On error, stay in fallback state final
     renderFallback(
       container,
       payload.fallbackMarkdown,
       payload.customLinkProps,
     );
+    container.dataset.mvInitialized = "true";
   }
 }
 
@@ -193,7 +221,7 @@ function initViewer(
 
 function processWidgets(): void {
   const widgets = document.querySelectorAll(
-    ".markdown-viewer-widget:not([data-mv-initialized])",
+    '.markdown-viewer-widget:not([data-mv-initialized="true"])',
   );
 
   widgets.forEach((widget) => {
@@ -225,7 +253,16 @@ function processWidgets(): void {
  * ========================================================= */
 
 function startObserver(): void {
-  loadDependencies();
+  // Trigger load but handle async
+  loadDependencies()
+    .then(() => processWidgets())
+    .catch((err) => {
+      console.warn("ToastUI failed loading, falling back to marked", err);
+      // If ToastUI fails, load marked for fallback rendering
+      return loadFallbackDependency().then(() => processWidgets());
+    });
+
+  // Immediate pass (likely fallback)
   processWidgets();
 
   const observer = new MutationObserver((mutations) => {
@@ -292,8 +329,8 @@ function register(): void {
 
 try {
   register();
-} catch {
-  /* noop */
+} catch (error) {
+  console.error("MarkdownViewer registration failed:", error);
 }
 
 export {};
