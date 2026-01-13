@@ -9,42 +9,33 @@ export type MarkdownMode =
 
 export type LinkSanitizationPolicy = "internal" | "external-forced";
 
-type SafeString = string & { readonly __safeBrand: unique symbol };
-
 /* ============================
  * Constants (immutable)
  * ============================ */
-
-const SAFE_PROTOCOLS = ["http:", "https:", "mailto:", "tel:"] as const;
 
 export const defaultCustomLinkProps = Object.freeze({
   target: "_blank",
   rel: "noreferrer nofollow noopener external",
 });
 
+const DOMPURIFY_CONFIG = {
+  ALLOWED_TAGS: ["br", "a"],
+  ALLOWED_ATTR: ["href", "title"],
+  KEEP_CONTENT: true,
+} as const;
+
+const DOMPURIFY_STORAGE_CONFIG = {
+  ALLOWED_TAGS: [],
+  ALLOWED_ATTR: [],
+  KEEP_CONTENT: true,
+} as const;
+
 /* ============================
  * Internal helpers (sealed)
  * ============================ */
 
-function escapeHtmlUnsafe(input: string): SafeString {
-  const escaped = input.replace(/[&<>"']/g, (char) => {
-    switch (char) {
-      case "&":
-        return "&amp;";
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case '"':
-        return "&quot;";
-      case "'":
-        return "&#39;";
-      default:
-        return char;
-    }
-  });
-
-  return escaped as SafeString;
+function getDOMPurify(): any {
+  return (window as any).DOMPurify;
 }
 
 function assertNever(_: never): never {
@@ -57,8 +48,8 @@ function assertNever(_: never): never {
 
 /**
  * URL sanitization with sealed policy
+ * - Uses DOMPurify for URL validation
  * - Blocks javascript:, data:, blob:
- * - Forces protocol normalization
  */
 export function sanitizeAnchorUrl(
   rawUrl: string,
@@ -74,20 +65,23 @@ export function sanitizeAnchorUrl(
       return policy === "external-forced" ? "" : trimmed;
     }
 
-    const parsed = new URL(
-      trimmed,
-      trimmed.startsWith("http") ? undefined : "https://example.com",
-    );
+    const DOMPurify = getDOMPurify();
+    if (!DOMPurify) return trimmed;
 
-    if (!SAFE_PROTOCOLS.includes(parsed.protocol as any)) {
+    // Use DOMPurify's sanitizeUrl for validation
+    const sanitized = DOMPurify.sanitize(`<a href="${trimmed}"></a>`, {
+      ALLOWED_TAGS: ["a"],
+      ALLOWED_ATTR: ["href"],
+      RETURN_TRUSTED_TYPE: false,
+    }).match(/href="([^"]*)"/)?.[1] || "";
+    
+    if (!sanitized) return "";
+
+    if (policy === "external-forced" && !trimmed.startsWith("http")) {
       return "";
     }
 
-    if (policy === "external-forced") {
-      parsed.protocol = "https:";
-    }
-
-    return parsed.href;
+    return sanitized;
   } catch {
     return "";
   }
@@ -95,26 +89,32 @@ export function sanitizeAnchorUrl(
 
 /**
  * Markdown sanitization
- * - No bypass
- * - No unescape
+ * - Uses DOMPurify for HTML sanitization
  * - Mode sealed
  */
 export function sanitizeMarkdown(value: string, mode: MarkdownMode): string {
   if (!value) return "";
 
-  const escaped = escapeHtmlUnsafe(value);
+  const DOMPurify = getDOMPurify();
+  if (!DOMPurify) return value;
 
   switch (mode) {
     case "viewer":
-      // Toast UI supports <br> only
-      return escaped.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
+      // Allow <br> and <a> tags for Toast UI, sanitize hrefs
+      return DOMPurify.sanitize(value, {
+        ...DOMPURIFY_CONFIG,
+        ALLOW_DATA_ATTR: false,
+      });
 
     case "fallback":
-      return escaped;
+      return DOMPurify.sanitize(value, {
+        ...DOMPURIFY_CONFIG,
+        ALLOW_DATA_ATTR: false,
+      });
 
     case "storage":
       // Strongest: zero HTML allowance
-      return escaped;
+      return DOMPurify.sanitize(value, DOMPURIFY_STORAGE_CONFIG);
 
     default:
       assertNever(mode);
@@ -124,10 +124,13 @@ export function sanitizeMarkdown(value: string, mode: MarkdownMode): string {
 /**
  * Fallback markdown preparation
  * - Pure transformation
- * - No HTML resurrection
+ * - Uses DOMPurify for safety
  */
 export function prepareFallbackMarkdown(value: string): string {
   if (!value) return "";
 
-  return value.replace(/<br\s*\/?>/gi, "\n").replace(/\n/g, "\n\n");
+  const DOMPurify = getDOMPurify();
+  const sanitized = DOMPurify ? DOMPurify.sanitize(value, DOMPURIFY_CONFIG) : value;
+
+  return sanitized.replace(/<br\s*\/?>/gi, "\n").replace(/\n/g, "\n\n");
 }

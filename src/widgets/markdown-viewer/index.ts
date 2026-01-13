@@ -43,6 +43,8 @@ function getHB(): any {
  * CDN dependencies
  * ========================================================= */
 
+const DOMPURIFY_JS =
+  "https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js";
 const TOAST_UI_CSS =
   "https://uicdn.toast.com/editor/latest/toastui-editor-viewer.min.css";
 const TOAST_UI_JS =
@@ -53,6 +55,15 @@ let dependenciesLoaded = false;
 
 function loadDependencies(): void {
   if (dependenciesLoaded) return;
+
+  if (
+    !(window as any).DOMPurify &&
+    !document.querySelector(`script[src="${DOMPURIFY_JS}"]`)
+  ) {
+    const script = document.createElement("script");
+    script.src = DOMPURIFY_JS;
+    document.head.appendChild(script);
+  }
 
   if (!document.querySelector(`link[href="${TOAST_UI_CSS}"]`)) {
     const link = document.createElement("link");
