@@ -154,7 +154,7 @@
     {{#if notes}}
     <div class="notes-modern-block">
       <h3>{{customLabels.notes}}</h3>
-      <p>{{notes}}</p>
+      {{> MarkdownViewer (prepareMarkdownViewerData notes) }}
     </div>
     {{/if}}
     {{#if terms.0.terms.length}}
