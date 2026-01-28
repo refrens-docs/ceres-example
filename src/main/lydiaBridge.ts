@@ -1,10 +1,16 @@
+// Query params
 const LYDIA_MODE_PARAM = "isLydiaMode";
 const DEBUG_PARAM = "debugHeight";
+
+// postMessage contract
 const HEIGHT_MESSAGE_TYPE = "ceres:content-height";
 const HEIGHT_MESSAGE_SOURCE = "ceres";
+
+// Height calculation configuration
 const PRINT_HEIGHT_BUFFER = 80;
-const PARENT_HEIGHT_BUFFER = 64;
-const LETTERHEAD_HEIGHT_OVERRIDE = 185;
+const PARENT_HEIGHT_BUFFER = 0;
+const HEIGHT_REPORT_DEBOUNCE_MS = 120;
+const HEIGHT_CHANGE_THRESHOLD = 1;
 
 type CleanupFn = () => void;
 
@@ -18,6 +24,14 @@ export interface LydiaBridgeHandle {
   destroy: () => void;
 }
 
+/**
+ * Initializes the Ceres → Lydia bridge when `isLydiaMode=1` is present.
+ *
+ * Height reporting contract:
+ * - Ceres posts `ceres:content-height` only after render or when layout changes.
+ * - Updates are debounced and only sent when the height meaningfully changes.
+ * - Lydia applies the reported height to the iframe.
+ */
 export function initLydiaBridge(
   options?: LydiaBridgeOptions
 ): LydiaBridgeHandle | null {
@@ -35,20 +49,26 @@ export function initLydiaBridge(
   const shouldDebug = searchParams.has(DEBUG_PARAM);
   const outputElementId = options?.outputElementId ?? "documentOutput";
 
+  // Internal state
   let isPreparingForPrint = false;
-  let hasSentInitialHeight = false;
+  let hasSentHeight = false;
   let lastComputedHeight: number | null = null;
   let lastReportedHeight: number | null = null;
   let resizeObserver: ResizeObserver | null = null;
+  let heightReportTimer: number | null = null;
+  let pendingReportReason: string | null = null;
 
   const cleanupFns: CleanupFn[] = [];
 
+  // Logging (only when debug flag is enabled)
   const debugLog = (...args: unknown[]) => {
-    if (shouldDebug) {
-      console.debug("[CeresPrint]", ...args);
+    if (!shouldDebug) {
+      return;
     }
+    console.debug("[CeresPrint]", ...args);
   };
 
+  // DOM measurement helpers
   const computeFullHeight = (): number => {
     const { body, documentElement: docEl } = document;
     if (!body || !docEl) return 0;
@@ -64,6 +84,7 @@ export function initLydiaBridge(
 
   };
 
+  // Messaging helpers
   const postHeightToParent = (fullHeight: number, reason = "resize") => {
     if (window.parent == null || window.parent === window) {
       return;
@@ -97,22 +118,58 @@ export function initLydiaBridge(
     debugLog("postHeightToParent", payload);
   };
 
-  const reportInitialHeight = (fullHeight: number, reason = "init") => {
+  const measureAndReportHeight = (reason: string, force: boolean) => {
+    const fullHeight = computeFullHeight();
+
     if (!Number.isFinite(fullHeight) || fullHeight <= 0) {
       return;
     }
 
     lastComputedHeight = fullHeight;
 
-    if (hasSentInitialHeight) {
+    const nextReportedHeight = Math.ceil(fullHeight + PARENT_HEIGHT_BUFFER);
+    const shouldPost =
+      force ||
+      lastReportedHeight == null ||
+      Math.abs(nextReportedHeight - lastReportedHeight) > HEIGHT_CHANGE_THRESHOLD;
+
+    if (!shouldPost) {
       return;
     }
 
-    hasSentInitialHeight = true;
+    hasSentHeight = true;
     postHeightToParent(fullHeight, reason);
-    debugLog("reportInitialHeight", { reason, fullHeight });
+    debugLog("reportContentHeight", { reason, fullHeight });
   };
 
+  /**
+   * Debounced height report. The double rAF ensures layout is settled before measurement.
+   */
+  const scheduleHeightReport = (reason = "resize", force = false) => {
+    if (hasSentHeight && !force) {
+      return;
+    }
+
+    pendingReportReason = reason;
+
+    if (heightReportTimer) {
+      window.clearTimeout(heightReportTimer);
+    }
+
+    heightReportTimer = window.setTimeout(() => {
+      heightReportTimer = null;
+      const reportReason = pendingReportReason ?? reason;
+      pendingReportReason = null;
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          measureAndReportHeight(reportReason, force);
+        });
+      });
+    }, HEIGHT_REPORT_DEBOUNCE_MS);
+  };
+
+  // Print sizing helpers
   const enforceSizing = (fullHeight: number) => {
     const docEl = document.documentElement;
     const body = document.body;
@@ -128,6 +185,9 @@ export function initLydiaBridge(
     body.style.minHeight = `${targetHeight}px`;
   };
 
+  /**
+   * Applies print-friendly sizing. Uses min-height so content doesn't collapse.
+   */
   const applyPrintSizing = (reason = "manual") => {
     const docEl = document.documentElement;
     const body = document.body;
@@ -153,6 +213,9 @@ export function initLydiaBridge(
     debugLog("applyPrintSizing", { reason, fullHeight });
   };
 
+  /**
+   * Restores document sizing after printing.
+   */
   const resetSizing = (reason = "manual") => {
     const docEl = document.documentElement;
     const body = document.body;
@@ -177,7 +240,7 @@ export function initLydiaBridge(
     debugLog("resetSizing", { reason });
   };
 
-  const triggerIframePrintInternal = (reason = "manual") => {
+  const triggerPrintInternal = (reason = "manual") => {
     applyPrintSizing(reason);
 
     requestAnimationFrame(() => {
@@ -188,17 +251,12 @@ export function initLydiaBridge(
     });
   };
 
+  /**
+   * Public API used by the renderer to report a stable height once rendering finishes.
+   * This is debounced and will only post if height changed.
+   */
   const reportContentHeight = (reason = "render-complete") => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const fullHeight = computeFullHeight();
-        if (!hasSentInitialHeight) {
-          reportInitialHeight(fullHeight, reason);
-        } else {
-          lastComputedHeight = fullHeight;
-        }
-      });
-    });
+    scheduleHeightReport(reason, true);
   };
 
   const handlePrintKey = (event: KeyboardEvent) => {
@@ -212,11 +270,18 @@ export function initLydiaBridge(
     }
 
     event.preventDefault();
-    triggerIframePrintInternal("keydown");
+    triggerPrintInternal("keydown");
   };
 
   const handleBeforePrint = () => applyPrintSizing("beforeprint");
   const handleAfterPrint = () => resetSizing("afterprint");
+
+  const isPrintMessage = (data: unknown): data is { action: "lydia:print"; reason?: string } => {
+    if (!data || typeof data !== "object") {
+      return false;
+    }
+    return (data as { action?: string }).action === "lydia:print";
+  };
 
   const handleParentMessage = (event: MessageEvent) => {
     if (event.source !== window.parent) {
@@ -224,59 +289,46 @@ export function initLydiaBridge(
     }
 
     const data = event.data;
-    if (!data || typeof data !== "object") {
+    if (!isPrintMessage(data)) {
       return;
     }
 
-    const action = (data as { action?: string }).action;
-    if (action !== "lydia:print") {
-      return;
-    }
-
-    const reason = (data as { reason?: string }).reason;
-    triggerIframePrintInternal(reason ? `parent:${reason}` : "parent");
+    const reason = data.reason;
+    triggerPrintInternal(reason ? `parent:${reason}` : "parent");
   };
 
   const addCleanup = (cleanup: CleanupFn) => {
     cleanupFns.push(cleanup);
   };
 
-  const addWindowListener = <K extends keyof WindowEventMap>(
-    type: K,
-    handler: (event: WindowEventMap[K]) => void,
+  const addListener = (
+    target: Window | Document,
+    type: string,
+    handler: EventListenerOrEventListenerObject,
     options?: boolean | AddEventListenerOptions
   ) => {
-    const listener = handler as EventListener;
-    window.addEventListener(type, listener, options);
-    addCleanup(() => window.removeEventListener(type, listener, options));
+    target.addEventListener(type, handler, options);
+    addCleanup(() => target.removeEventListener(type, handler, options));
   };
 
-  addWindowListener("keydown", handlePrintKey, { passive: false });
-  addWindowListener("beforeprint", handleBeforePrint);
-  addWindowListener("afterprint", handleAfterPrint);
-  addWindowListener("message", handleParentMessage);
+  addListener(window, "keydown", handlePrintKey as EventListener, { passive: false });
+  addListener(window, "beforeprint", handleBeforePrint as EventListener);
+  addListener(window, "afterprint", handleAfterPrint as EventListener);
+  addListener(window, "message", handleParentMessage as EventListener);
 
   const handleDocumentVisibilityChange = () => {
     if (document.visibilityState === "visible" && !isPreparingForPrint) {
       resetSizing("visibilitychange");
     }
   };
-
-  document.addEventListener("visibilitychange", handleDocumentVisibilityChange);
-  addCleanup(() =>
-    document.removeEventListener(
-      "visibilitychange",
-      handleDocumentVisibilityChange
-    )
-  );
+  addListener(document, "visibilitychange", handleDocumentVisibilityChange as EventListener);
 
   if (typeof ResizeObserver !== "undefined" && document.body) {
     resizeObserver = new ResizeObserver(() => {
-      const fullHeight = computeFullHeight();
       if (isPreparingForPrint) {
+        const fullHeight = computeFullHeight();
         enforceSizing(fullHeight);
-      } else {
-        lastComputedHeight = fullHeight;
+        return;
       }
     });
 
@@ -288,43 +340,51 @@ export function initLydiaBridge(
   }
 
   const triggerPrint = (reason?: string) =>
-    triggerIframePrintInternal(reason ?? "external");
+    triggerPrintInternal(reason ?? "external");
 
-  const container = document.getElementById(outputElementId);
+  const setupInitialHeightReporting = () => {
+    const container = document.getElementById(outputElementId);
 
-  if (container && container.children.length > 0) {
-    reportContentHeight("initial");
-  } else if (container && typeof MutationObserver !== "undefined") {
-    const observer = new MutationObserver((mutations) => {
-      if (hasSentInitialHeight) {
-        observer.disconnect();
-        return;
-      }
-
-      const hasNewNodes = mutations.some(
-        (mutation) =>
-          mutation.type === "childList" && mutation.addedNodes.length > 0
-      );
-
-      if (!hasNewNodes) {
-        return;
-      }
-
-      observer.disconnect();
-      reportContentHeight("mutation");
-    });
-
-    observer.observe(container, { childList: true, subtree: true });
-    addCleanup(() => observer.disconnect());
-  } else if (!container) {
-    const onLoad = () => reportContentHeight("load");
-    if (document.readyState === "complete") {
-      requestAnimationFrame(onLoad);
-    } else {
-      window.addEventListener("load", onLoad, { once: true });
-      addCleanup(() => window.removeEventListener("load", onLoad));
+    if (
+      container &&
+      container.children.length > 0 &&
+      !container.classList.contains("loading-message")
+    ) {
+      reportContentHeight("initial");
+      return;
     }
-  }
+
+    if (container && typeof MutationObserver !== "undefined") {
+      const observer = new MutationObserver((mutations) => {
+        const hasNewNodes = mutations.some(
+          (mutation) =>
+            mutation.type === "childList" && mutation.addedNodes.length > 0
+        );
+
+        if (!hasNewNodes) {
+          return;
+        }
+
+        observer.disconnect();
+        reportContentHeight("mutation");
+      });
+
+      observer.observe(container, { childList: true, subtree: true });
+      addCleanup(() => observer.disconnect());
+      return;
+    }
+
+    if (!container) {
+      const onLoad = () => reportContentHeight("load");
+      if (document.readyState === "complete") {
+        requestAnimationFrame(onLoad);
+      } else {
+        addListener(window, "load", onLoad as EventListener, { once: true });
+      }
+    }
+  };
+
+  setupInitialHeightReporting();
 
   const destroy = () => {
     cleanupFns.forEach((fn) => fn());

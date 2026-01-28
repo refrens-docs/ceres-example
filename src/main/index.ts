@@ -77,6 +77,50 @@ const loadCSS = (href: string): Promise<void> =>
 
 const lydiaBridge = initLydiaBridge({ outputElementId: OUTPUT_ELEMENT_ID });
 
+const waitForImages = (container: HTMLElement | null, timeoutMs = 2000): Promise<void> =>
+  new Promise((resolve) => {
+    if (!container) {
+      resolve();
+      return;
+    }
+
+    const images = Array.from(container.querySelectorAll('img'));
+    if (images.length === 0) {
+      resolve();
+      return;
+    }
+
+    let pending = images.length;
+    let resolved = false;
+
+    const finish = () => {
+      if (resolved) {
+        return;
+      }
+      resolved = true;
+      resolve();
+    };
+
+    const onImageDone = () => {
+      pending -= 1;
+      if (pending <= 0) {
+        finish();
+      }
+    };
+
+    images.forEach((image) => {
+      if (image.complete) {
+        onImageDone();
+        return;
+      }
+
+      image.addEventListener('load', onImageDone, { once: true });
+      image.addEventListener('error', onImageDone, { once: true });
+    });
+
+    window.setTimeout(finish, timeoutMs);
+  });
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (value === null) {
     return false;
@@ -359,6 +403,7 @@ const renderDocument = async () => {
     const previewOptions = isLydiaMode
       ? sanitizePreviewOptions(parsePreviewOptions(getQueryParam(PREVIEW_OPTIONS_PARAM)))
       : null;
+    let previewStylesApplied = false;
 
     const assets = templateManifest.assets;
     if (!assets || !assets.js) {
@@ -371,50 +416,54 @@ const renderDocument = async () => {
 
     await Promise.all([loadScript(jsUrl), cssUrl ? loadCSS(cssUrl) : Promise.resolve()]);
 
+    const renderWithData = async (payload: any, reason = 'payload') => {
+      if (!payload) {
+        return;
+      }
+
+      if (previewOptions && typeof payload === 'object') {
+        mergeInto(payload, previewOptions);
+        if (!previewStylesApplied) {
+          applyPreviewStyles(previewOptions);
+          previewStylesApplied = true;
+        }
+      }
+
+      const template = (window as any).CeresTemplate;
+
+      if (typeof template !== 'function') {
+        throw new Error(
+          'Template bundle did not export window.CeresTemplate. The template bundle may have failed to load or initialize properly.',
+        );
+      }
+
+      const html = template(payload);
+      if (outputDiv) {
+        outputDiv.innerHTML = html;
+        outputDiv.classList.remove('loading-message');
+      }
+
+      const fontsReady = 'fonts' in document && document.fonts?.ready
+        ? document.fonts.ready
+        : Promise.resolve();
+
+      await Promise.all([fontsReady, waitForImages(outputDiv)]);
+
+      lydiaBridge?.reportContentHeight(`render:${reason}`);
+    };
+
     const response = await fetch(apiEndpoint);
     if (!response.ok) {
       throw new Error(`API request failed with status ${response.status}`);
     }
 
     const data = await response.json();
+    await renderWithData(data, 'api');
 
-    if (previewOptions) {
-      mergeInto(data, previewOptions);
+    if (previewOptions && !previewStylesApplied) {
       applyPreviewStyles(previewOptions);
+      previewStylesApplied = true;
     }
-    const template = (window as any).CeresTemplate;
-
-    if (typeof template !== 'function') {
-      throw new Error(
-        'Template bundle did not export window.CeresTemplate. The template bundle may have failed to load or initialize properly.',
-      );
-    }
-
-    const html = template(data);
-    if (outputDiv) {
-      outputDiv.innerHTML = html;
-      outputDiv.classList.remove('loading-message');
-
-      if (lydiaBridge?.reportContentHeight) {
-        const heightSensitiveImages = outputDiv.querySelectorAll<HTMLImageElement>('img[data-ceres-height]');
-
-        heightSensitiveImages.forEach((image) => {
-          if (image.complete) {
-            requestAnimationFrame(() => lydiaBridge?.reportContentHeight('asset-complete'));
-            return;
-          }
-
-          const handleImageEvent = () => {
-            requestAnimationFrame(() => lydiaBridge?.reportContentHeight('asset-load'));
-          };
-
-          image.addEventListener('load', handleImageEvent, { once: true });
-          image.addEventListener('error', handleImageEvent, { once: true });
-        });
-      }
-    }
-
-    lydiaBridge?.reportContentHeight('render');
   } catch (error: any) {
     console.error('Error rendering document:', error);
     if (outputDiv) {

@@ -76,10 +76,7 @@ body {
     padding: 0;
     background-color: none;
   }
-  .invoice-letterhead,
-  .invoice-letterhead-footer {
-    display: none !important;
-  }
+  /* .invoice-letterhead, .invoice-letterhead-footer { display: none !important; } */
 }
 
 .invoice-modern-container {
