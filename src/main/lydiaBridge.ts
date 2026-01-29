@@ -1,6 +1,13 @@
+import {
+  applyPreviewStyles,
+  extractTemplateStyleOptions,
+  getQueryParam,
+  isPlainObject,
+} from './commonUtils';
+
 // Query params
-const LYDIA_MODE_PARAM = "isLydiaMode";
 const DEBUG_PARAM = "debugHeight";
+const DEBUG_STYLES_PARAM = "debugStyles";
 
 // postMessage contract
 const HEIGHT_MESSAGE_TYPE = "ceres:content-height";
@@ -25,7 +32,7 @@ export interface LydiaBridgeHandle {
 }
 
 /**
- * Initializes the Ceres → Lydia bridge when `isLydiaMode=1` is present.
+ * Initializes the Ceres → Lydia bridge when called by the renderer.
  *
  * Height reporting contract:
  * - Ceres posts `ceres:content-height` only after render or when layout changes.
@@ -39,15 +46,10 @@ export function initLydiaBridge(
     return null;
   }
 
-  const searchParams = new URLSearchParams(window.location.search);
-  const lydiaModeEnabled = searchParams.get(LYDIA_MODE_PARAM);
-
-  if (!lydiaModeEnabled) {
-    return null;
-  }
-
-  const shouldDebug = searchParams.has(DEBUG_PARAM);
+  const shouldDebug = getQueryParam(DEBUG_PARAM) !== null;
+  const shouldDebugStyles = getQueryParam(DEBUG_STYLES_PARAM) !== null;
   const outputElementId = options?.outputElementId ?? "documentOutput";
+
 
   // Internal state
   let isPreparingForPrint = false;
@@ -283,12 +285,40 @@ export function initLydiaBridge(
     return (data as { action?: string }).action === "lydia:print";
   };
 
+  const isTemplateUpdateMessage = (
+    data: unknown,
+  ): data is { type: "lydia:template-update"; template?: unknown; reason?: string } => {
+    if (!isPlainObject(data)) {
+      return false;
+    }
+
+    return data.type === "lydia:template-update";
+  };
+
   const handleParentMessage = (event: MessageEvent) => {
     if (event.source !== window.parent) {
       return;
     }
 
     const data = event.data;
+    if (isTemplateUpdateMessage(data)) {
+      const styleOptions = extractTemplateStyleOptions({ template: data.template });
+
+      if (shouldDebugStyles) {
+        console.debug("[CeresStyle]", {
+          source: "postMessage",
+          reason: data.reason,
+          options: styleOptions,
+        });
+      }
+
+      if (styleOptions) {
+        applyPreviewStyles(styleOptions);
+      }
+
+      return;
+    }
+
     if (!isPrintMessage(data)) {
       return;
     }
