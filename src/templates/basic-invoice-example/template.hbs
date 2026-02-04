@@ -1,9 +1,11 @@
 <div class="invoice-modern-shell">
-  {{#if letterHead}}
-  <div class="no-dibella invoice-letterhead">
-    <img src="{{letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
+  <div class="no-dibella invoice-letterhead{{#unless letterHead}} is-empty{{/unless}}">
+    {{#if letterHead}}
+      <img src="{{letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
+    {{else}}
+      <img alt="Letterhead" data-ceres-height="letterhead" />
+    {{/if}}
   </div>
-  {{/if}}
 
   <div class="invoice-modern-container">
   <div class="invoice-header-modern">
@@ -291,9 +293,11 @@
 
   </div>
 
-  {{#if letterHeadFooter}}
-  <div class="no-dibella invoice-letterhead-footer">
-    <img src="{{letterHeadFooter}}" alt="Letterhead footer"  data-ceres-height="letterhead-footer" />
+  <div class="no-dibella invoice-letterhead-footer{{#unless letterHeadFooter}} is-empty{{/unless}}">
+    {{#if letterHeadFooter}}
+      <img src="{{letterHeadFooter}}" alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{else}}
+      <img alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{/if}}
   </div>
-  {{/if}}
 </div>

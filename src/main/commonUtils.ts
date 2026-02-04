@@ -144,6 +144,19 @@ const toNonEmptyString = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const toAssetUrl = (value: unknown): string | null => {
+  const direct = toNonEmptyString(value);
+  if (direct) {
+    return direct;
+  }
+
+  if (!isPlainObject(value)) {
+    return null;
+  }
+
+  return toNonEmptyString((value as PlainObject).url);
+};
+
 const isRGBAColor = (value: unknown): value is RGBAColor => {
   if (!isPlainObject(value)) {
     return false;
@@ -360,6 +373,10 @@ export const applyPreviewStyles = (options: PlainObject | null | undefined) => {
   if (template) {
     const titleFont = normalizeFontName(template.titleFont);
     const bodyFont = normalizeFontName(template.bodyFont);
+    const templateRecord = template as PlainObject;
+    const templatePdfOptions = isPlainObject(templateRecord.pdfOptions)
+      ? (templateRecord.pdfOptions as PlainObject)
+      : null;
 
     if (titleFont) {
       ensureGoogleFontLoaded(titleFont);
@@ -377,7 +394,87 @@ export const applyPreviewStyles = (options: PlainObject | null | undefined) => {
       const escaped = bodyFont.replace(/'/g, "\\'");
       setVar('--title-font', `'${escaped}', sans-serif`);
     }
+
+    if (templatePdfOptions) {
+      const zoomValue = Number(templatePdfOptions.zoomSize);
+      const zoomStyleId = 'ceres-template-zoom';
+      const existingZoom = document.getElementById(zoomStyleId);
+
+      if (!Number.isFinite(zoomValue) || zoomValue <= 0 || zoomValue === 0.8) {
+        existingZoom?.remove();
+      } else {
+        const style = existingZoom ?? document.createElement('style');
+        style.id = zoomStyleId;
+        style.textContent = `@media print { html { zoom: ${zoomValue}; } }`;
+        if (!existingZoom) {
+          document.head.appendChild(style);
+        }
+      }
+    }
   }
+};
+
+export const applyPreviewAssets = (template: PlainObject | null | undefined): boolean => {
+  if (!template || typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+
+  const hasLetterHead = Object.prototype.hasOwnProperty.call(template, 'letterHead');
+  const hasLetterHeadFooter = Object.prototype.hasOwnProperty.call(template, 'letterHeadFooter');
+
+  if (!hasLetterHead && !hasLetterHeadFooter) {
+    return false;
+  }
+
+  let didUpdate = false;
+
+  const updateAsset = (
+    dataKey: 'letterHead' | 'letterHeadFooter',
+    selector: string,
+    containerSelector: string,
+  ) => {
+    if (!Object.prototype.hasOwnProperty.call(template, dataKey)) {
+      return;
+    }
+
+    const img = document.querySelector(selector);
+    if (!(img instanceof HTMLImageElement)) {
+      return;
+    }
+
+    const url = toAssetUrl((template as PlainObject)[dataKey]);
+    const container = img.closest(containerSelector) as HTMLElement | null;
+
+    if (url) {
+      if (img.src !== url) {
+        img.src = url;
+      }
+      if (container) {
+        container.style.removeProperty('display');
+        container.classList.remove('is-empty');
+      }
+    } else {
+      img.removeAttribute('src');
+      if (container) {
+        container.classList.add('is-empty');
+      }
+    }
+
+    didUpdate = true;
+  };
+
+  updateAsset(
+    'letterHead',
+    'img[data-ceres-height="letterhead"]',
+    '.invoice-letterhead',
+  );
+  updateAsset(
+    'letterHeadFooter',
+    'img[data-ceres-height="letterhead-footer"]',
+    '.invoice-letterhead-footer',
+  );
+
+  return didUpdate;
 };
 
 export const extractTemplateStyleOptions = (payload: unknown): PlainObject | null => {
@@ -419,6 +516,13 @@ export const extractTemplateStyleOptions = (payload: unknown): PlainObject | nul
   }
   if ('bodyFont' in template) {
     templateFonts.bodyFont = template.bodyFont;
+  }
+
+  if (isPlainObject(template.pdfOptions)) {
+    const pdfOptions = template.pdfOptions as PlainObject;
+    if ('zoomSize' in pdfOptions) {
+      templateFonts.pdfOptions = { zoomSize: pdfOptions.zoomSize };
+    }
   }
 
   const result: PlainObject = {};

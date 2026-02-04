@@ -1,4 +1,5 @@
 import {
+  applyPreviewAssets,
   applyPreviewStyles,
   extractTemplateStyleOptions,
   getQueryParam,
@@ -285,6 +286,15 @@ export function initLydiaBridge(
     return (data as { action?: string }).action === "lydia:print";
   };
 
+  const isHeightRequestMessage = (
+    data: unknown,
+  ): data is { action: "lydia:height-request"; reason?: string } => {
+    if (!data || typeof data !== "object") {
+      return false;
+    }
+    return (data as { action?: string }).action === "lydia:height-request";
+  };
+
   const isTemplateUpdateMessage = (
     data: unknown,
   ): data is { type: "lydia:template-update"; template?: unknown; reason?: string } => {
@@ -316,6 +326,19 @@ export function initLydiaBridge(
         applyPreviewStyles(styleOptions);
       }
 
+      const assetUpdated = applyPreviewAssets(
+        isPlainObject(data.template) ? (data.template as Record<string, unknown>) : null,
+      );
+      if (assetUpdated) {
+        reportContentHeight('template-assets');
+      }
+
+      return;
+    }
+
+    if (isHeightRequestMessage(data)) {
+      const reason = data.reason;
+      reportContentHeight(reason ? `parent:${reason}` : 'parent:height-request');
       return;
     }
 
