@@ -43,7 +43,7 @@ function withOffset(d: Date, offsetStr?: string | number): Date {
 function looksLikeOffset(value: any): value is string | number {
   if (typeof value === 'number') return true;
   if (typeof value !== 'string') return false;
-  return /^([+-]?)(\d{1,2}):?(\d{2})$/.test(value);
+  return /^([+-]?)(\d{1,2}):?(\d{2})?$/.test(value);
 }
 
 function fmtDate(
@@ -213,25 +213,46 @@ function formatTimeSince(date: any) {
 function relativeTime(date: any) {
   const d = safeDate(date);
   if (!d) return '';
-  const diff = Math.abs(new Date().getTime() - d.getTime());
-  const day = 864e5;
-  const month = 2592e6;
-  const years = 31104e6;
-  if (diff < day) return 'today';
-  let unit: string;
-  if (diff < month) unit = 'days';
-  else if (diff < years) unit = 'months';
-  else unit = 'years';
-  const num = (() => {
-    const ms = diff;
-    if (unit === 'days') return Math.floor(ms / day);
-    if (unit === 'months') return Math.floor(ms / month);
-    return Math.floor(ms / years);
-  })();
-  let unitStr = unit === 'days' ? ' day' : unit === 'months' ? ' month' : ' year';
-  if (num > 1) unitStr += 's';
-  unitStr += ' ago';
-  return `${num}${unitStr}`;
+  const now = new Date();
+  const diffMs = d.getTime() - now.getTime();
+  const diffSeconds = Math.round(Math.abs(diffMs) / 1000);
+  const diffMinutes = Math.round(diffSeconds / 60);
+
+  const suffix = diffMs < 0 ? ' ago' : '';
+  const prefix = diffMs > 0 ? 'in ' : '';
+
+  let result = '';
+  if (diffSeconds < 30) {
+    result = 'less than a minute';
+  } else if (diffSeconds < 90) {
+    result = '1 minute';
+  } else if (diffMinutes < 45) {
+    result = `${diffMinutes} minutes`;
+  } else if (diffMinutes < 90) {
+    result = 'about 1 hour';
+  } else if (diffMinutes < 22 * 60) {
+    const hours = Math.round(diffMinutes / 60);
+    result = `about ${hours} hours`;
+  } else if (diffMinutes < 36 * 60) {
+    result = '1 day';
+  } else if (diffMinutes < 25 * 1440) {
+    const days = Math.round(diffMinutes / 1440);
+    result = `${days} days`;
+  } else if (diffMinutes < 45 * 1440) {
+    result = 'about 1 month';
+  } else if (diffMinutes < 320 * 1440) {
+    const months = Math.round(diffMinutes / 43200);
+    result = `${months} months`;
+  } else if (diffMinutes < 548 * 1440) {
+    result = 'about 1 year';
+  } else if (diffMinutes < 730 * 1440) {
+    result = 'over 1 year';
+  } else {
+    const years = Math.round(diffMinutes / 525600);
+    result = `almost ${years} years`;
+  }
+
+  return `${prefix}${result}${suffix}`.trim();
 }
 
 function register() {
