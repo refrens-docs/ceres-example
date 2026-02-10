@@ -1,3 +1,24 @@
+/**
+ * Lydia Bridge — the communication layer between Ceres and Lydia.
+ *
+ * When a business uses a custom layout template for their documents (invoices, quotations, etc.),
+ * Lydia doesn't render the document itself. Instead, it embeds Ceres inside an <iframe>.
+ * Ceres fetches the document data from Serana, renders it using the custom template, and then
+ * needs to tell Lydia how tall the content is so the iframe fits naturally — no scrollbars,
+ * no clipping. That's what this bridge handles.
+ *
+ * The lifecycle looks like this:
+ *   1. Lydia builds a Ceres URL with ?template=...&apiUrl=... and drops it into an iframe
+ *   2. Ceres renders the document template into #documentOutput
+ *   3. This bridge wakes up (if ?isLydiaMode is present), measures the content height,
+ *      and posts it to Lydia via postMessage
+ *   4. Lydia's useIframeHeight hook picks up the message and resizes the iframe
+ *   5. When the user prints, this bridge takes over sizing so the PDF comes out clean
+ *
+ * The bridge only activates when loaded inside Lydia's iframe — it's a no-op otherwise.
+ * Pass ?debugHeight in the URL to see what's happening in the console.
+ */
+
 const LYDIA_MODE_PARAM = 'isLydiaMode';
 const DEBUG_PARAM = 'debugHeight';
 const HEIGHT_MESSAGE_TYPE = 'ceres:content-height';
@@ -17,7 +38,12 @@ export interface LydiaBridgeHandle {
   destroy: () => void;
 }
 
+/**
+ * Boots the bridge. Called by Ceres' main renderer after the template is injected.
+ * Returns null if we're not inside Lydia's iframe — so it's always safe to call.
+ */
 export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle | null {
+  // Not in a browser — nothing to bridge
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return null;
   }
@@ -25,6 +51,7 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
   const searchParams = new URLSearchParams(window.location.search);
   const lydiaModeEnabled = searchParams.get(LYDIA_MODE_PARAM);
 
+  // Not embedded inside Lydia — stand down
   if (!lydiaModeEnabled) {
     return null;
   }
@@ -46,6 +73,8 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
     }
   };
 
+  // Measures the full document height using every reliable method available.
+  // Different browsers report height differently, so we take the max of all approaches.
   const computeFullHeight = (): number => {
     const { body, documentElement: docEl } = document;
     if (!body || !docEl) {
@@ -62,6 +91,8 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
     );
   };
 
+  // Sends the measured height to Lydia so it can resize the iframe to fit.
+  // Skips duplicate reports on resize to avoid unnecessary chatter.
   const postHeightToParent = (fullHeight: number, reason = 'resize') => {
     if (window.parent == null || window.parent === window) {
       return;
@@ -95,6 +126,8 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
     debugLog('postHeightToParent', payload);
   };
 
+  // The first height report is special — it's the moment Lydia knows the content is ready.
+  // We only send it once; after that, resize events take over.
   const reportInitialHeight = (fullHeight: number, reason = 'init') => {
     if (!Number.isFinite(fullHeight) || fullHeight <= 0) {
       return;
@@ -111,6 +144,8 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
     debugLog('reportInitialHeight', { reason, fullHeight });
   };
 
+  // Locks the document to a minimum height so the browser doesn't collapse it during print.
+  // The extra buffer accounts for browser chrome and margin quirks in print mode.
   const enforceSizing = (fullHeight: number) => {
     const docEl = document.documentElement;
     const body = document.body;
@@ -126,6 +161,9 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
     body.style.minHeight = `${targetHeight}px`;
   };
 
+  // Prepares the document for printing. Browsers behave oddly with iframed content —
+  // they can clip, collapse, or misalign things. We force everything to auto/visible
+  // and then pin the height so the full document makes it to the PDF.
   const applyPrintSizing = (reason = 'manual') => {
     const docEl = document.documentElement;
     const body = document.body;
@@ -151,6 +189,7 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
     debugLog('applyPrintSizing', { reason, fullHeight });
   };
 
+  // Undoes the print overrides so the document goes back to normal after printing.
   const resetSizing = (reason = 'manual') => {
     const docEl = document.documentElement;
     const body = document.body;
@@ -175,6 +214,9 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
     debugLog('resetSizing', { reason });
   };
 
+  // The actual print trigger. We apply sizing first, then wait two animation frames
+  // to let the browser settle before calling window.print(). One frame isn't enough —
+  // the browser needs a full paint cycle to reflect the style changes.
   const triggerIframePrintInternal = (reason = 'manual') => {
     applyPrintSizing(reason);
 
@@ -186,6 +228,8 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
     });
   };
 
+  // Called by Ceres' renderer after the template has been injected into the DOM.
+  // Waits two frames for the browser to finish layout, then measures and reports.
   const reportContentHeight = (reason = 'render-complete') => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -199,6 +243,8 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
     });
   };
 
+  // Intercepts Ctrl+P / Cmd+P inside the iframe so we can prep the layout before printing.
+  // Without this, the browser would print the iframe content as-is, which can look broken.
   const handlePrintKey = (event: KeyboardEvent) => {
     const key = typeof event.key === 'string' ? event.key.toLowerCase() : null;
     if (!key || key !== 'p') {
@@ -216,6 +262,8 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
   const handleBeforePrint = () => applyPrintSizing('beforeprint');
   const handleAfterPrint = () => resetSizing('afterprint');
 
+  // Listens for print commands from Lydia. When the user hits print in the parent app,
+  // Lydia sends { action: 'lydia:print' } so Ceres can prepare the layout first.
   const handleParentMessage = (event: MessageEvent) => {
     if (event.source !== window.parent) {
       return;
@@ -249,11 +297,14 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
     addCleanup(() => window.removeEventListener(type, listener, options));
   };
 
+  // Wire up all the event listeners. Everything gets tracked for cleanup on destroy.
   addWindowListener('keydown', handlePrintKey, { passive: false });
   addWindowListener('beforeprint', handleBeforePrint);
   addWindowListener('afterprint', handleAfterPrint);
   addWindowListener('message', handleParentMessage);
 
+  // Some browsers leave print styles stuck when the user switches tabs during a print dialog.
+  // When the tab comes back into view, we clean up just in case.
   const handleDocumentVisibilityChange = () => {
     if (document.visibilityState === 'visible' && !isPreparingForPrint) {
       resetSizing('visibilitychange');
@@ -263,6 +314,9 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
   document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
   addCleanup(() => document.removeEventListener('visibilitychange', handleDocumentVisibilityChange));
 
+  // Watch for content size changes after initial render — images loading, fonts swapping,
+  // or dynamic content shifting things around. During print prep, we re-enforce sizing;
+  // otherwise we just track the latest height quietly.
   if (typeof ResizeObserver !== 'undefined' && document.body) {
     resizeObserver = new ResizeObserver(() => {
       const fullHeight = computeFullHeight();
@@ -282,6 +336,11 @@ export function initLydiaBridge(options?: LydiaBridgeOptions): LydiaBridgeHandle
 
   const triggerPrint = (reason?: string) => triggerIframePrintInternal(reason ?? 'external');
 
+  // Figure out when the template content is actually in the DOM so we can report
+  // the first meaningful height to Lydia. Three strategies, in order of preference:
+  //   1. Content is already there — measure immediately
+  //   2. Container exists but is empty — watch for the first child nodes to appear
+  //   3. No container at all — fall back to the window load event
   const container = document.getElementById(outputElementId);
 
   if (container && container.children.length > 0) {
