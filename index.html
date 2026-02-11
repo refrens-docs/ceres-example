@@ -9,8 +9,6 @@
       body {
         font-family: Arial, sans-serif;
         margin: 0;
-        padding: 20px;
-        background-color: #f8f8f8;
         display: flex;
         justify-content: center;
         align-items: flex-start; /* Align to top */
@@ -18,11 +16,18 @@
       }
 
       @media print {
+        html,
         body {
-          padding: 0px !important;
-          margin: 0px !important;
-          height: fit-content !important;
-          background-color: none !important;
+          min-height: auto !important;
+          overflow: visible !important;
+        }
+
+        body {
+          padding: 0 !important;
+          margin: 0 !important;
+          background-color: transparent !important;
+          display: block !important;
+          align-items: stretch !important;
         }
       }
 
@@ -68,6 +73,7 @@
           document.getElementById("documentOutput").innerHTML =
             "Error: " + err.message;
         });
+
     </script>
   </body>
 </html>
