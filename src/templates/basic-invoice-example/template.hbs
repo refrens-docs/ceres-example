@@ -1,4 +1,13 @@
-<div class="invoice-modern-container">
+<div class="invoice-modern-shell">
+  <div class="no-dibella invoice-letterhead{{#unless letterHead}} is-empty{{/unless}}">
+    {{#if letterHead}}
+      <img src="{{letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
+    {{else}}
+      <img alt="Letterhead" data-ceres-height="letterhead" />
+    {{/if}}
+  </div>
+
+  <div class="invoice-modern-container">
   <div class="invoice-header-modern">
     <div class="logo-section">
       <h1>{{ invoiceTitle }}</h1>
@@ -16,12 +25,44 @@
       </p>
       <p>
         <span class="meta-label">{{customLabels.invoiceDate}}:</span>
-        {{invoiceDateUserInput}}
+        {{formateShortDateWithOffset invoiceDate ownerOffset}}
       </p>
       <p>
         <span class="meta-label">{{customLabels.dueDate}}:</span>
-        <strong>{{formattedDueDate}}</strong>
+        <strong>{{formateShortDateWithOffset dueDate ownerOffset}}</strong>
       </p>
+      {{#if irn}}
+      {{#if irn.AckDt}}
+      <p>
+        <span class="meta-label">IRN Ack Date:</span>
+        {{formatDateInTimeZone irn.AckDt "UTC" "SECONDARY_SHORT_DATE_FORMAT"}}
+      </p>
+      {{/if}}
+      {{#if irn.CancelDate}}
+      <p>
+        <span class="meta-label">IRN Cancelled On:</span>
+        {{formateShortDateWithOffset irn.CancelDate ownerOffset}}
+      </p>
+      {{/if}}
+      {{#if irn.EwbDt}}
+      <p>
+        <span class="meta-label">E-Way Bill Date:</span>
+        {{formatDateInTimeZone irn.EwbDt "UTC" "SECONDARY_SHORT_DATE_FORMAT"}}
+      </p>
+      {{/if}}
+      {{#if irn.EwbValidTill}}
+      <p>
+        <span class="meta-label">E-Way Valid Till:</span>
+        {{formatDateInTimeZone irn.EwbValidTill "UTC" "SECONDARY_SHORT_DATE_FORMAT"}}
+      </p>
+      {{/if}}
+      {{#if irn.ewayCancelDate}}
+      <p>
+        <span class="meta-label">E-Way Cancelled On:</span>
+        {{formatDateInTimeZone irn.ewayCancelDate "UTC" "SECONDARY_SHORT_DATE_FORMAT"}}
+      </p>
+      {{/if}}
+      {{/if}}
       {{!-- Status tag using the minimal InvoiceStatus widget --}}
       <p>
         <span class="meta-label">Status:</span>
@@ -61,6 +102,42 @@
       <p>GSTIN: {{billedTo.gstin}}</p>
       {{/if}}
     </div>
+
+    {{#if transportDetails}}
+    <div class="info-section transport-details">
+      <h3>Transport</h3>
+      {{#if transportDetails.transport}}
+      <p>
+        <span class="meta-label">Mode:</span>
+        {{transportDetails.transport}}
+      </p>
+      {{/if}}
+      {{#if transportDetails.transportMode}}
+      <p>
+        <span class="meta-label">Transport Mode:</span>
+        {{transportDetails.transportMode}}
+      </p>
+      {{/if}}
+      {{#if transportDetails.challanNumber}}
+      <p>
+        <span class="meta-label">Challan No.:</span>
+        {{transportDetails.challanNumber}}
+      </p>
+      {{/if}}
+      {{#if transportDetails.challanDate}}
+      <p>
+        <span class="meta-label">Challan Date:</span>
+        {{formateDateWithOffset transportDetails.challanDate ownerOffset}}
+      </p>
+      {{/if}}
+      {{#if transportDetails.extraInformation}}
+      <p>
+        <span class="meta-label">Notes:</span>
+        {{transportDetails.extraInformation}}
+      </p>
+      {{/if}}
+    </div>
+    {{/if}}
   </div>
 
   <table class="item-table-modern">
@@ -144,11 +221,56 @@
       <span class="label">{{customLabels.total}}:</span>
       <span class="value">{{totals.total}}</span>
     </div>
+    {{#if latePaymentFee}}
+    {{#if dueDate}}
+    {{#if latePaymentFee.showInInvoice}}
+    {{#if latePaymentFee.enabled}}
+    {{#unless latePaymentFee.isApplied}}
+    <div class="total-line late-fee">
+      <span class="label">Late Payment Fee:</span>
+      <span class="value">
+        {{#if latePaymentFee.finalAmount}}Additional {{latePaymentFee.finalAmount}} {{/if}}
+        {{#if latePaymentFee.when}}
+          after {{formatDateAddDays dueDate latePaymentFee.when ownerOffset}}
+        {{/if}}
+      </span>
+    </div>
+    {{/unless}}
+    {{/if}}
+    {{/if}}
+    {{/if}}
+    {{/if}}
     <div class="total-in-words">
       <span>{{customLabels.totalInWords}}:</span>
       <span>{{customLabels.totalInWordsValue}}</span>
     </div>
   </div>
+
+  {{#if allPayments.length}}
+  <div class="payments-section">
+    <h3>Payments</h3>
+    <table class="item-table-modern">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Mode</th>
+          <th class="text-right">Amount</th>
+          <th class="text-right">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each allPayments}}
+        <tr>
+          <td>{{formateShortDateWithOffset paymentDate ../ownerOffset}}</td>
+          <td>{{paymentMethod}}</td>
+          <td class="text-right">{{amount}}</td>
+          <td class="text-right">{{status}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
 
   <div class="notes-terms-modern-section">
     {{#if notes}}
@@ -172,5 +294,15 @@
   <div class="invoice-footer-modern">
     <p>&copy; 2025 {{billedBy.name}}. All rights reserved.</p>
     <p>Powered by Refrens.com</p>
+  </div>
+
+  </div>
+
+  <div class="no-dibella invoice-letterhead-footer{{#unless letterHeadFooter}} is-empty{{/unless}}">
+    {{#if letterHeadFooter}}
+      <img src="{{letterHeadFooter}}" alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{else}}
+      <img alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{/if}}
   </div>
 </div>
