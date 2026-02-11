@@ -8,12 +8,78 @@
 /* --- Modern Edge Template Styles --- */
 @import url("https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Noto+Sans+Arabic:wght@100..900&display=swap");
 
+:root {
+  --title-font: "Funnel Display", sans-serif;
+  --subtitle-font: "Funnel Display", sans-serif;
+  --primary-color: #3f51b5;
+  --secondary-color: #673ab7;
+  --primary-background: #f8fafd;
+  --secondary-background: #ffffff;
+}
+
 body {
-  font-family: "Funnel Display", sans-serif;
+  font-family: var(--subtitle-font);
+
+  .invoice-modern-shell {
+    max-width: 1000px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .invoice-letterhead,
+  .invoice-letterhead-footer {
+    display: block;
+    width: 100%;
+  }
+
+  .invoice-letterhead img,
+  .invoice-letterhead-footer img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
   margin: 0;
   color: #333;
   -webkit-print-color-adjust: exact;
-  color-adjust: exact;
+  print-color-adjust: exact;
+  width: 100%;
+}
+
+.invoice-modern-shell {
+  max-width: 1000px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.invoice-letterhead,
+.invoice-letterhead-footer {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.invoice-letterhead.is-empty,
+.invoice-letterhead-footer.is-empty {
+  position: absolute;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.invoice-letterhead img,
+.invoice-letterhead-footer img {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 @media print {
@@ -22,12 +88,11 @@ body {
     padding: 0;
     background-color: none;
   }
+  /* .invoice-letterhead, .invoice-letterhead-footer { display: none !important; } */
 }
 
 .invoice-modern-container {
-  max-width: 1000px;
-  margin: 0 auto;
-  background-color: #ffffff;
+  padding-inline: 32px;
   border-radius: 12px;
 }
 
@@ -41,7 +106,8 @@ body {
   border-bottom: 2px solid #e0e0e0;
 }
 .invoice-header-modern .logo-section h1 {
-  color: #3f51b5; /* Deep blue */
+  color: var(--primary-color);
+  font-family: var(--title-font);
   font-size: 42px;
   margin: 0;
   font-weight: 800;
@@ -55,7 +121,7 @@ body {
 
 /* Consolidated Info Block */
 .info-block-modern {
-  background-color: #f8fafd;
+  background-color: var(--secondary-background);
   border: 1px solid #e0e6ed;
   border-radius: 8px;
   padding: 30px;
@@ -69,7 +135,8 @@ body {
   padding: 0;
 }
 .info-section h3 {
-  color: #3f51b5;
+  color: var(--primary-color);
+  font-family: var(--title-font);
   font-size: 18px;
   margin-top: 0;
   margin-bottom: 15px;
@@ -112,14 +179,14 @@ body {
   font-size: 14px;
 }
 .item-table-modern thead th {
-  background-color: #3f51b5;
+  background-color: var(--primary-color);
   color: #fff;
   font-weight: 600;
   text-transform: uppercase;
 }
 .item-table-modern tbody td {
   border-bottom: 1px solid #eef2f5;
-  background-color: #fff;
+  background-color: var(--secondary-background);
 }
 .item-table-modern tbody tr:last-child td {
   border-bottom: none;
@@ -132,7 +199,7 @@ body {
 }
 .item-table-modern .item-name {
   font-weight: 600;
-  color: #222;
+  color: var(--primary-color);
 }
 .item-table-modern .item-desc {
   font-size: 12px;
@@ -145,8 +212,8 @@ body {
 .totals-full-width-section {
   background: linear-gradient(
     to right,
-    #3f51b5,
-    #673ab7
+    var(--primary-color),
+    var(--secondary-color)
   ); /* Gradient background */
   color: #fff;
   padding: 40px 50px;
@@ -223,7 +290,7 @@ body {
 }
 .notes-modern-block,
 .terms-modern-block {
-  background-color: #fdfdfd;
+  background-color: var(--secondary-background);
   padding: 25px;
   border-radius: 8px;
   border: 1px solid #eee;
@@ -231,7 +298,8 @@ body {
 }
 .notes-modern-block h3,
 .terms-modern-block h3 {
-  color: #3f51b5;
+  color: var(--primary-color);
+  font-family: var(--title-font);
   font-size: 18px;
   margin-top: 0;
   margin-bottom: 15px;

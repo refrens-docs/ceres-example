@@ -1,78 +1,37 @@
+import { initDibellaBridge } from './dibellaBridge';
 import { initLydiaBridge } from './lydiaBridge';
+import {
+  applyPreviewStyles,
+  decodeBase64,
+  extractTemplateStyleOptions,
+  getQueryParam,
+  loadCSS,
+  loadScript,
+  loadTemplateManifest,
+  waitForImages,
+} from './commonUtils';
 
 const OUTPUT_ELEMENT_ID = 'documentOutput';
+const LYDIA_MODE_PARAM = 'isLydiaMode';
+const DIBELLA_MODE_PARAM = 'isDibellaMode';
+const DEBUG_STYLES_PARAM = 'debugStyles';
 
-const decodeBase64 = (encoded: string | null): string | null => {
-  if (!encoded) {
-    return null;
-  }
+const isLydiaMode = Boolean(getQueryParam(LYDIA_MODE_PARAM));
+const isDibellaMode = Boolean(getQueryParam(DIBELLA_MODE_PARAM));
 
-  try {
-    return atob(encoded);
-  } catch (error) {
-    return null;
-  }
-};
+const shouldDebugStyles = getQueryParam(DEBUG_STYLES_PARAM) !== null;
 
-const getQueryParam = (key: string): string | null => {
-  const params = new URLSearchParams(window.location.search);
-  return params.get(key);
-};
+if (isDibellaMode && !isLydiaMode && typeof document !== 'undefined') {
+  document.body?.classList.add('isDibella');
+}
 
-const resolveTemplateManifestUrl = (encodedValue: string | null): string | null => {
-  if (!encodedValue) {
-    return null;
-  }
+const lydiaBridge = isLydiaMode
+  ? initLydiaBridge({ outputElementId: OUTPUT_ELEMENT_ID })
+  : null;
 
-  const decoded = decodeBase64(encodedValue);
-  if (!decoded) {
-    return null;
-  }
-
-  if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
-    return decoded;
-  }
-
-  return `./templates/${decoded}/manifest.json`;
-};
-
-const loadTemplateManifest = async () => {
-  const encodedManifestUrl = getQueryParam('templateManifest') || getQueryParam('template');
-  const manifestUrl = resolveTemplateManifestUrl(encodedManifestUrl);
-
-  if (!manifestUrl) {
-    throw new Error('No template specified. Please provide ?template=<name> or ?templateManifest=<base64-url>');
-  }
-
-  const response = await fetch(manifestUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch template manifest from ${manifestUrl}: ${response.status}`);
-  }
-
-  const manifest = await response.json();
-  return { manifest, url: manifestUrl };
-};
-
-const loadScript = (src: string): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = src;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-    document.head.appendChild(script);
-  });
-
-const loadCSS = (href: string): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = href;
-    link.onload = () => resolve();
-    link.onerror = () => reject(new Error(`Failed to load CSS: ${href}`));
-    document.head.appendChild(link);
-  });
-
-const lydiaBridge = initLydiaBridge({ outputElementId: OUTPUT_ELEMENT_ID });
+const dibellaBridge = !isLydiaMode && isDibellaMode
+  ? initDibellaBridge()
+  : null;
 
 const renderDocument = async () => {
   const outputDiv = document.getElementById(OUTPUT_ELEMENT_ID);
@@ -90,6 +49,8 @@ const renderDocument = async () => {
       throw new Error('Could not decode apiUrl parameter');
     }
 
+    let templateStylesApplied = false;
+
     const assets = templateManifest.assets;
     if (!assets || !assets.js) {
       throw new Error("Template manifest does not contain required 'assets.js' field");
@@ -101,27 +62,65 @@ const renderDocument = async () => {
 
     await Promise.all([loadScript(jsUrl), cssUrl ? loadCSS(cssUrl) : Promise.resolve()]);
 
+    const renderWithData = async (payload: any, reason = 'payload') => {
+      if (!payload) {
+        return;
+      }
+
+      const templateStyleOptions = extractTemplateStyleOptions(payload);
+      if (templateStyleOptions && !templateStylesApplied) {
+        if (shouldDebugStyles) {
+          console.debug('[CeresStyle]', {
+            source: 'apiTemplate',
+            options: templateStyleOptions,
+          });
+        }
+        applyPreviewStyles(templateStyleOptions);
+        templateStylesApplied = true;
+      } else if (shouldDebugStyles && !templateStyleOptions) {
+        console.debug('[CeresStyle]', {
+          source: 'apiTemplate',
+          options: null,
+        });
+      }
+
+      const template = (window as any).CeresTemplate;
+
+      if (typeof template !== 'function') {
+        throw new Error(
+          'Template bundle did not export window.CeresTemplate. The template bundle may have failed to load or initialize properly.',
+        );
+      }
+
+      const html = template(payload);
+      if (outputDiv) {
+        outputDiv.innerHTML = html;
+        outputDiv.classList.remove('loading-message');
+      }
+
+      const fontsReady = 'fonts' in document && document.fonts?.ready
+        ? document.fonts.ready
+        : Promise.resolve();
+
+      await Promise.all([fontsReady, waitForImages(outputDiv)]);
+
+      lydiaBridge?.reportContentHeight(`render:${reason}`);
+    };
+
     const response = await fetch(apiEndpoint);
     if (!response.ok) {
       throw new Error(`API request failed with status ${response.status}`);
     }
 
     const data = await response.json();
-    const template = (window as any).CeresTemplate;
+    await renderWithData(data, 'api');
 
-    if (typeof template !== 'function') {
-      throw new Error(
-        'Template bundle did not export window.CeresTemplate. The template bundle may have failed to load or initialize properly.',
-      );
+    if (shouldDebugStyles && !templateStylesApplied) {
+      console.debug('[CeresStyle]', {
+        source: 'apiTemplate:missing',
+        options: null,
+      });
     }
-
-    const html = template(data);
-    if (outputDiv) {
-      outputDiv.innerHTML = html;
-      outputDiv.classList.remove('loading-message');
-    }
-
-    lydiaBridge?.reportContentHeight('render');
   } catch (error: any) {
     console.error('Error rendering document:', error);
     if (outputDiv) {

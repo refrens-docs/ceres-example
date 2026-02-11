@@ -1,4 +1,13 @@
-<div class="invoice-modern-container">
+<div class="invoice-modern-shell">
+  <div class="no-dibella invoice-letterhead{{#unless letterHead}} is-empty{{/unless}}">
+    {{#if letterHead}}
+      <img src="{{letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
+    {{else}}
+      <img alt="Letterhead" data-ceres-height="letterhead" />
+    {{/if}}
+  </div>
+
+  <div class="invoice-modern-container">
   <div class="invoice-header-modern">
     <div class="logo-section">
       <h1>{{ invoiceTitle }}</h1>
@@ -285,5 +294,15 @@
   <div class="invoice-footer-modern">
     <p>&copy; 2025 {{billedBy.name}}. All rights reserved.</p>
     <p>Powered by Refrens.com</p>
+  </div>
+
+  </div>
+
+  <div class="no-dibella invoice-letterhead-footer{{#unless letterHeadFooter}} is-empty{{/unless}}">
+    {{#if letterHeadFooter}}
+      <img src="{{letterHeadFooter}}" alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{else}}
+      <img alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{/if}}
   </div>
 </div>
