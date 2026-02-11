@@ -1,155 +1,136 @@
-(function() {
-  // Simple base64 decoder
-  function decodeBase64(encoded: any) {
-    try {
-      return atob(encoded);
-    } catch (e) {
-      return null;
+import { initDibellaBridge } from './dibellaBridge';
+import { initLydiaBridge } from './lydiaBridge';
+import {
+  applyPreviewStyles,
+  decodeBase64,
+  extractTemplateStyleOptions,
+  getQueryParam,
+  loadCSS,
+  loadScript,
+  loadTemplateManifest,
+  waitForImages,
+} from './commonUtils';
+
+const OUTPUT_ELEMENT_ID = 'documentOutput';
+const LYDIA_MODE_PARAM = 'isLydiaMode';
+const DIBELLA_MODE_PARAM = 'isDibellaMode';
+const DEBUG_STYLES_PARAM = 'debugStyles';
+
+const isLydiaMode = Boolean(getQueryParam(LYDIA_MODE_PARAM));
+const isDibellaMode = Boolean(getQueryParam(DIBELLA_MODE_PARAM));
+
+const shouldDebugStyles = getQueryParam(DEBUG_STYLES_PARAM) !== null;
+
+if (isDibellaMode && !isLydiaMode && typeof document !== 'undefined') {
+  document.body?.classList.add('isDibella');
+}
+
+const lydiaBridge = isLydiaMode
+  ? initLydiaBridge({ outputElementId: OUTPUT_ELEMENT_ID })
+  : null;
+
+const dibellaBridge = !isLydiaMode && isDibellaMode
+  ? initDibellaBridge()
+  : null;
+
+const renderDocument = async () => {
+  const outputDiv = document.getElementById(OUTPUT_ELEMENT_ID);
+
+  try {
+    const { manifest: templateManifest, url: templateManifestUrl } = await loadTemplateManifest();
+
+    const encodedApiUrl = getQueryParam('apiUrl');
+    if (!encodedApiUrl) {
+      throw new Error('Missing required parameter: ?apiUrl=<base64-encoded-url>');
     }
-  }
 
-  function getQueryParam(key: any) {
-    const params = new URLSearchParams(window.location.search);
-    return params.get(key);
-  }
-
-  // Resolve template manifest URL from encoded query parameter
-  function resolveTemplateManifestUrl(encodedValue: any) {
-    if (!encodedValue) return null;
-    
-    const decoded = decodeBase64(encodedValue);
-    if (!decoded) return null;
-    
-    // Check if it's a full URL or template name
-    if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
-      return decoded; // Full URL
-    } else {
-      // Template name - construct local path
-      return './templates/' + decoded + '/manifest.json';
+    const apiEndpoint = decodeBase64(encodedApiUrl);
+    if (!apiEndpoint) {
+      throw new Error('Could not decode apiUrl parameter');
     }
-  }
 
-  // Load template manifest from URL
-  async function loadTemplateManifest() {
-    // Try templateManifest param first, then template param
-    const encodedManifestUrl = getQueryParam('templateManifest') || getQueryParam('template');
-    
-    // Resolve the manifest URL
-    const manifestUrl = resolveTemplateManifestUrl(encodedManifestUrl);
-    
-    if (!manifestUrl) {
-      throw new Error(
-        'No template specified. Please provide ?template=<name> or ?templateManifest=<base64-url>'
-      );
+    let templateStylesApplied = false;
+
+    const assets = templateManifest.assets;
+    if (!assets || !assets.js) {
+      throw new Error("Template manifest does not contain required 'assets.js' field");
     }
-    
-    const response = await fetch(manifestUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch template manifest from ${manifestUrl}: ${response.status}`);
-    }
-    
-    const manifest = await response.json();
-    return { manifest: manifest, url: manifestUrl };
-  }
 
-  function loadScript(src: any) {
-    return new Promise(function(resolve, reject) {
-      const script = document.createElement("script");
-      script.src = src;
-      script.onload = resolve;
-      script.onerror = function() {
-        reject(new Error("Failed to load script: " + src));
-      };
-      document.head.appendChild(script);
-    });
-  }
+    const manifestBaseUrl = templateManifestUrl.substring(0, templateManifestUrl.lastIndexOf('/'));
+    const jsUrl = `${manifestBaseUrl}/${assets.js}`;
+    const cssUrl = assets.css ? `${manifestBaseUrl}/${assets.css}` : null;
 
-  function loadCSS(href: any) {
-    return new Promise(function(resolve, reject) {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = href;
-      link.onload = function() {
-        resolve(null);
-      };
-      link.onerror = function() {
-        reject(new Error("Failed to load CSS: " + href));
-      };
-      document.head.appendChild(link);
-    });
-  }
+    await Promise.all([loadScript(jsUrl), cssUrl ? loadCSS(cssUrl) : Promise.resolve()]);
 
-  async function renderDocument() {
-    const outputDiv = document.getElementById("documentOutput");
-
-    try {
-      // Step 1: Load template manifest
-      const { manifest: templateManifest, url: templateManifestUrl } = 
-        await loadTemplateManifest();
-
-      // Step 2: Get and decode API URL
-      const encodedApiUrl = getQueryParam("apiUrl");
-      if (!encodedApiUrl) {
-        throw new Error("Missing required parameter: ?apiUrl=<base64-encoded-url>");
-      }
-      
-      const API_ENDPOINT = decodeBase64(encodedApiUrl);
-      if (!API_ENDPOINT) {
-        throw new Error("Could not decode apiUrl parameter");
+    const renderWithData = async (payload: any, reason = 'payload') => {
+      if (!payload) {
+        return;
       }
 
-      // Step 3: Extract and validate template assets
-      const assets = templateManifest.assets;
-      if (!assets || !assets.js) {
-        throw new Error(
-          "Template manifest does not contain required 'assets.js' field"
-        );
+      const templateStyleOptions = extractTemplateStyleOptions(payload);
+      if (templateStyleOptions && !templateStylesApplied) {
+        if (shouldDebugStyles) {
+          console.debug('[CeresStyle]', {
+            source: 'apiTemplate',
+            options: templateStyleOptions,
+          });
+        }
+        applyPreviewStyles(templateStyleOptions);
+        templateStylesApplied = true;
+      } else if (shouldDebugStyles && !templateStyleOptions) {
+        console.debug('[CeresStyle]', {
+          source: 'apiTemplate',
+          options: null,
+        });
       }
 
-      // Step 4: Build absolute URLs for template assets
-      const manifestBaseUrl = templateManifestUrl.substring(
-        0,
-        templateManifestUrl.lastIndexOf("/")
-      );
-      const jsUrl = manifestBaseUrl + "/" + assets.js;
-      const cssUrl = assets.css ? manifestBaseUrl + "/" + assets.css : null;
-
-      // Step 5: Load template bundle (JS + CSS if present)
-      await Promise.all([
-        loadScript(jsUrl),
-        cssUrl ? loadCSS(cssUrl) : Promise.resolve(null),
-      ]);
-
-      // Step 6: Fetch API data
-      const response = await fetch(API_ENDPOINT);
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-      const data = await response.json();
-
-      // Step 7: Get the loaded template and render
       const template = (window as any).CeresTemplate;
-      if (!template) {
+
+      if (typeof template !== 'function') {
         throw new Error(
-          "Template bundle did not export window.CeresTemplate. " +
-            "The template bundle may have failed to load or initialize properly."
+          'Template bundle did not export window.CeresTemplate. The template bundle may have failed to load or initialize properly.',
         );
       }
-      
-      const html = template(data);
+
+      const html = template(payload);
       if (outputDiv) {
         outputDiv.innerHTML = html;
+        outputDiv.classList.remove('loading-message');
       }
-      
-    } catch (error: any) {
-      console.error("Error rendering document:", error);
-      if (outputDiv) {
-        outputDiv.innerHTML = `<div class="error-message">Error: ${error.message}</div>`;
-      }
+
+      const fontsReady = 'fonts' in document && document.fonts?.ready
+        ? document.fonts.ready
+        : Promise.resolve();
+
+      await Promise.all([fontsReady, waitForImages(outputDiv)]);
+
+      lydiaBridge?.reportContentHeight(`render:${reason}`);
+    };
+
+    const response = await fetch(apiEndpoint);
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
     }
+
+    const data = await response.json();
+    await renderWithData(data, 'api');
+
+    if (shouldDebugStyles && !templateStylesApplied) {
+      console.debug('[CeresStyle]', {
+        source: 'apiTemplate:missing',
+        options: null,
+      });
+    }
+  } catch (error: any) {
+    console.error('Error rendering document:', error);
+    if (outputDiv) {
+      outputDiv.innerHTML = `<div class="error-message">Error: ${error.message}</div>`;
+      outputDiv.classList.remove('loading-message');
+    }
+    lydiaBridge?.reportContentHeight('error');
   }
+};
 
-  renderDocument();
-})();
+void renderDocument();
 
-export { };
+export {};
