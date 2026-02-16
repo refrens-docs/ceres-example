@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment, no-new, consistent-return */
 // @ts-ignore
 import template from "./MarkdownViewer.hbs";
 
@@ -23,10 +24,18 @@ type MarkdownViewerPayload = {
  * Payload encoding (HTML + JSON safe)
  * ========================================================= */
 
+/**
+ *
+ * @param payload
+ */
 function encodePayload(payload: MarkdownViewerPayload): string {
   return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
 }
 
+/**
+ *
+ * @param encoded
+ */
 function decodePayload(encoded: string): MarkdownViewerPayload {
   return JSON.parse(decodeURIComponent(escape(atob(encoded))));
 }
@@ -35,6 +44,9 @@ function decodePayload(encoded: string): MarkdownViewerPayload {
  * Handlebars access
  * ========================================================= */
 
+/**
+ *
+ */
 function getHB(): any {
   return (window as any).Handlebars;
 }
@@ -53,6 +65,11 @@ const MARKED_JS = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
 
 let dependenciesPromise: Promise<void> | null = null;
 
+/**
+ *
+ * @param src
+ * @param globalName
+ */
 function loadScript(src: string, globalName: string): Promise<void> {
   return new Promise((resolve, reject) => {
     if ((window as any)[globalName]) {
@@ -72,11 +89,14 @@ function loadScript(src: string, globalName: string): Promise<void> {
 
     script.addEventListener("load", () => resolve());
     script.addEventListener("error", () =>
-      reject(new Error(`Failed to load ${src}`)),
+      reject(new Error(`Failed to load ${src}`))
     );
   });
 }
 
+/**
+ *
+ */
 function loadDependencies(): Promise<void> {
   if (dependenciesPromise) return dependenciesPromise;
 
@@ -95,6 +115,9 @@ function loadDependencies(): Promise<void> {
   return dependenciesPromise;
 }
 
+/**
+ *
+ */
 function loadFallbackDependency(): Promise<void> {
   return Promise.all([
     loadScript(DOMPURIFY_JS, "DOMPurify"),
@@ -106,12 +129,18 @@ function loadFallbackDependency(): Promise<void> {
  * Fallback renderer (marked)
  * ========================================================= */
 
+/**
+ *
+ * @param container
+ * @param markdown
+ * @param customLinkProps
+ */
 function renderFallback(
   container: HTMLElement,
   markdown: string,
-  customLinkProps: typeof defaultCustomLinkProps,
+  customLinkProps: typeof defaultCustomLinkProps
 ): void {
-  const marked = (window as any).marked;
+  const { marked } = window as any;
 
   if (!marked) {
     container.innerText = markdown;
@@ -144,14 +173,19 @@ function renderFallback(
  * Viewer initialization
  * ========================================================= */
 
+/**
+ *
+ * @param container
+ * @param payload
+ */
 function initViewer(
   container: HTMLElement,
-  payload: MarkdownViewerPayload,
+  payload: MarkdownViewerPayload
 ): void {
   // If fully initialized, skip
   if (container.dataset.mvInitialized === "true") return;
 
-  const toastui = (window as any).toastui;
+  const { toastui } = window as any;
   const forceFallback = payload.forceFallbackRenderer;
   const canUpgrade = !forceFallback && toastui && toastui.Editor;
 
@@ -162,7 +196,7 @@ function initViewer(
         renderFallback(
           container,
           payload.fallbackMarkdown,
-          payload.customLinkProps,
+          payload.customLinkProps
         );
       });
     }
@@ -172,7 +206,7 @@ function initViewer(
       renderFallback(
         container,
         payload.fallbackMarkdown,
-        payload.customLinkProps,
+        payload.customLinkProps
       );
       // Mark as potential for upgrade unless forced
       container.dataset.mvInitialized = forceFallback ? "true" : "fallback";
@@ -193,7 +227,7 @@ function initViewer(
           if (context.entering && result?.attributes) {
             result.attributes.href = sanitizeAnchorUrl(
               result.attributes.href,
-              "external-forced",
+              "external-forced"
             );
             Object.assign(result.attributes, payload.customLinkProps);
           }
@@ -209,7 +243,7 @@ function initViewer(
     renderFallback(
       container,
       payload.fallbackMarkdown,
-      payload.customLinkProps,
+      payload.customLinkProps
     );
     container.dataset.mvInitialized = "true";
   }
@@ -219,14 +253,17 @@ function initViewer(
  * Widget discovery + parsing
  * ========================================================= */
 
+/**
+ *
+ */
 function processWidgets(): void {
   const widgets = document.querySelectorAll(
-    '.markdown-viewer-widget:not([data-mv-initialized="true"])',
+    '.markdown-viewer-widget:not([data-mv-initialized="true"])'
   );
 
   widgets.forEach((widget) => {
     const script = widget.querySelector(
-      "script[data-md-viewer]",
+      "script[data-md-viewer]"
     ) as HTMLScriptElement | null;
 
     if (!script) return;
@@ -252,6 +289,9 @@ function processWidgets(): void {
  * Observation + lifecycle
  * ========================================================= */
 
+/**
+ *
+ */
 function startObserver(): void {
   // Trigger load but handle async
   loadDependencies()
@@ -291,13 +331,16 @@ function startObserver(): void {
  * Handlebars registration
  * ========================================================= */
 
+/**
+ *
+ */
 function register(): void {
   const HB = getHB();
   if (!HB) return;
 
   HB.registerHelper(
     "prepareMarkdownViewerData",
-    function(content: string, options: any) {
+    function (content: string, options: any) {
       const safeContent = content || "";
 
       const payload: MarkdownViewerPayload = {
@@ -308,11 +351,12 @@ function register(): void {
       };
 
       return {
-        elementId:
-          "md-viewer-" + Math.random().toString(36).slice(2) + "-" + Date.now(),
+        elementId: `md-viewer-${Math.random()
+          .toString(36)
+          .slice(2)}-${Date.now()}`,
         payloadBase64: encodePayload(payload),
       };
-    },
+    }
   );
 
   HB.registerPartial("MarkdownViewer", template);
@@ -334,3 +378,5 @@ try {
 }
 
 export { };
+
+/* eslint-enable @typescript-eslint/ban-ts-comment, no-new, consistent-return */

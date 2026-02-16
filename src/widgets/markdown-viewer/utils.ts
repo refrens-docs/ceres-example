@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, consistent-return, @typescript-eslint/no-explicit-any */
 /* ============================
  * Types (sealed contracts)
  * ============================ */
@@ -34,10 +35,17 @@ const DOMPURIFY_STORAGE_CONFIG = {
  * Internal helpers (sealed)
  * ============================ */
 
+/**
+ *
+ */
 function getDOMPurify(): any {
   return (window as any).DOMPurify;
 }
 
+/**
+ *
+ * @param _
+ */
 function assertNever(_: never): never {
   throw new Error("Unreachable code path reached");
 }
@@ -50,10 +58,12 @@ function assertNever(_: never): never {
  * URL sanitization with sealed policy
  * - Uses DOMPurify for URL validation
  * - Blocks javascript:, data:, blob:
+ * @param rawUrl
+ * @param policy
  */
 export function sanitizeAnchorUrl(
   rawUrl: string,
-  policy: LinkSanitizationPolicy,
+  policy: LinkSanitizationPolicy
 ): string {
   if (!rawUrl || typeof rawUrl !== "string") return "";
 
@@ -69,12 +79,13 @@ export function sanitizeAnchorUrl(
     if (!DOMPurify) return trimmed;
 
     // Use DOMPurify's sanitizeUrl for validation
-    const sanitized = DOMPurify.sanitize(`<a href="${trimmed}"></a>`, {
-      ALLOWED_TAGS: ["a"],
-      ALLOWED_ATTR: ["href"],
-      RETURN_TRUSTED_TYPE: false,
-    }).match(/href="([^"]*)"/)?.[1] || "";
-    
+    const sanitized =
+      DOMPurify.sanitize(`<a href="${trimmed}"></a>`, {
+        ALLOWED_TAGS: ["a"],
+        ALLOWED_ATTR: ["href"],
+        RETURN_TRUSTED_TYPE: false,
+      }).match(/href="([^"]*)"/)?.[1] || "";
+
     if (!sanitized) return "";
 
     if (policy === "external-forced" && !trimmed.startsWith("http")) {
@@ -91,6 +102,8 @@ export function sanitizeAnchorUrl(
  * Markdown sanitization
  * - Uses DOMPurify for HTML sanitization
  * - Mode sealed
+ * @param value
+ * @param mode
  */
 export function sanitizeMarkdown(value: string, mode: MarkdownMode): string {
   if (!value) return "";
@@ -125,12 +138,17 @@ export function sanitizeMarkdown(value: string, mode: MarkdownMode): string {
  * Fallback markdown preparation
  * - Pure transformation
  * - Uses DOMPurify for safety
+ * @param value
  */
 export function prepareFallbackMarkdown(value: string): string {
   if (!value) return "";
 
   const DOMPurify = getDOMPurify();
-  const sanitized = DOMPurify ? DOMPurify.sanitize(value, DOMPURIFY_CONFIG) : value;
+  const sanitized = DOMPurify
+    ? DOMPurify.sanitize(value, DOMPURIFY_CONFIG)
+    : value;
 
   return sanitized.replace(/<br\s*\/?>/gi, "\n").replace(/\n/g, "\n\n");
 }
+
+/* eslint-enable @typescript-eslint/no-unused-vars, consistent-return, @typescript-eslint/no-explicit-any */

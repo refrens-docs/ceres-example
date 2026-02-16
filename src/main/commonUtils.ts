@@ -1,4 +1,4 @@
-const GOOGLE_FONT_WEIGHTS = '300;400;500;600;700';
+const GOOGLE_FONT_WEIGHTS = "300;400;500;600;700";
 
 type RGBAColor = { r: number; g: number; b: number; a?: number };
 
@@ -17,7 +17,7 @@ export const decodeBase64 = (encoded: string | null): string | null => {
 };
 
 export const getQueryParam = (key: string): string | null => {
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     return null;
   }
 
@@ -25,7 +25,9 @@ export const getQueryParam = (key: string): string | null => {
   return params.get(key);
 };
 
-export const resolveTemplateManifestUrl = (encodedValue: string | null): string | null => {
+export const resolveTemplateManifestUrl = (
+  encodedValue: string | null
+): string | null => {
   if (!encodedValue) {
     return null;
   }
@@ -35,7 +37,7 @@ export const resolveTemplateManifestUrl = (encodedValue: string | null): string 
     return null;
   }
 
-  if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+  if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
     return decoded;
   }
 
@@ -43,16 +45,21 @@ export const resolveTemplateManifestUrl = (encodedValue: string | null): string 
 };
 
 export const loadTemplateManifest = async () => {
-  const encodedManifestUrl = getQueryParam('templateManifest') || getQueryParam('template');
+  const encodedManifestUrl =
+    getQueryParam("templateManifest") || getQueryParam("template");
   const manifestUrl = resolveTemplateManifestUrl(encodedManifestUrl);
 
   if (!manifestUrl) {
-    throw new Error('No template specified. Please provide ?template=<name> or ?templateManifest=<base64-url>');
+    throw new Error(
+      "No template specified. Please provide ?template=<name> or ?templateManifest=<base64-url>"
+    );
   }
 
   const response = await fetch(manifestUrl);
   if (!response.ok) {
-    throw new Error(`Failed to fetch template manifest from ${manifestUrl}: ${response.status}`);
+    throw new Error(
+      `Failed to fetch template manifest from ${manifestUrl}: ${response.status}`
+    );
   }
 
   const manifest = await response.json();
@@ -61,7 +68,7 @@ export const loadTemplateManifest = async () => {
 
 export const loadScript = (src: string): Promise<void> =>
   new Promise((resolve, reject) => {
-    const script = document.createElement('script');
+    const script = document.createElement("script");
     script.src = src;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
@@ -70,22 +77,25 @@ export const loadScript = (src: string): Promise<void> =>
 
 export const loadCSS = (href: string): Promise<void> =>
   new Promise((resolve, reject) => {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
     link.href = href;
     link.onload = () => resolve();
     link.onerror = () => reject(new Error(`Failed to load CSS: ${href}`));
     document.head.appendChild(link);
   });
 
-export const waitForImages = (container: HTMLElement | null, timeoutMs = 2000): Promise<void> =>
+export const waitForImages = (
+  container: HTMLElement | null,
+  timeoutMs = 2000
+): Promise<void> =>
   new Promise((resolve) => {
     if (!container) {
       resolve();
       return;
     }
 
-    const images = Array.from(container.querySelectorAll('img'));
+    const images = Array.from(container.querySelectorAll("img"));
     if (images.length === 0) {
       resolve();
       return;
@@ -115,8 +125,8 @@ export const waitForImages = (container: HTMLElement | null, timeoutMs = 2000): 
         return;
       }
 
-      image.addEventListener('load', onImageDone, { once: true });
-      image.addEventListener('error', onImageDone, { once: true });
+      image.addEventListener("load", onImageDone, { once: true });
+      image.addEventListener("error", onImageDone, { once: true });
     });
 
     window.setTimeout(finish, timeoutMs);
@@ -127,16 +137,17 @@ export const isPlainObject = (value: unknown): value is PlainObject => {
     return false;
   }
 
-  return typeof value === 'object' && !Array.isArray(value);
+  return typeof value === "object" && !Array.isArray(value);
 };
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
 
 const isFiniteNumber = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value);
+  typeof value === "number" && Number.isFinite(value);
 
 const toNonEmptyString = (value: unknown): string | null => {
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     return null;
   }
 
@@ -166,8 +177,8 @@ const isRGBAColor = (value: unknown): value is RGBAColor => {
   return isFiniteNumber(r) && isFiniteNumber(g) && isFiniteNumber(b);
 };
 
-const toCssColor = (value: unknown): string | null => {
-  if (typeof value === 'string') {
+export const toCssColor = (value: unknown): string | null => {
+  if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
   }
@@ -204,19 +215,19 @@ const ensureGoogleFontLoaded = (fontName: string) => {
     return;
   }
 
-  const id = `ceres-font-${normalized.replace(/\s+/g, '-').toLowerCase()}`;
+  const id = `ceres-font-${normalized.replace(/\s+/g, "-").toLowerCase()}`;
   if (document.getElementById(id)) {
     return;
   }
 
-  const fontFamilyParam = encodeURIComponent(normalized).replace(/%20/g, '+');
+  const fontFamilyParam = encodeURIComponent(normalized).replace(/%20/g, "+");
   const href = `https://fonts.googleapis.com/css2?family=${fontFamilyParam}:wght@${GOOGLE_FONT_WEIGHTS}&display=swap`;
 
-  const link = document.createElement('link');
+  const link = document.createElement("link");
   link.id = id;
-  link.rel = 'stylesheet';
+  link.rel = "stylesheet";
   link.href = href;
-  link.setAttribute('data-ceres-font', normalized);
+  link.setAttribute("data-ceres-font", normalized);
   document.head.appendChild(link);
 };
 
@@ -239,7 +250,7 @@ export const mergeInto = (target: unknown, source: unknown): PlainObject => {
 
     if (Array.isArray(value)) {
       base[key] = value.map((item) =>
-        isPlainObject(item) ? mergeInto({}, item) : item,
+        isPlainObject(item) ? mergeInto({}, item) : item
       );
       return;
     }
@@ -250,7 +261,9 @@ export const mergeInto = (target: unknown, source: unknown): PlainObject => {
   return base;
 };
 
-export const parsePreviewOptions = (encoded: string | null): PlainObject | null => {
+export const parsePreviewOptions = (
+  encoded: string | null
+): PlainObject | null => {
   if (!encoded) {
     return null;
   }
@@ -266,27 +279,34 @@ export const parsePreviewOptions = (encoded: string | null): PlainObject | null 
       return parsed;
     }
   } catch (error) {
-    console.warn('Unable to parse previewOptions payload', error);
+    console.warn("Unable to parse previewOptions payload", error);
   }
 
   return null;
 };
 
-export const sanitizePreviewOptions = (options: PlainObject | null): PlainObject | null => {
+export const sanitizePreviewOptions = (
+  options: PlainObject | null
+): PlainObject | null => {
   if (!options) {
     return null;
   }
 
   const clone = mergeInto({}, options);
 
-  const templateColor = clone.templateColor;
+  const { templateColor } = clone;
   if (isPlainObject(templateColor)) {
-    const colorKeys: Array<'primaryColor' | 'secondaryColor' | 'primaryBackground' | 'secondaryBackground'> = [
-      'primaryColor',
-      'secondaryColor',
-      'primaryBackground',
-      'secondaryBackground',
-    ];
+    const colorKeys: Array<
+      | "primaryColor"
+      | "secondaryColor"
+      | "primaryBackground"
+      | "secondaryBackground"
+    > = [
+        "primaryColor",
+        "secondaryColor",
+        "primaryBackground",
+        "secondaryBackground",
+      ];
 
     const sanitizedEntries = colorKeys
       .map((key) => {
@@ -303,10 +323,10 @@ export const sanitizePreviewOptions = (options: PlainObject | null): PlainObject
     }
   }
 
-  const assetKeys: Array<'letterHead' | 'letterHeadFooter' | 'logo'> = [
-    'letterHead',
-    'letterHeadFooter',
-    'logo',
+  const assetKeys: Array<"letterHead" | "letterHeadFooter" | "logo"> = [
+    "letterHead",
+    "letterHeadFooter",
+    "logo",
   ];
 
   assetKeys.forEach((key) => {
@@ -328,7 +348,11 @@ export const sanitizePreviewOptions = (options: PlainObject | null): PlainObject
 };
 
 export const applyPreviewStyles = (options: PlainObject | null | undefined) => {
-  if (!options || typeof window === 'undefined' || typeof document === 'undefined') {
+  if (
+    !options ||
+    typeof window === "undefined" ||
+    typeof document === "undefined"
+  ) {
     return;
   }
 
@@ -357,18 +381,16 @@ export const applyPreviewStyles = (options: PlainObject | null | undefined) => {
     : null;
 
   if (templateColor) {
-    setColorVar('--primary-color', templateColor.primaryColor);
-    setColorVar('--secondary-color', templateColor.secondaryColor);
-    setColorVar('--primary-background', templateColor.primaryBackground);
-    setColorVar('--secondary-background', templateColor.secondaryBackground);
+    setColorVar("--primary-color", templateColor.primaryColor);
+    setColorVar("--secondary-color", templateColor.secondaryColor);
+    setColorVar("--primary-background", templateColor.primaryBackground);
+    setColorVar("--secondary-background", templateColor.secondaryBackground);
   }
 
-  const template = (options.template ?? null) as
-    | {
-        titleFont?: string;
-        bodyFont?: string;
-      }
-    | null;
+  const template = (options.template ?? null) as {
+    titleFont?: string;
+    bodyFont?: string;
+  } | null;
 
   if (template) {
     const titleFont = normalizeFontName(template.titleFont);
@@ -381,29 +403,29 @@ export const applyPreviewStyles = (options: PlainObject | null | undefined) => {
     if (titleFont) {
       ensureGoogleFontLoaded(titleFont);
       const escaped = titleFont.replace(/'/g, "\\'");
-      setVar('--title-font', `'${escaped}', sans-serif`);
+      setVar("--title-font", `'${escaped}', sans-serif`);
     }
 
     if (bodyFont) {
       ensureGoogleFontLoaded(bodyFont);
       const escaped = bodyFont.replace(/'/g, "\\'");
-      setVar('--subtitle-font', `'${escaped}', sans-serif`);
+      setVar("--subtitle-font", `'${escaped}', sans-serif`);
     }
 
     if (!titleFont && bodyFont) {
       const escaped = bodyFont.replace(/'/g, "\\'");
-      setVar('--title-font', `'${escaped}', sans-serif`);
+      setVar("--title-font", `'${escaped}', sans-serif`);
     }
 
     if (templatePdfOptions) {
       const zoomValue = Number(templatePdfOptions.zoomSize);
-      const zoomStyleId = 'ceres-template-zoom';
+      const zoomStyleId = "ceres-template-zoom";
       const existingZoom = document.getElementById(zoomStyleId);
 
       if (!Number.isFinite(zoomValue) || zoomValue <= 0 || zoomValue === 0.8) {
         existingZoom?.remove();
       } else {
-        const style = existingZoom ?? document.createElement('style');
+        const style = existingZoom ?? document.createElement("style");
         style.id = zoomStyleId;
         style.textContent = `@media print { html { zoom: ${zoomValue}; } }`;
         if (!existingZoom) {
@@ -414,13 +436,25 @@ export const applyPreviewStyles = (options: PlainObject | null | undefined) => {
   }
 };
 
-export const applyPreviewAssets = (template: PlainObject | null | undefined): boolean => {
-  if (!template || typeof window === 'undefined' || typeof document === 'undefined') {
+export const applyPreviewAssets = (
+  template: PlainObject | null | undefined
+): boolean => {
+  if (
+    !template ||
+    typeof window === "undefined" ||
+    typeof document === "undefined"
+  ) {
     return false;
   }
 
-  const hasLetterHead = Object.prototype.hasOwnProperty.call(template, 'letterHead');
-  const hasLetterHeadFooter = Object.prototype.hasOwnProperty.call(template, 'letterHeadFooter');
+  const hasLetterHead = Object.prototype.hasOwnProperty.call(
+    template,
+    "letterHead"
+  );
+  const hasLetterHeadFooter = Object.prototype.hasOwnProperty.call(
+    template,
+    "letterHeadFooter"
+  );
 
   if (!hasLetterHead && !hasLetterHeadFooter) {
     return false;
@@ -429,9 +463,9 @@ export const applyPreviewAssets = (template: PlainObject | null | undefined): bo
   let didUpdate = false;
 
   const updateAsset = (
-    dataKey: 'letterHead' | 'letterHeadFooter',
+    dataKey: "letterHead" | "letterHeadFooter",
     selector: string,
-    containerSelector: string,
+    containerSelector: string
   ) => {
     if (!Object.prototype.hasOwnProperty.call(template, dataKey)) {
       return;
@@ -450,13 +484,13 @@ export const applyPreviewAssets = (template: PlainObject | null | undefined): bo
         img.src = url;
       }
       if (container) {
-        container.style.removeProperty('display');
-        container.classList.remove('is-empty');
+        container.style.removeProperty("display");
+        container.classList.remove("is-empty");
       }
     } else {
-      img.removeAttribute('src');
+      img.removeAttribute("src");
       if (container) {
-        container.classList.add('is-empty');
+        container.classList.add("is-empty");
       }
     }
 
@@ -464,35 +498,44 @@ export const applyPreviewAssets = (template: PlainObject | null | undefined): bo
   };
 
   updateAsset(
-    'letterHead',
+    "letterHead",
     'img[data-ceres-height="letterhead"]',
-    '.invoice-letterhead',
+    ".invoice-letterhead"
   );
   updateAsset(
-    'letterHeadFooter',
+    "letterHeadFooter",
     'img[data-ceres-height="letterhead-footer"]',
-    '.invoice-letterhead-footer',
+    ".invoice-letterhead-footer"
   );
 
   return didUpdate;
 };
 
-export const extractTemplateStyleOptions = (payload: unknown): PlainObject | null => {
+export const extractTemplateStyleOptions = (
+  payload: unknown
+): PlainObject | null => {
   if (!isPlainObject(payload)) {
     return null;
   }
 
-  const template = isPlainObject(payload.template) ? (payload.template as PlainObject) : null;
+  const template = isPlainObject(payload.template)
+    ? (payload.template as PlainObject)
+    : null;
   if (!template) {
     return null;
   }
 
-  const colorKeys: Array<'primaryColor' | 'secondaryColor' | 'primaryBackground' | 'secondaryBackground'> = [
-    'primaryColor',
-    'secondaryColor',
-    'primaryBackground',
-    'secondaryBackground',
-  ];
+  const colorKeys: Array<
+    | "primaryColor"
+    | "secondaryColor"
+    | "primaryBackground"
+    | "secondaryBackground"
+  > = [
+      "primaryColor",
+      "secondaryColor",
+      "primaryBackground",
+      "secondaryBackground",
+    ];
 
   const templateColorSource = isPlainObject(template.templateColor)
     ? (template.templateColor as PlainObject)
@@ -511,16 +554,16 @@ export const extractTemplateStyleOptions = (payload: unknown): PlainObject | nul
   });
 
   const templateFonts: PlainObject = {};
-  if ('titleFont' in template) {
+  if ("titleFont" in template) {
     templateFonts.titleFont = template.titleFont;
   }
-  if ('bodyFont' in template) {
+  if ("bodyFont" in template) {
     templateFonts.bodyFont = template.bodyFont;
   }
 
   if (isPlainObject(template.pdfOptions)) {
     const pdfOptions = template.pdfOptions as PlainObject;
-    if ('zoomSize' in pdfOptions) {
+    if ("zoomSize" in pdfOptions) {
       templateFonts.pdfOptions = { zoomSize: pdfOptions.zoomSize };
     }
   }

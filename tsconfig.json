@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ESNext",              // Keep modern for tree-shaking; Babel will downlevel to ES5
+    "target": "ESNext", // Keep modern for tree-shaking; Babel will downlevel to ES5
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
@@ -12,7 +12,9 @@
     "baseUrl": ".",
     "paths": {},
     "noEmit": true,
-    "allowArbitraryExtensions": true
   },
-  "include": ["src", "src/types"]
+  "include": [
+    "src",
+    "tests"
+  ]
 }
