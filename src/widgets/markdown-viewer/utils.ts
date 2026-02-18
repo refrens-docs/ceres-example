@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars, consistent-return, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars, consistent-return */
 /* ============================
  * Types (sealed contracts)
  * ============================ */
@@ -9,6 +9,11 @@ export type MarkdownMode =
   | "storage"; // DB write (strongest)
 
 export type LinkSanitizationPolicy = "internal" | "external-forced";
+
+/** Minimal interface for DOMPurify accessed via window global */
+interface DOMPurifyInstance {
+  sanitize(dirty: string, config?: Record<string, unknown>): string;
+}
 
 /* ============================
  * Constants (immutable)
@@ -26,8 +31,8 @@ const DOMPURIFY_CONFIG = {
 } as const;
 
 const DOMPURIFY_STORAGE_CONFIG = {
-  ALLOWED_TAGS: [],
-  ALLOWED_ATTR: [],
+  ALLOWED_TAGS: [] as string[],
+  ALLOWED_ATTR: [] as string[],
   KEEP_CONTENT: true,
 } as const;
 
@@ -36,10 +41,12 @@ const DOMPURIFY_STORAGE_CONFIG = {
  * ============================ */
 
 /**
- *
+ * Retrieve DOMPurify from the window global (loaded via script tag).
  */
-function getDOMPurify(): any {
-  return (window as any).DOMPurify;
+function getDOMPurify(): DOMPurifyInstance | undefined {
+  return (window as unknown as Record<string, unknown>).DOMPurify as
+    | DOMPurifyInstance
+    | undefined;
 }
 
 /**
@@ -151,4 +158,4 @@ export function prepareFallbackMarkdown(value: string): string {
   return sanitized.replace(/<br\s*\/?>/gi, "\n").replace(/\n/g, "\n\n");
 }
 
-/* eslint-enable @typescript-eslint/no-unused-vars, consistent-return, @typescript-eslint/no-explicit-any */
+/* eslint-enable @typescript-eslint/no-unused-vars, consistent-return */

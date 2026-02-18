@@ -2,7 +2,6 @@
 @import "https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Noto+Sans+Arabic:wght@100..900&display=swap";
 
 @media print {
-
   .notes-modern-block,
   .terms-modern-block {
     break-inside: avoid;
@@ -134,6 +133,7 @@ body {
   margin-bottom: 40px;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
+
   /* Three columns for invoice details, billed by, billed to */
   gap: 30px;
   box-shadow: 0 4px 15px rgb(0 0 0 / 5%);
@@ -234,12 +234,14 @@ body {
   background: linear-gradient(to right,
       var(--primary-color),
       var(--secondary-color));
+
   /* Gradient background */
 
   color: #fff;
   padding: 40px 50px;
   border-radius: 12px;
   margin-top: 50px;
+
   /* Space from line items */
   box-shadow: 0 8px 25px rgb(0 0 0 / 20%);
   display: flex;
@@ -253,6 +255,7 @@ body {
   display: flex;
   justify-content: space-between;
   width: 60%;
+
   /* Control internal width of total lines */
   margin-bottom: 15px;
   font-size: 18px;
@@ -266,8 +269,10 @@ body {
   padding-top: 20px;
   border-top: 2px solid rgb(255 255 255 / 30%);
   width: 80%;
+
   /* Grand total spans wider */
   display: flex;
+
   /* Ensure it's centered if content is shorter */
   justify-content: center;
   gap: 20px;
@@ -288,6 +293,7 @@ body {
 
 .totals-full-width-section .total-line.grand .label {
   text-align: right;
+
   /* Adjust for centering grand total */
   flex-grow: 0;
   margin-right: 15px;
@@ -297,6 +303,7 @@ body {
   text-align: left;
   flex-grow: 0;
   color: #ffd700;
+
   /* Gold for grand total */
 }
 
@@ -353,6 +360,7 @@ body {
 
 .terms-modern-block ul {
   list-style-type: "✔ ";
+
   /* Custom checkmark bullet */
   padding-left: 20px;
   margin: 0;
