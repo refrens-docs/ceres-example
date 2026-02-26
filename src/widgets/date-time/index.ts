@@ -209,11 +209,11 @@ function formatDateWithOffset(date: any, offset = "+5:30") {
 }
 
 /**
- *
+ * Formats a date with a given offset in short style.
  * @param date
  * @param offset
  */
-function formateShortDateWithOffset(date: any, offset = "+5:30") {
+function formatShortDateWithOffset(date: any, offset = "+5:30") {
   const d = safeDate(date);
   if (!d) return "";
   return formatByStyle(withOffset(d, offset), "short");
@@ -252,18 +252,18 @@ function formatShortDateTime(date: any) {
 }
 
 /**
- *
+ * Formats a date in short style (kept for compatibility, though name implies full).
  * @param date
  * @param format
  */
 function formatFullDate(date: any, format = undefined) {
   const d = safeDate(date);
   if (!d) return "";
-  return formatByStyle(d, "short");
+  return formatByStyle(d, "primary");
 }
 
 /**
- *
+ * Formats a date with offset in primary style.
  * @param date
  * @param offset
  * @param format
@@ -275,16 +275,16 @@ function formatFullDateWithOffset(
 ) {
   const d = safeDate(date);
   if (!d) return "";
-  return formatByStyle(withOffset(d, offset), "short");
+  return formatByStyle(withOffset(d, offset), "primary");
 }
 
 /**
- *
+ * Alias for formatShortDateWithOffset.
  * @param date
  * @param offset
  */
-function formateDateWithOffset(date: any, offset = "+5:30") {
-  return formateShortDateWithOffset(date, offset);
+function formatDateWithOffsetShort(date: any, offset = "+5:30") {
+  return formatShortDateWithOffset(date, offset);
 }
 
 /**
@@ -432,66 +432,47 @@ function register() {
   const HB = getHB();
   if (!HB) return;
 
-  HB.registerHelper("formatDate", function (date: any) {
-    return formatDate(date);
-  });
-  HB.registerHelper("formatDateWithOffset", function (date: any, offset: any) {
-    return formatDateWithOffset(date, offset);
-  });
-  HB.registerHelper(
-    "formateShortDateWithOffset",
-    function (date: any, offset: any) {
-      return formateShortDateWithOffset(date, offset);
-    }
+  HB.registerHelper("formatDate", (date: any) => formatDate(date));
+  HB.registerHelper("formatDateWithOffset", (date: any, offset: any) =>
+    formatDateWithOffset(date, offset)
   );
-  HB.registerHelper("formatHalfDate", function (date: any) {
-    return formatHalfDate(date);
-  });
-  HB.registerHelper(
-    "formatHalfDateWithOffset",
-    function (date: any, offset: any) {
-      return formatHalfDateWithOffset(date, offset);
-    }
+  HB.registerHelper("formatShortDateWithOffset", (date: any, offset: any) =>
+    formatShortDateWithOffset(date, offset)
   );
-  HB.registerHelper("formatDateTime", function (date: any) {
-    return formatDateTime(date);
-  });
-  HB.registerHelper("formatShortDateTime", function (date: any) {
-    return formatShortDateTime(date);
-  });
-  HB.registerHelper("formatFullDate", function (date: any) {
-    return formatFullDate(date);
-  });
-  HB.registerHelper(
-    "formatFullDateWithOffset",
-    function (date: any, offset: any) {
-      return formatFullDateWithOffset(date, offset);
-    }
+
+  HB.registerHelper("formatHalfDate", (date: any) => formatHalfDate(date));
+  HB.registerHelper("formatHalfDateWithOffset", (date: any, offset: any) =>
+    formatHalfDateWithOffset(date, offset)
   );
-  HB.registerHelper("formatTimeSince", function (date: any) {
-    return formatTimeSince(date);
-  });
-  HB.registerHelper("relativeTime", function (date: any) {
-    return relativeTime(date);
-  });
-  HB.registerHelper("formateDateWithOffset", function (date: any, offset: any) {
-    return formateDateWithOffset(date, offset);
-  });
-  HB.registerHelper(
-    "formatDateInTimeZone",
-    function (date: any, timeZone: any, formatKey: any) {
-      return formatDateInTimeZone(date, timeZone, formatKey);
-    }
+
+  HB.registerHelper("formatDateTime", (date: any) => formatDateTime(date));
+  HB.registerHelper("formatShortDateTime", (date: any) =>
+    formatShortDateTime(date)
   );
-  HB.registerHelper(
-    "formatDateAddDays",
-    function (date: any, days: any, offset: any) {
-      return formatDateAddDays(date, days, offset);
-    }
+
+  HB.registerHelper("formatFullDate", (date: any) => formatFullDate(date));
+  HB.registerHelper("formatFullDateWithOffset", (date: any, offset: any) =>
+    formatFullDateWithOffset(date, offset)
   );
-  HB.registerHelper("addDays", function (date: any, days: any) {
-    return addDaysISO(date, days);
-  });
+
+  HB.registerHelper("formatTimeSince", (date: any) => formatTimeSince(date));
+  HB.registerHelper("relativeTime", (date: any) => relativeTime(date));
+
+  HB.registerHelper("formatDateInTimeZone", (date: any, tz: any, key: any) =>
+    formatDateInTimeZone(date, tz, key)
+  );
+  HB.registerHelper("formatDateAddDays", (date: any, days: any, offset: any) =>
+    formatDateAddDays(date, days, offset)
+  );
+  HB.registerHelper("addDays", (date: any, days: any) => addDaysISO(date, days));
+
+  // Legacy/Typo aliases for backward compatibility
+  HB.registerHelper("formateShortDateWithOffset", (date: any, offset: any) =>
+    formatShortDateWithOffset(date, offset)
+  );
+  HB.registerHelper("formateDateWithOffset", (date: any, offset: any) =>
+    formatShortDateWithOffset(date, offset)
+  );
 
   (window as any).CeresWidgets = (window as any).CeresWidgets || {};
   (window as any).CeresWidgets.DateTime = {
@@ -503,6 +484,9 @@ function register() {
       SECONDARY_SHORT_DATE_FORMAT,
       formatDateInTimeZone,
       formatDateAddDays,
+      formatShortDateWithOffset,
+      formatFullDate,
+      formatFullDateWithOffset,
     },
   };
 }
