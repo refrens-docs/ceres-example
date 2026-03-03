@@ -5,3 +5,4 @@ public/
 .env
 .DS_Store
 webpack.temp.config.js
+coverage/

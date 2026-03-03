@@ -25,7 +25,7 @@ import {
   extractTemplateStyleOptions,
   getQueryParam,
   isPlainObject,
-} from './commonUtils';
+} from "./commonUtils";
 
 // Query params
 const DEBUG_PARAM = "debugHeight";
@@ -61,6 +61,7 @@ export interface LydiaBridgeHandle {
  * - Ceres posts `ceres:content-height` only after render or when layout changes.
  * - Updates are debounced and only sent when the height meaningfully changes.
  * - Lydia applies the reported height to the iframe.
+ * @param options
  */
 export function initLydiaBridge(
   options?: LydiaBridgeOptions
@@ -107,7 +108,6 @@ export function initLydiaBridge(
       body.getBoundingClientRect().height,
       docEl.getBoundingClientRect().height
     );
-
   };
 
   // Sends the measured height to Lydia so it can resize the iframe to fit.
@@ -150,7 +150,6 @@ export function initLydiaBridge(
   const measureAndReportHeight = (reason: string, force: boolean) => {
     const fullHeight = computeFullHeight();
 
-
     if (!Number.isFinite(fullHeight) || fullHeight <= 0) {
       return;
     }
@@ -161,7 +160,8 @@ export function initLydiaBridge(
     const shouldPost =
       force ||
       lastReportedHeight == null ||
-      Math.abs(nextReportedHeight - lastReportedHeight) > HEIGHT_CHANGE_THRESHOLD;
+      Math.abs(nextReportedHeight - lastReportedHeight) >
+      HEIGHT_CHANGE_THRESHOLD;
 
     if (!shouldPost) {
       return;
@@ -174,6 +174,8 @@ export function initLydiaBridge(
 
   /**
    * Debounced height report. The double rAF ensures layout is settled before measurement.
+   * @param reason
+   * @param force
    */
   const scheduleHeightReport = (reason = "resize", force = false) => {
     if (hasSentHeight && !force) {
@@ -203,7 +205,7 @@ export function initLydiaBridge(
   // The extra buffer accounts for browser chrome and margin quirks in print mode.
   const enforceSizing = (fullHeight: number) => {
     const docEl = document.documentElement;
-    const body = document.body;
+    const { body } = document;
 
     if (!docEl || !body) {
       return;
@@ -221,10 +223,11 @@ export function initLydiaBridge(
    * they can clip, collapse, or misalign things. We force everything to auto/visible
    * and then pin the height so the full document makes it to the PDF.
    * Uses min-height so content doesn't collapse.
+   * @param reason
    */
   const applyPrintSizing = (reason = "manual") => {
     const docEl = document.documentElement;
-    const body = document.body;
+    const { body } = document;
 
     if (!docEl || !body) {
       return;
@@ -250,10 +253,11 @@ export function initLydiaBridge(
   /**
    * Restores document sizing after printing.
    * Undoes the print overrides so the document goes back to normal.
+   * @param reason
    */
   const resetSizing = (reason = "manual") => {
     const docEl = document.documentElement;
-    const body = document.body;
+    const { body } = document;
 
     if (!docEl || !body) {
       return;
@@ -293,6 +297,7 @@ export function initLydiaBridge(
    * Public API used by the renderer to report a stable height once rendering finishes.
    * Called by Ceres' renderer after the template has been injected into the DOM.
    * This is debounced and will only post if height changed.
+   * @param reason
    */
   const reportContentHeight = (reason = "render-complete") => {
     scheduleHeightReport(reason, true);
@@ -317,7 +322,9 @@ export function initLydiaBridge(
   const handleBeforePrint = () => applyPrintSizing("beforeprint");
   const handleAfterPrint = () => resetSizing("afterprint");
 
-  const isPrintMessage = (data: unknown): data is { action: "lydia:print"; reason?: string } => {
+  const isPrintMessage = (
+    data: unknown
+  ): data is { action: "lydia:print"; reason?: string } => {
     if (!data || typeof data !== "object") {
       return false;
     }
@@ -325,7 +332,7 @@ export function initLydiaBridge(
   };
 
   const isHeightRequestMessage = (
-    data: unknown,
+    data: unknown
   ): data is { action: "lydia:height-request"; reason?: string } => {
     if (!data || typeof data !== "object") {
       return false;
@@ -334,8 +341,12 @@ export function initLydiaBridge(
   };
 
   const isTemplateUpdateMessage = (
-    data: unknown,
-  ): data is { type: "lydia:template-update"; template?: unknown; reason?: string } => {
+    data: unknown
+  ): data is {
+    type: "lydia:template-update";
+    template?: unknown;
+    reason?: string;
+  } => {
     if (!isPlainObject(data)) {
       return false;
     }
@@ -350,15 +361,17 @@ export function initLydiaBridge(
       return;
     }
 
-    const data = event.data;
+    const { data } = event;
     if (isTemplateUpdateMessage(data)) {
-      const styleOptions = extractTemplateStyleOptions({ template: data.template });
+      const styleOptions = extractTemplateStyleOptions({
+        template: data.template,
+      });
 
       if (shouldDebugStyles) {
         console.debug("[CeresStyle]", {
           source: "postMessage",
           reason: data.reason,
-          options: styleOptions,
+          dialogOptions: styleOptions,
         });
       }
 
@@ -367,18 +380,22 @@ export function initLydiaBridge(
       }
 
       const assetUpdated = applyPreviewAssets(
-        isPlainObject(data.template) ? (data.template as Record<string, unknown>) : null,
+        isPlainObject(data.template)
+          ? (data.template as Record<string, unknown>)
+          : null
       );
       if (assetUpdated) {
-        reportContentHeight('template-assets');
+        reportContentHeight("template-assets");
       }
 
       return;
     }
 
     if (isHeightRequestMessage(data)) {
-      const reason = data.reason;
-      reportContentHeight(reason ? `parent:${reason}` : 'parent:height-request');
+      const { reason } = data;
+      reportContentHeight(
+        reason ? `parent:${reason}` : "parent:height-request"
+      );
       return;
     }
 
@@ -386,7 +403,7 @@ export function initLydiaBridge(
       return;
     }
 
-    const reason = data.reason;
+    const { reason } = data;
     triggerPrintInternal(reason ? `parent:${reason}` : "parent");
   };
 
@@ -398,14 +415,16 @@ export function initLydiaBridge(
     target: Window | Document,
     type: string,
     handler: EventListenerOrEventListenerObject,
-    options?: boolean | AddEventListenerOptions
+    eventOptions?: boolean | AddEventListenerOptions
   ) => {
-    target.addEventListener(type, handler, options);
-    addCleanup(() => target.removeEventListener(type, handler, options));
+    target.addEventListener(type, handler, eventOptions);
+    addCleanup(() => target.removeEventListener(type, handler, eventOptions));
   };
 
   // Wire up all the event listeners. Everything gets tracked for cleanup on destroy.
-  addListener(window, "keydown", handlePrintKey as EventListener, { passive: false });
+  addListener(window, "keydown", handlePrintKey as EventListener, {
+    passive: false,
+  });
   addListener(window, "beforeprint", handleBeforePrint as EventListener);
   addListener(window, "afterprint", handleAfterPrint as EventListener);
   addListener(window, "message", handleParentMessage as EventListener);
@@ -417,7 +436,11 @@ export function initLydiaBridge(
       resetSizing("visibilitychange");
     }
   };
-  addListener(document, "visibilitychange", handleDocumentVisibilityChange as EventListener);
+  addListener(
+    document,
+    "visibilitychange",
+    handleDocumentVisibilityChange as EventListener
+  );
 
   // Watch for content size changes after initial render — images loading, fonts swapping,
   // or dynamic content shifting things around. During print prep, we re-enforce sizing;
@@ -427,7 +450,6 @@ export function initLydiaBridge(
       if (isPreparingForPrint) {
         const fullHeight = computeFullHeight();
         enforceSizing(fullHeight);
-        return;
       }
     });
 

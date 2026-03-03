@@ -1,0 +1,12 @@
+{
+    "extends": [
+        "@refrens/eslint-config"
+    ],
+    "rules": {
+        "@typescript-eslint/no-explicit-any": "warn"
+    },
+    "ignorePatterns": [
+        "webpack.config.js",
+        "coverage/"
+    ]
+}
