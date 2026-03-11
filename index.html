@@ -52,23 +52,31 @@
       // Minimal bootstrap: Load vendor deps + main renderer
       Promise.all([
         fetch("./vendor-manifest.json").then(function (r) {
-          if (!r.ok) throw new Error("Failed to fetch vendor manifest: " + r.status);
+          if (!r.ok)
+            throw new Error("Failed to fetch vendor manifest: " + r.status);
           return r.json();
         }),
         fetch("./main-manifest.json").then(function (r) {
-          if (!r.ok) throw new Error("Failed to fetch main manifest: " + r.status);
+          if (!r.ok)
+            throw new Error("Failed to fetch main manifest: " + r.status);
           return r.json();
-        })
+        }),
       ])
         .then(function (results) {
           var vendorManifest = results[0];
           var mainManifest = results[1];
 
-          if (!vendorManifest.handlebars || !vendorManifest.handlebars.js) {
+          if (
+            !vendorManifest.handlebars ||
+            !vendorManifest.handlebars.js ||
+            !vendorManifest.handlebars.js.trim()
+          ) {
             throw new Error("Vendor manifest missing handlebars entry");
           }
-          if (!mainManifest.js) {
-            throw new Error("Renderer JS not found in main manifest");
+          if (!mainManifest.js || !mainManifest.js.trim()) {
+            throw new Error(
+              "Renderer JS not found in main manifest or empty entry",
+            );
           }
 
           // Load Handlebars first (templates depend on window.Handlebars)
