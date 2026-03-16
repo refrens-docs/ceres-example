@@ -14,6 +14,7 @@ const ONLY_MAIN = process.env.BUILD_MAIN_ONLY === "1"; // build just main render
 const ONLY_WIDGETS = process.env.BUILD_WIDGETS_ONLY === "1"; // build just widgets
 const ONLY_TEMPLATE = process.env.TEMPLATE; // npm run build:template --template=<name>
 const ONLY_WIDGET = process.env.WIDGET; // npm run build:widget --widget=<name>
+const ONLY_VENDOR = process.env.BUILD_VENDOR_ONLY === "1"; // build just vendor chunks
 const PURGE_OLD = process.env.PURGE_OLD_ASSETS === "1"; // optional cleanup flag
 
 // --- Template SemVer Helpers (enhanced) ----------------------------------------------
@@ -322,29 +323,58 @@ function getWidgetEntries() {
   }, {});
 }
 
+// Discover vendor entry points (self-hosted shared dependencies)
+/**
+ *
+ */
+function getVendorEntries() {
+  const base = path.join(__dirname, "src/vendor");
+  if (!fs.existsSync(base)) return {};
+  const dirs = fs
+    .readdirSync(base)
+    .filter((d) => fs.statSync(path.join(base, d)).isDirectory());
+  return dirs.reduce((acc, dir) => {
+    const entry = path.join(base, dir, "index.ts");
+    if (fs.existsSync(entry)) acc[`vendor/${dir}/bundle`] = entry;
+    return acc;
+  }, {});
+}
+
 // Decide entries
 let templateEntries = {};
 if (ONLY_TEMPLATES || ONLY_TEMPLATE) templateEntries = getTemplateEntries();
-else if (ONLY_MAIN || ONLY_WIDGETS) templateEntries = {};
+else if (ONLY_MAIN || ONLY_WIDGETS || ONLY_VENDOR) templateEntries = {};
 else templateEntries = getTemplateEntries();
 
 let widgetEntries = {};
 if (ONLY_WIDGETS) widgetEntries = getWidgetEntries();
-else if (ONLY_MAIN || ONLY_TEMPLATES || ONLY_TEMPLATE) widgetEntries = {};
+else if (ONLY_MAIN || ONLY_TEMPLATES || ONLY_TEMPLATE || ONLY_VENDOR)
+  widgetEntries = {};
 else widgetEntries = getWidgetEntries();
+
+let vendorEntries = {};
+if (ONLY_VENDOR) vendorEntries = getVendorEntries();
+else if (ONLY_MAIN || ONLY_TEMPLATES || ONLY_TEMPLATE || ONLY_WIDGETS)
+  vendorEntries = {};
+else vendorEntries = getVendorEntries();
 
 let systemEntries = {};
 if (ONLY_TEMPLATES || ONLY_TEMPLATE) systemEntries = {};
 else if (ONLY_MAIN)
   systemEntries = { "main-renderer/renderer": "./src/main/index.ts" };
-else if (ONLY_WIDGETS)
-  systemEntries = {}; // no aggregate widgets index; build per-widget bundles
+else if (ONLY_WIDGETS || ONLY_VENDOR)
+  systemEntries = {};
 else
   systemEntries = {
     "main-renderer/renderer": "./src/main/index.ts",
   };
 
-const entries = { ...systemEntries, ...templateEntries, ...widgetEntries };
+const entries = {
+  ...systemEntries,
+  ...templateEntries,
+  ...widgetEntries,
+  ...vendorEntries,
+};
 
 // Build version maps ONCE (patch bump) only if we are actually building assets
 const templateEntryKeys = Object.keys(templateEntries);
@@ -369,6 +399,7 @@ class AssetManifestPlugin {
           const MAIN_ENTRY = "main-renderer/renderer";
           const templateManifests = {}; // tplName -> { version, js, css, jsHash, cssHash }
           const widgetManifests = {}; // widgetName -> { js, css }
+          const vendorManifests = {}; // vendorName -> { js, css }
           const globalTemplatesManifest = {}; // Global template manifest
 
           // Helper to calculate file hash
@@ -499,6 +530,15 @@ class AssetManifestPlugin {
               }
               continue;
             }
+
+            if (entryName.startsWith("vendor/")) {
+              const parts = entryName.split("/");
+              if (parts.length >= 3) {
+                const vendorName = parts[1];
+                vendorManifests[vendorName] = assetRecord;
+              }
+              continue;
+            }
           }
 
           const emitJSON = (name, obj) =>
@@ -530,6 +570,11 @@ class AssetManifestPlugin {
           }
           if (Object.keys(widgetsSummary).length) {
             emitJSON("widgets-manifest.json", widgetsSummary);
+          }
+
+          // Vendor: summary manifest mapping vendorName -> { js, css }
+          if (Object.keys(vendorManifests).length) {
+            emitJSON("vendor-manifest.json", vendorManifests);
           }
 
           // Optional purge of old template and widget versions
@@ -661,6 +706,66 @@ class AssetManifestPlugin {
   }
 }
 
+// CSP meta tag plugin – injects Content-Security-Policy into index.html
+// Computes SHA-256 hashes for all inline <script> blocks so the CSP stays
+// in sync with the actual script content across builds.
+class CspMetaPlugin {
+  apply(compiler) {
+    compiler.hooks.compilation.tap("CspMetaPlugin", (compilation) => {
+      // Hook into HtmlWebpackPlugin's afterEmit to modify the emitted HTML
+      const HWP = require("html-webpack-plugin");
+
+      HWP.getHooks(compilation).beforeEmit.tapAsync(
+        "CspMetaPlugin",
+        (data, cb) => {
+          const html = data.html;
+
+          // Extract all inline <script>…</script> content (not <script src="...">)
+          const inlineScriptRegex =
+            /<script(?![^>]*\bsrc\b)[^>]*>([\s\S]*?)<\/script>/gi;
+          const hashes = [];
+          let match;
+
+          while ((match = inlineScriptRegex.exec(html)) !== null) {
+            const scriptContent = match[1];
+            if (!scriptContent.trim()) continue;
+            const hash = crypto
+              .createHash("sha256")
+              .update(scriptContent)
+              .digest("base64");
+            hashes.push(`'sha256-${hash}'`);
+          }
+
+          // Build CSP directives
+          const scriptSrc = [
+            ...hashes,
+            "'self'",
+          ].join(" ");
+
+          const csp = [
+            `script-src ${scriptSrc}`,
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com",
+            "font-src 'self' https://fonts.gstatic.com",
+            "connect-src *",
+            "img-src 'self' data: https:",
+            "default-src 'self'",
+          ].join("; ");
+
+          const metaTag = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
+
+          // Inject right after <head> (or after existing <meta> tags)
+          data.html = html.replace(
+            /(<head[^>]*>)/i,
+            `$1\n    ${metaTag}`
+          );
+
+          cb(null, data);
+        }
+      );
+    });
+  }
+}
+
 // Build dynamic partialDirs for all widgets subfolders
 /**
  *
@@ -694,6 +799,11 @@ module.exports = {
         const w = parts[1];
         const version = widgetVersionMap[w];
         return `${name}.${version}.js`;
+      }
+      if (name.startsWith("vendor/")) {
+        const parts = name.split("/");
+        const v = parts[1];
+        return `vendor/${v}/bundle.[contenthash:8].js`;
       }
       return `${name}.[contenthash:8].js`;
     },
@@ -740,6 +850,11 @@ module.exports = {
           const version = widgetVersionMap[w];
           return `${name}.${version}.css`;
         }
+        if (name.startsWith("vendor/")) {
+          const parts = name.split("/");
+          const v = parts[1];
+          return `vendor/${v}/bundle.[contenthash:8].css`;
+        }
         return `${name}.[contenthash:8].css`;
       },
     }),
@@ -750,6 +865,7 @@ module.exports = {
       inject: false, // We handle script/CSS injection manually
       minify: false,
     }),
+    new CspMetaPlugin(),
     new AssetManifestPlugin(),
   ],
   optimization: {

@@ -52,16 +52,32 @@ function getHB(): any {
 }
 
 /* =========================================================
- * CDN dependencies
+ * Self-hosted vendor dependencies (loaded from vendor-manifest.json)
  * ========================================================= */
 
-const DOMPURIFY_JS =
-  "https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js";
-const TOAST_UI_CSS =
-  "https://uicdn.toast.com/editor/latest/toastui-editor-viewer.min.css";
-const TOAST_UI_JS =
-  "https://uicdn.toast.com/editor/latest/toastui-editor-viewer.min.js";
-const MARKED_JS = "https://cdn.jsdelivr.net/npm/marked/marked.min.js";
+type VendorManifest = Record<string, { js?: string; css?: string }>;
+
+let vendorManifestPromise: Promise<VendorManifest> | null = null;
+
+/**
+ * Fetch vendor-manifest.json once and cache the result.
+ */
+function loadVendorManifest(): Promise<VendorManifest> {
+  if (vendorManifestPromise) return vendorManifestPromise;
+
+  vendorManifestPromise = fetch("./vendor-manifest.json")
+    .then((r) => {
+      if (!r.ok) throw new Error(`vendor-manifest.json: ${r.status}`);
+      return r.json() as Promise<VendorManifest>;
+    })
+    .catch((err) => {
+      // Reset so a retry is possible
+      vendorManifestPromise = null;
+      throw err;
+    });
+
+  return vendorManifestPromise;
+}
 
 let dependenciesPromise: Promise<void> | null = null;
 
@@ -95,22 +111,38 @@ function loadScript(src: string, globalName: string): Promise<void> {
 }
 
 /**
+ * Load a CSS file if not already present.
+ * @param href
+ */
+function loadCSS(href: string): void {
+  if (!document.querySelector(`link[href="${href}"]`)) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.appendChild(link);
+  }
+}
+
+/**
  *
  */
 function loadDependencies(): Promise<void> {
   if (dependenciesPromise) return dependenciesPromise;
 
-  if (!document.querySelector(`link[href="${TOAST_UI_CSS}"]`)) {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = TOAST_UI_CSS;
-    document.head.appendChild(link);
-  }
+  dependenciesPromise = loadVendorManifest().then((manifest) => {
+    const dp = manifest["dompurify"];
+    const tu = manifest["toastui-editor"];
 
-  dependenciesPromise = Promise.all([
-    loadScript(DOMPURIFY_JS, "DOMPurify"),
-    loadScript(TOAST_UI_JS, "toastui"),
-  ]).then(() => undefined);
+    if (!dp?.js) throw new Error("Vendor manifest missing dompurify entry");
+    if (!tu?.js) throw new Error("Vendor manifest missing toastui-editor entry");
+
+    if (tu.css) loadCSS(`./${tu.css}`);
+
+    return Promise.all([
+      loadScript(`./${dp.js}`, "DOMPurify"),
+      loadScript(`./${tu.js}`, "toastui"),
+    ]).then(() => undefined);
+  });
 
   return dependenciesPromise;
 }
@@ -119,10 +151,18 @@ function loadDependencies(): Promise<void> {
  *
  */
 function loadFallbackDependency(): Promise<void> {
-  return Promise.all([
-    loadScript(DOMPURIFY_JS, "DOMPurify"),
-    loadScript(MARKED_JS, "marked"),
-  ]).then(() => undefined);
+  return loadVendorManifest().then((manifest) => {
+    const dp = manifest["dompurify"];
+    const mk = manifest["marked"];
+
+    if (!dp?.js) throw new Error("Vendor manifest missing dompurify entry");
+    if (!mk?.js) throw new Error("Vendor manifest missing marked entry");
+
+    return Promise.all([
+      loadScript(`./${dp.js}`, "DOMPurify"),
+      loadScript(`./${mk.js}`, "marked"),
+    ]).then(() => undefined);
+  });
 }
 
 /* =========================================================
