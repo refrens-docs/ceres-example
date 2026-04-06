@@ -511,6 +511,61 @@ export const applyPreviewAssets = (
   return didUpdate;
 };
 
+/**
+ * DOM targeting convention for Lydia-pushed field updates.
+ *
+ * Templates must mark updatable elements with data attributes:
+ *   - img[data-ceres-field="qrCode"]           → QR code image
+ *   - [data-ceres-field="irn"]                 → IRN text node
+ *   - [data-ceres-field-container="qrCode"]    → wrapper toggled with is-empty class
+ *
+ * Element targeting uses data-ceres-field attributes (similar to data-ceres-height in applyPreviewAssets).
+ * Container targeting uses data-ceres-field-container attributes (not class selectors — intentionally explicit).
+ * Adding support for a new field: add data-ceres-field="<key>" to the template element,
+ * then register a handler in lydiaBridge.ts using registerInvoiceFieldHandler.
+ */
+
+/**
+ * Updates the QR code image in the rendered template.
+ * Targets img[data-ceres-field="qrCode"] — templates must use this attribute.
+ * Toggles is-empty on the nearest [data-ceres-field-container="qrCode"] when value is absent.
+ *
+ * @param value - QR code data URL, or null/undefined to hide
+ */
+export const applyQrCodeUpdate = (value: unknown): void => {
+  const qrImg = document.querySelector<HTMLImageElement>(
+    'img[data-ceres-field="qrCode"]'
+  );
+  if (!qrImg) return;
+
+  const container = qrImg.closest<HTMLElement>(
+    '[data-ceres-field-container="qrCode"]'
+  );
+
+  if (typeof value === "string" && value.length > 0) {
+    qrImg.src = value;
+    container?.classList.remove("is-empty");
+  } else {
+    qrImg.src = "";
+    container?.classList.add("is-empty");
+  }
+};
+
+/**
+ * Updates the IRN text node in the rendered template.
+ * Targets [data-ceres-field="irn"] — templates must use this attribute.
+ *
+ * @param value - IRN string, or null/undefined to clear
+ */
+export const applyIrnUpdate = (value: unknown): void => {
+  const irnEl = document.querySelector<HTMLElement>(
+    '[data-ceres-field="irn"]'
+  );
+  if (!irnEl) return;
+
+  irnEl.textContent = typeof value === "string" ? value : "";
+};
+
 export const extractTemplateStyleOptions = (
   payload: unknown
 ): PlainObject | null => {

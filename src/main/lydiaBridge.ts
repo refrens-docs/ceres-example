@@ -22,6 +22,8 @@
 import {
   applyPreviewAssets,
   applyPreviewStyles,
+  applyQrCodeUpdate,
+  applyIrnUpdate,
   extractTemplateStyleOptions,
   getQueryParam,
   isPlainObject,
@@ -50,6 +52,7 @@ export interface LydiaBridgeOptions {
 export interface LydiaBridgeHandle {
   reportContentHeight: (reason?: string) => void;
   triggerPrint: (reason?: string) => void;
+  registerInvoiceFieldHandler: (field: string, handler: (value: unknown) => void) => void;
   destroy: () => void;
 }
 
@@ -84,7 +87,32 @@ export function initLydiaBridge(
   let heightReportTimer: number | null = null;
   let pendingReportReason: string | null = null;
 
+  // Handshake state
+  let isLydiaReady = false;
+  const pendingCeresQueue: Array<() => void> = [];
+
+  // Field handler registry — maps invoiceResponse field keys to DOM update functions.
+  // Registered before ceres:ready is sent; dispatched when lydia:invoice-update arrives.
+  const invoiceFieldHandlers = new Map<string, (value: unknown) => void>();
+
   const cleanupFns: CleanupFn[] = [];
+
+  // Note: handler receives `unknown` (not a generic keyed type) because Map<string, fn>
+  // cannot express per-key type safety without complex mapped types. Handlers guard internally.
+  const registerInvoiceFieldHandler = <K extends string>(
+    field: K,
+    handler: (value: unknown) => void
+  ): void => {
+    invoiceFieldHandlers.set(field, handler);
+  };
+
+  const handleInvoiceUpdate = (fields: Record<string, unknown>): void => {
+    // Unrecognised keys are silently ignored — forward compatible.
+    Object.entries(fields).forEach(([key, value]) => {
+      const handler = invoiceFieldHandlers.get(key);
+      if (handler) handler(value);
+    });
+  };
 
   // Logging (only when debug flag is enabled)
   const debugLog = (...args: unknown[]) => {
@@ -110,17 +138,25 @@ export function initLydiaBridge(
     );
   };
 
+  // Sends a message to the parent window. Includes all necessary guards.
+  const sendToParent = (payload: object) => {
+    if (window.parent == null || window.parent === window) return;
+    if (typeof window.parent.postMessage !== "function") return;
+    window.parent.postMessage(payload, "*");
+  };
+
+  // Sends immediately if handshake is complete, otherwise queues for later.
+  const sendOrQueue = (fn: () => void) => {
+    if (isLydiaReady) {
+      fn();
+    } else {
+      pendingCeresQueue.push(fn);
+    }
+  };
+
   // Sends the measured height to Lydia so it can resize the iframe to fit.
   // Skips duplicate reports on resize to avoid unnecessary chatter.
   const postHeightToParent = (fullHeight: number, reason = "resize") => {
-    if (window.parent == null || window.parent === window) {
-      return;
-    }
-
-    if (typeof window.parent.postMessage !== "function") {
-      return;
-    }
-
     if (!Number.isFinite(fullHeight)) {
       return;
     }
@@ -141,7 +177,7 @@ export function initLydiaBridge(
       timestamp: Date.now(),
     };
 
-    window.parent.postMessage(payload, "*");
+    sendOrQueue(() => sendToParent(payload));
     debugLog("postHeightToParent", payload);
   };
 
@@ -340,6 +376,25 @@ export function initLydiaBridge(
     return (data as { action?: string }).action === "lydia:height-request";
   };
 
+  const isLydiaAckMessage = (
+    data: unknown
+  ): data is { source: "lydia"; type: "lydia:ack"; version: number } => {
+    if (!isPlainObject(data)) return false;
+    return data.source === "lydia" && data.type === "lydia:ack";
+  };
+
+  const isInvoiceUpdateMessage = (
+    data: unknown
+  ): data is { source: "lydia"; type: "lydia:invoice-update"; fields: Record<string, unknown>; reason?: string } => {
+    if (!isPlainObject(data)) return false;
+    return (
+      data.source === "lydia" &&
+      data.type === "lydia:invoice-update" &&
+      typeof data.fields === "object" &&
+      data.fields !== null
+    );
+  };
+
   const isTemplateUpdateMessage = (
     data: unknown
   ): data is {
@@ -362,6 +417,18 @@ export function initLydiaBridge(
     }
 
     const { data } = event;
+    if (isLydiaAckMessage(data)) {
+      isLydiaReady = true;
+      const queued = pendingCeresQueue.splice(0);
+      queued.forEach((fn) => fn());
+      return;
+    }
+
+    if (isInvoiceUpdateMessage(data)) {
+      handleInvoiceUpdate(data.fields);
+      return;
+    }
+
     if (isTemplateUpdateMessage(data)) {
       const styleOptions = extractTemplateStyleOptions({
         template: data.template,
@@ -518,9 +585,19 @@ export function initLydiaBridge(
     resetSizing("destroy");
   };
 
+  // Register known invoice field handlers.
+  // All handlers must be registered before ceres:ready is sent.
+  registerInvoiceFieldHandler("qrCode", applyQrCodeUpdate);
+  registerInvoiceFieldHandler("irn", applyIrnUpdate);
+
+  // Signal to Lydia that the bridge is fully initialised and ready to receive messages.
+  // This MUST be the last action — all handlers must be registered before we declare ready.
+  sendToParent({ source: "ceres", type: "ceres:ready", version: 1 });
+
   return {
     reportContentHeight,
     triggerPrint,
+    registerInvoiceFieldHandler,
     destroy,
   };
 }
