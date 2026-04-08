@@ -302,11 +302,11 @@ export const sanitizePreviewOptions = (
       | "primaryBackground"
       | "secondaryBackground"
     > = [
-        "primaryColor",
-        "secondaryColor",
-        "primaryBackground",
-        "secondaryBackground",
-      ];
+      "primaryColor",
+      "secondaryColor",
+      "primaryBackground",
+      "secondaryBackground",
+    ];
 
     const sanitizedEntries = colorKeys
       .map((key) => {
@@ -434,6 +434,75 @@ export const applyPreviewStyles = (options: PlainObject | null | undefined) => {
       }
     }
   }
+
+  // --- Watermark ---
+  const watermark = isPlainObject(options.watermark)
+    ? (options.watermark as PlainObject)
+    : null;
+
+  if (watermark) {
+    // Use Boolean() directly — no undefined fallback needed since isEnabled is
+    // always present in the real data shape, and an absent/falsy value should
+    // be treated as disabled (avoids an untested dead branch).
+    const isEnabled = Boolean(watermark.isEnabled);
+
+    const outputEl =
+      typeof document !== "undefined"
+        ? document.getElementById("documentOutput")
+        : null;
+
+    if (!isEnabled) {
+      // Clear all watermark state when disabled
+      root.style.removeProperty("--watermark-logo");
+      root.style.removeProperty("--watermark-opacity");
+      root.style.removeProperty("--watermark-rotate");
+      root.style.removeProperty("--watermark-scale");
+      root.style.removeProperty("--watermark-repeated-pattern");
+      root.style.removeProperty("--watermark-z-index");
+      // Clear text attr on both elements (screen + print targets)
+      outputEl?.removeAttribute("data-watermark-text");
+      document.body?.removeAttribute("data-watermark-text");
+      return;
+      // NOTE: this `return` exits applyPreviewStyles entirely. Colors and fonts
+      // are processed before this block so they are not affected.
+    }
+
+    const logo = toNonEmptyString(watermark.logo);
+    const customText = toNonEmptyString(watermark.customText);
+
+    if (logo) {
+      // Image watermark: set logo URL and clear any stale text attribute.
+      root.style.setProperty("--watermark-logo", `url(${toAssetUrl(logo)})`);
+      outputEl?.removeAttribute("data-watermark-text");
+      document.body?.removeAttribute("data-watermark-text");
+    } else if (customText) {
+      // Text watermark: clear logo var, set data attribute on both elements.
+      // outputEl (#documentOutput) drives the screen ::before pseudo-element.
+      // document.body drives the print ::before pseudo-element (position:fixed).
+      root.style.removeProperty("--watermark-logo");
+      outputEl?.setAttribute("data-watermark-text", customText);
+      document.body?.setAttribute("data-watermark-text", customText);
+    }
+
+    // Numeric properties — use setProperty directly, NOT setVar, because setVar
+    // guards with `if (!value)` which treats "0" as falsy and would silently skip
+    // opacity:0, rotation:0 etc.
+    const opacity =
+      typeof watermark.opacity === "number" ? watermark.opacity / 100 : 0.1;
+    root.style.setProperty("--watermark-opacity", String(opacity));
+
+    const rotation =
+      typeof watermark.rotation === "number" ? watermark.rotation : 0;
+    root.style.setProperty("--watermark-rotate", `${rotation}deg`);
+
+    const scale = typeof watermark.scale === "number" ? watermark.scale : 1;
+    root.style.setProperty("--watermark-scale", String(scale));
+
+    const repeatedPattern = watermark.repeatedPatterns
+      ? "repeat-y"
+      : "no-repeat";
+    root.style.setProperty("--watermark-repeated-pattern", repeatedPattern);
+  }
 };
 
 export const applyPreviewAssets = (
@@ -531,11 +600,11 @@ export const extractTemplateStyleOptions = (
     | "primaryBackground"
     | "secondaryBackground"
   > = [
-      "primaryColor",
-      "secondaryColor",
-      "primaryBackground",
-      "secondaryBackground",
-    ];
+    "primaryColor",
+    "secondaryColor",
+    "primaryBackground",
+    "secondaryBackground",
+  ];
 
   const templateColorSource = isPlainObject(template.templateColor)
     ? (template.templateColor as PlainObject)
@@ -575,6 +644,12 @@ export const extractTemplateStyleOptions = (
 
   if (Object.keys(templateFonts).length > 0) {
     result.template = templateFonts;
+  }
+
+  // Extract watermark — must be before the null-return guard so a payload
+  // with only watermark (no colors/fonts) still returns a non-null result.
+  if (isPlainObject(template.watermark)) {
+    result.watermark = template.watermark;
   }
 
   return Object.keys(result).length > 0 ? result : null;
