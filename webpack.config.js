@@ -740,11 +740,12 @@ class CspMetaPlugin {
           const scriptSrc = [
             ...hashes,
             "'self'",
+            "https://*.github.io",
           ].join(" ");
 
           const csp = [
             `script-src ${scriptSrc}`,
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://*.github.io",
             "font-src 'self' https://fonts.gstatic.com",
             "connect-src *",
             "img-src 'self' data: https:",
