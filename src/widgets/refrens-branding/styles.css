@@ -1,0 +1,35 @@
+/* RefrensBranding Widget
+ * Shows "Powered by Refrens.com" in the web view (Lydia iframe) for trial users.
+ * Hidden in print and dibella modes — dibella renders branding in the PDF footer.
+ */
+
+.refrens-branding-widget {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 16px;
+  padding: 8px 0;
+}
+
+.refrens-branding-widget a {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.refrens-branding-widget img {
+  height: 16px;
+  width: auto;
+}
+
+/* Hide in print — dibella handles branding in the PDF footer */
+@media print {
+  .refrens-branding-widget {
+    display: none !important;
+  }
+}
+
+/* Hide in dibella mode — body.isDibella is set by ceres main/index.ts */
+body.isDibella .refrens-branding-widget {
+  display: none !important;
+}
