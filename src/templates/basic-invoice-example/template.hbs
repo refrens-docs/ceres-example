@@ -1,9 +1,11 @@
 <div class="invoice-modern-shell">
-  {{#if letterHead}}
-  <div class="invoice-letterhead">
-    <img src="{{letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
+  <div class="no-dibella invoice-letterhead{{#unless letterHead}} is-empty{{/unless}}">
+    {{#if letterHead}}
+      <img src="{{letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
+    {{else}}
+      <img alt="Letterhead" data-ceres-height="letterhead" />
+    {{/if}}
   </div>
-  {{/if}}
 
   <div class="invoice-modern-container">
   <div class="invoice-header-modern">
@@ -156,7 +158,12 @@
         <td>
           <span class="item-name">{{name}}</span>
           {{#if sku}}<span class="item-sku"> (SKU: {{sku}})</span>{{/if}}
-          {{#if description}}<br /><span class="item-desc">{{description}}</span>{{/if}}
+          {{#if description}}
+            <br />
+            <div class="item-desc">
+              {{> MarkdownViewer (prepareMarkdownViewerData description) }}
+            </div>
+          {{/if}}
         </td>
         <td class="text-right">{{quantity}}</td>
         <td class="text-right">{{rate}}</td>
@@ -269,7 +276,7 @@
     {{#if notes}}
     <div class="notes-modern-block">
       <h3>{{customLabels.notes}}</h3>
-      <p>{{notes}}</p>
+      {{> MarkdownViewer (prepareMarkdownViewerData notes) }}
     </div>
     {{/if}}
     {{#if terms.0.terms.length}}
@@ -292,9 +299,11 @@
 
   </div>
 
-  {{#if letterHeadFooter}}
-  <div class="invoice-letterhead-footer">
-    <img src="{{letterHeadFooter}}" alt="Letterhead footer"  data-ceres-height="letterhead-footer" />
+  <div class="no-dibella invoice-letterhead-footer{{#unless letterHeadFooter}} is-empty{{/unless}}">
+    {{#if letterHeadFooter}}
+      <img src="{{letterHeadFooter}}" alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{else}}
+      <img alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{/if}}
   </div>
-  {{/if}}
 </div>
