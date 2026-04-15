@@ -1,8 +1,8 @@
 {{!-- RefrensBranding partial
      Renders "Powered by Refrens.com" only when showBranding is truthy.
-     Hidden in print and dibella modes — dibella adds branding to the PDF footer itself. --}}
+     no-dibella class hides this in dibella PDF mode (dibella injects its own branding in the footer). --}}
 {{#if showBranding}}
-<div class="refrens-branding-widget">
+<div class="refrens-branding-widget no-dibella">
   <a href="https://www.refrens.com" target="_blank" rel="noopener noreferrer">
     <img
       src="https://assets.refrens.com/powered_by_refrens_com_330ab8acf1.png"
