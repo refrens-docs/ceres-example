@@ -103,7 +103,11 @@ const renderDocument = async () => {
         );
       }
 
-      const html = template(payload);
+      const mapper = (window as any).CeresTemplateDataMapper;
+      const mappedPayload =
+        typeof mapper === "function" ? mapper(payload) : payload;
+      const html = template(mappedPayload);
+
       if (outputDiv) {
         outputDiv.innerHTML = html;
         outputDiv.classList.remove("loading-message");
@@ -145,4 +149,4 @@ const renderDocument = async () => {
 
 renderDocument();
 
-export { };
+export {};
