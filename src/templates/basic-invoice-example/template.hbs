@@ -32,6 +32,12 @@
         <strong>{{formateShortDateWithOffset dueDate ownerOffset}}</strong>
       </p>
       {{#if irn}}
+      {{#if irn.Irn}}
+      <p>
+        <span class="meta-label">IRN:</span>
+        <span data-ceres-field="irn" class="irn-value">{{irn.Irn}}</span>
+      </p>
+      {{/if}}
       {{#if irn.AckDt}}
       <p>
         <span class="meta-label">IRN Ack Date:</span>
@@ -63,6 +69,10 @@
       </p>
       {{/if}}
       {{/if}}
+      {{!-- QR code: always present in DOM; src populated via postMessage after e-invoice generation --}}
+      <div data-ceres-field-container="qrCode" class="irn-qr-container is-empty">
+        <img data-ceres-field="qrCode" src="" alt="E-Invoice QR Code" class="irn-qr-image" />
+      </div>
       {{!-- Status tag using the minimal InvoiceStatus widget --}}
       <p>
         <span class="meta-label">Status:</span>
