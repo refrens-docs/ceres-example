@@ -53,6 +53,7 @@ export interface LydiaBridgeHandle {
   reportContentHeight: (reason?: string) => void;
   triggerPrint: (reason?: string) => void;
   registerInvoiceFieldHandler: (field: string, handler: (value: unknown) => void) => void;
+  notifyReady: () => void;
   destroy: () => void;
 }
 
@@ -590,19 +591,27 @@ export function initLydiaBridge(
   };
 
   // Register known invoice field handlers.
-  // All handlers must be registered before ceres:ready is sent.
   registerInvoiceFieldHandler("qrCode", applyQrCodeUpdate);
   registerInvoiceFieldHandler("irn", applyIrnUpdate);
 
-  // Signal to Lydia that the bridge is fully initialised and ready to receive messages.
-  // This MUST be the last action — all handlers must be registered before we declare ready.
-  console.error('[MONKA] Ceres sending ceres:ready');
-  sendToParent({ source: "ceres", type: "ceres:ready", version: 1 });
+  // Called by the renderer after the template HTML is injected into the DOM.
+  // Sending ceres:ready at that point ensures Lydia's queued invoice-update messages
+  // (e.g. qrCode, irn) arrive when the target DOM elements already exist.
+  // Must NOT be called before outputDiv.innerHTML is set — handlers look up DOM elements
+  // at call time and will silently fail if the elements aren't there yet.
+  let hasNotifiedReady = false;
+  const notifyReady = () => {
+    if (hasNotifiedReady) return;
+    hasNotifiedReady = true;
+    console.error('[MONKA] Ceres sending ceres:ready');
+    sendToParent({ source: "ceres", type: "ceres:ready", version: 1 });
+  };
 
   return {
     reportContentHeight,
     triggerPrint,
     registerInvoiceFieldHandler,
+    notifyReady,
     destroy,
   };
 }
