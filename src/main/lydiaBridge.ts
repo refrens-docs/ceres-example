@@ -108,8 +108,10 @@ export function initLydiaBridge(
 
   const handleInvoiceUpdate = (fields: Record<string, unknown>): void => {
     // Unrecognised keys are silently ignored — forward compatible.
+    console.error('[MONKA] Ceres handleInvoiceUpdate: keys=%o', Object.keys(fields));
     Object.entries(fields).forEach(([key, value]) => {
       const handler = invoiceFieldHandlers.get(key);
+      console.error('[MONKA] Ceres field=%s hasHandler=%s valueType=%s', key, !!handler, typeof value);
       if (handler) handler(value);
     });
   };
@@ -417,7 +419,9 @@ export function initLydiaBridge(
     }
 
     const { data } = event;
+    console.error('[MONKA] Ceres handleParentMessage: type=%s source=%s', (data as any)?.type ?? (data as any)?.action, (data as any)?.source);
     if (isLydiaAckMessage(data)) {
+      console.error('[MONKA] Ceres received lydia:ack, flushing %d queued messages', pendingCeresQueue.length);
       isLydiaReady = true;
       const queued = pendingCeresQueue.splice(0);
       queued.forEach((fn) => fn());
@@ -592,6 +596,7 @@ export function initLydiaBridge(
 
   // Signal to Lydia that the bridge is fully initialised and ready to receive messages.
   // This MUST be the last action — all handlers must be registered before we declare ready.
+  console.error('[MONKA] Ceres sending ceres:ready');
   sendToParent({ source: "ceres", type: "ceres:ready", version: 1 });
 
   return {

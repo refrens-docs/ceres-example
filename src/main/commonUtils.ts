@@ -536,18 +536,22 @@ export const applyQrCodeUpdate = (value: unknown): void => {
   const qrImg = document.querySelector<HTMLImageElement>(
     'img[data-ceres-field="qrCode"]'
   );
+  console.error('[MONKA] Ceres applyQrCodeUpdate: imgFound=%s valueType=%s valueLength=%d', !!qrImg, typeof value, typeof value === 'string' ? value.length : 0);
   if (!qrImg) return;
 
   const container = qrImg.closest<HTMLElement>(
     '[data-ceres-field-container="qrCode"]'
   );
+  console.error('[MONKA] Ceres applyQrCodeUpdate: containerFound=%s containerClasses=%s', !!container, container?.className);
 
   if (typeof value === "string" && value.length > 0) {
     qrImg.src = value;
     container?.classList.remove("is-empty");
+    console.error('[MONKA] Ceres applyQrCodeUpdate: QR applied, is-empty removed');
   } else {
     qrImg.src = "";
     container?.classList.add("is-empty");
+    console.error('[MONKA] Ceres applyQrCodeUpdate: empty value, is-empty added');
   }
 };
 
