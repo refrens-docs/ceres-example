@@ -95,6 +95,27 @@ body {
   display: block;
 }
 
+.regional-qr-section {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.regional-qr-container {
+  display: inline-block;
+}
+
+.regional-qr-container.is-empty {
+  display: none;
+}
+
+.regional-qr-image {
+  height: 96px;
+  width: 96px;
+  display: block;
+}
+
 .invoice-letterhead img,
 .invoice-letterhead-footer img {
   display: block;

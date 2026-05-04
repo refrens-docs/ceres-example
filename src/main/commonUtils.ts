@@ -556,6 +556,78 @@ export const applyQrCodeUpdate = (value: unknown): void => {
 };
 
 /**
+ * Updates the ZATCA QR code image in the rendered template.
+ * Targets img[data-ceres-field="zatcaQrCode"] — templates must use this attribute.
+ * Toggles is-empty on the nearest [data-ceres-field-container="zatcaQrCode"] when value is absent.
+ */
+export const applyZatcaQrCodeUpdate = (value: unknown): void => {
+  const qrImg = document.querySelector<HTMLImageElement>(
+    'img[data-ceres-field="zatcaQrCode"]'
+  );
+  if (!qrImg) return;
+
+  const container = qrImg.closest<HTMLElement>(
+    '[data-ceres-field-container="zatcaQrCode"]'
+  );
+
+  if (typeof value === "string" && value.length > 0) {
+    qrImg.src = value;
+    container?.classList.remove("is-empty");
+  } else {
+    qrImg.src = "";
+    container?.classList.add("is-empty");
+  }
+};
+
+/**
+ * Updates the LHDN QR code image in the rendered template.
+ * Targets img[data-ceres-field="lhdnQrCode"] — templates must use this attribute.
+ * Toggles is-empty on the nearest [data-ceres-field-container="lhdnQrCode"] when value is absent.
+ */
+export const applyLhdnQrCodeUpdate = (value: unknown): void => {
+  const qrImg = document.querySelector<HTMLImageElement>(
+    'img[data-ceres-field="lhdnQrCode"]'
+  );
+  if (!qrImg) return;
+
+  const container = qrImg.closest<HTMLElement>(
+    '[data-ceres-field-container="lhdnQrCode"]'
+  );
+
+  if (typeof value === "string" && value.length > 0) {
+    qrImg.src = value;
+    container?.classList.remove("is-empty");
+  } else {
+    qrImg.src = "";
+    container?.classList.add("is-empty");
+  }
+};
+
+/**
+ * Updates the document QR code image in the rendered template.
+ * Targets img[data-ceres-field="documentQr"] — templates must use this attribute.
+ * Toggles is-empty on the nearest [data-ceres-field-container="documentQr"] when value is absent.
+ */
+export const applyDocumentQrUpdate = (value: unknown): void => {
+  const qrImg = document.querySelector<HTMLImageElement>(
+    'img[data-ceres-field="documentQr"]'
+  );
+  if (!qrImg) return;
+
+  const container = qrImg.closest<HTMLElement>(
+    '[data-ceres-field-container="documentQr"]'
+  );
+
+  if (typeof value === "string" && value.length > 0) {
+    qrImg.src = value;
+    container?.classList.remove("is-empty");
+  } else {
+    qrImg.src = "";
+    container?.classList.add("is-empty");
+  }
+};
+
+/**
  * Updates the IRN text node in the rendered template.
  * Targets [data-ceres-field="irn"] — templates must use this attribute.
  *

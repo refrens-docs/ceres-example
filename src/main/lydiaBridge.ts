@@ -24,6 +24,9 @@ import {
   applyPreviewStyles,
   applyQrCodeUpdate,
   applyIrnUpdate,
+  applyZatcaQrCodeUpdate,
+  applyLhdnQrCodeUpdate,
+  applyDocumentQrUpdate,
   extractTemplateStyleOptions,
   getQueryParam,
   isPlainObject,
@@ -597,6 +600,9 @@ export function initLydiaBridge(
   // Register known invoice field handlers.
   registerInvoiceFieldHandler("qrCode", applyQrCodeUpdate);
   registerInvoiceFieldHandler("irn", applyIrnUpdate);
+  registerInvoiceFieldHandler("zatcaQrCode", applyZatcaQrCodeUpdate);
+  registerInvoiceFieldHandler("lhdnQrCode", applyLhdnQrCodeUpdate);
+  registerInvoiceFieldHandler("documentQr", applyDocumentQrUpdate);
 
   // Called by the renderer after the template HTML is injected into the DOM.
   // Sending ceres:ready at that point ensures Lydia's queued invoice-update messages
