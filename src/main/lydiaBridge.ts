@@ -112,10 +112,8 @@ export function initLydiaBridge(
 
   const handleInvoiceUpdate = (fields: Record<string, unknown>): void => {
     // Unrecognised keys are silently ignored — forward compatible.
-    console.error('[MONKA] Ceres handleInvoiceUpdate: keys=%o qrCodeType=%s qrCodeLength=%d', Object.keys(fields), typeof fields.qrCode, typeof fields.qrCode === 'string' ? fields.qrCode.length : -1);
     Object.entries(fields).forEach(([key, value]) => {
       const handler = invoiceFieldHandlers.get(key);
-      console.error('[MONKA] Ceres field=%s hasHandler=%s valueType=%s', key, !!handler, typeof value);
       if (handler) handler(value);
     });
   };
@@ -419,17 +417,12 @@ export function initLydiaBridge(
   // Lydia sends { action: 'lydia:print' } so Ceres can prepare the layout first.
   const handleParentMessage = (event: MessageEvent) => {
     const { data } = event;
-    const msgType = (data as any)?.type ?? (data as any)?.action;
-    const msgSource = (data as any)?.source;
-    console.error('[MONKA] Ceres handleParentMessage RAW: type=%s source=%s sourceMatch=%s', msgType, msgSource, event.source === window.parent);
 
     if (event.source !== window.parent) {
       return;
     }
 
-    console.error('[MONKA] Ceres handleParentMessage: type=%s source=%s', msgType, msgSource);
     if (isLydiaAckMessage(data)) {
-      console.error('[MONKA] Ceres received lydia:ack, flushing %d queued messages', pendingCeresQueue.length);
       isLydiaReady = true;
       const queued = pendingCeresQueue.splice(0);
       queued.forEach((fn) => fn());
@@ -613,7 +606,6 @@ export function initLydiaBridge(
   const notifyReady = () => {
     if (hasNotifiedReady) return;
     hasNotifiedReady = true;
-    console.error('[MONKA] Ceres sending ceres:ready');
     sendToParent({ source: "ceres", type: "ceres:ready", version: 1 });
   };
 
