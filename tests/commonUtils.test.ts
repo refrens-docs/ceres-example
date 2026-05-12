@@ -73,11 +73,11 @@ describe("commonUtils", () => {
     });
 
     describe("applyQrCodeUpdate", () => {
-        let mockImg: { src: string; closest: jest.Mock };
+        let mockImg: { src: string; closest: jest.Mock; removeAttribute: jest.Mock };
         let mockContainer: { classList: { remove: jest.Mock; add: jest.Mock } };
 
         beforeEach(() => {
-            mockImg = { src: "", closest: jest.fn() };
+            mockImg = { src: "", closest: jest.fn(), removeAttribute: jest.fn() };
             mockContainer = { classList: { remove: jest.fn(), add: jest.fn() } };
             (global as any).document = { querySelector: jest.fn() };
         });
@@ -103,7 +103,7 @@ describe("commonUtils", () => {
             mockImg.closest.mockReturnValue(mockContainer);
             (global as any).document.querySelector.mockReturnValue(mockImg);
             applyQrCodeUpdate("");
-            expect(mockImg.src).toBe("");
+            expect(mockImg.removeAttribute).toHaveBeenCalledWith("src");
             expect(mockContainer.classList.add).toHaveBeenCalledWith("is-empty");
         });
 
@@ -111,7 +111,7 @@ describe("commonUtils", () => {
             mockImg.closest.mockReturnValue(mockContainer);
             (global as any).document.querySelector.mockReturnValue(mockImg);
             applyQrCodeUpdate(null);
-            expect(mockImg.src).toBe("");
+            expect(mockImg.removeAttribute).toHaveBeenCalledWith("src");
             expect(mockContainer.classList.add).toHaveBeenCalledWith("is-empty");
         });
 
@@ -126,7 +126,7 @@ describe("commonUtils", () => {
             mockImg.closest.mockReturnValue(null);
             (global as any).document.querySelector.mockReturnValue(mockImg);
             applyQrCodeUpdate(null);
-            expect(mockImg.src).toBe("");
+            expect(mockImg.removeAttribute).toHaveBeenCalledWith("src");
         });
     });
 

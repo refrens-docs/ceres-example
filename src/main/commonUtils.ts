@@ -546,7 +546,9 @@ export const applyQrCodeUpdate = (value: unknown): void => {
     qrImg.src = value;
     container?.classList.remove("is-empty");
   } else {
-    qrImg.src = "";
+    // removeAttribute (not src = "") so the browser doesn't refetch the current
+    // page URL — matches the pattern in applyPreviewAssets.
+    qrImg.removeAttribute("src");
     container?.classList.add("is-empty");
   }
 };
@@ -570,7 +572,9 @@ export const applyZatcaQrCodeUpdate = (value: unknown): void => {
     qrImg.src = value;
     container?.classList.remove("is-empty");
   } else {
-    qrImg.src = "";
+    // removeAttribute (not src = "") so the browser doesn't refetch the current
+    // page URL — matches the pattern in applyPreviewAssets.
+    qrImg.removeAttribute("src");
     container?.classList.add("is-empty");
   }
 };
@@ -594,7 +598,9 @@ export const applyLhdnQrCodeUpdate = (value: unknown): void => {
     qrImg.src = value;
     container?.classList.remove("is-empty");
   } else {
-    qrImg.src = "";
+    // removeAttribute (not src = "") so the browser doesn't refetch the current
+    // page URL — matches the pattern in applyPreviewAssets.
+    qrImg.removeAttribute("src");
     container?.classList.add("is-empty");
   }
 };
@@ -618,7 +624,9 @@ export const applyDocumentQrUpdate = (value: unknown): void => {
     qrImg.src = value;
     container?.classList.remove("is-empty");
   } else {
-    qrImg.src = "";
+    // removeAttribute (not src = "") so the browser doesn't refetch the current
+    // page URL — matches the pattern in applyPreviewAssets.
+    qrImg.removeAttribute("src");
     container?.classList.add("is-empty");
   }
 };

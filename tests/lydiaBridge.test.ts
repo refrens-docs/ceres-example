@@ -109,9 +109,15 @@ describe("initLydiaBridge", () => {
             expect(typeof handle!.destroy).toBe("function");
         });
 
-        it("sends ceres:ready as the last init action", () => {
+        it("sends ceres:ready when notifyReady is called", () => {
+            // ceres:ready is emitted by the renderer (src/main/index.ts) via
+            // handle.notifyReady() AFTER outputDiv.innerHTML is set — not during init —
+            // so handlers can find their data-ceres-field DOM targets when Lydia's
+            // queued updates flush.
             const { parentPostMessage } = setupBrowserGlobals();
-            initLydiaBridge();
+            const handle = initLydiaBridge();
+            expect(handle).not.toBeNull();
+            handle!.notifyReady();
             expect(parentPostMessage).toHaveBeenLastCalledWith(
                 { source: "ceres", type: "ceres:ready", version: 1 },
                 "*"
