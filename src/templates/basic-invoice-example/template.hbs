@@ -32,6 +32,12 @@
         <strong>{{formateShortDateWithOffset dueDate ownerOffset}}</strong>
       </p>
       {{#if irn}}
+      {{#if irn.Irn}}
+      <p>
+        <span class="meta-label">IRN:</span>
+        <span data-ceres-field="irn" class="irn-value">{{irn.Irn}}</span>
+      </p>
+      {{/if}}
       {{#if irn.AckDt}}
       <p>
         <span class="meta-label">IRN Ack Date:</span>
@@ -63,6 +69,10 @@
       </p>
       {{/if}}
       {{/if}}
+      {{!-- QR code: always present in DOM; src populated via postMessage after e-invoice generation --}}
+      <div data-ceres-field-container="qrCode" class="irn-qr-container is-empty">
+        <img data-ceres-field="qrCode" src="" alt="E-Invoice QR Code" class="irn-qr-image" />
+      </div>
       {{!-- Status tag using the minimal InvoiceStatus widget --}}
       <p>
         <span class="meta-label">Status:</span>
@@ -289,6 +299,19 @@
       </ul>
     </div>
     {{/if}}
+  </div>
+
+  {{!-- Regional QR codes: always in DOM; src populated via postMessage from Lydia --}}
+  <div class="regional-qr-section">
+    <div data-ceres-field-container="zatcaQrCode" class="regional-qr-container is-empty">
+      <img data-ceres-field="zatcaQrCode" src="" alt="ZATCA QR Code" class="regional-qr-image" />
+    </div>
+    <div data-ceres-field-container="lhdnQrCode" class="regional-qr-container is-empty">
+      <img data-ceres-field="lhdnQrCode" src="" alt="LHDN QR Code" class="regional-qr-image" />
+    </div>
+    <div data-ceres-field-container="documentQr" class="regional-qr-container is-empty">
+      <img data-ceres-field="documentQr" src="" alt="Document QR Code" class="regional-qr-image" />
+    </div>
   </div>
 
   <div class="invoice-footer-modern">

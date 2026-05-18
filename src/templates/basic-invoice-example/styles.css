@@ -5,7 +5,6 @@
   .notes-modern-block,
   .terms-modern-block {
     break-inside: avoid;
-    break-inside: avoid;
   }
 }
 
@@ -75,6 +74,46 @@ body {
   border: 0;
   overflow: hidden;
   pointer-events: none;
+}
+
+.irn-value {
+  word-break: break-all;
+  font-size: 0.75em;
+}
+
+.irn-qr-container {
+  margin-top: 6px;
+}
+
+.irn-qr-container.is-empty {
+  display: none;
+}
+
+.irn-qr-image {
+  height: 80px;
+  width: 80px;
+  display: block;
+}
+
+.regional-qr-section {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.regional-qr-container {
+  display: inline-block;
+}
+
+.regional-qr-container.is-empty {
+  display: none;
+}
+
+.regional-qr-image {
+  height: 96px;
+  width: 96px;
+  display: block;
 }
 
 .invoice-letterhead img,

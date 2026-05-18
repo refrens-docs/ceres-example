@@ -103,10 +103,17 @@ const renderDocument = async () => {
         );
       }
 
-      const html = template(payload);
+      const mapper = (window as any).CeresTemplateDataMapper;
+      const mappedPayload =
+        typeof mapper === "function" ? mapper(payload) : payload;
+      const html = template(mappedPayload);
+
       if (outputDiv) {
         outputDiv.innerHTML = html;
         outputDiv.classList.remove("loading-message");
+        // DOM elements (data-ceres-field targets) now exist — safe to tell Lydia we're ready.
+        // Lydia will flush its queue (e.g. qrCode/irn updates) in response to ceres:ready.
+        lydiaBridge?.notifyReady();
       }
 
       const fontsReady =
@@ -145,4 +152,4 @@ const renderDocument = async () => {
 
 renderDocument();
 
-export { };
+export {};
