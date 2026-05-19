@@ -3,6 +3,8 @@ import {
   toCssColor,
   mergeInto,
   isPlainObject,
+  applyQrCodeUpdate,
+  applyIrnUpdate,
   extractTemplateStyleOptions,
 } from "../src/main/commonUtils";
 
@@ -33,6 +35,96 @@ describe("commonUtils", () => {
     it("returns null for invalid input", () => {
       expect(toCssColor(null)).toBeNull();
       expect(toCssColor("invalid")).toBe("invalid"); // It returns string if input is string
+    });
+  });
+
+  describe("applyQrCodeUpdate", () => {
+    let mockImg: { src: string; closest: jest.Mock; removeAttribute: jest.Mock };
+    let mockContainer: { classList: { remove: jest.Mock; add: jest.Mock } };
+
+    beforeEach(() => {
+      mockImg = { src: "", closest: jest.fn(), removeAttribute: jest.fn() };
+      mockContainer = { classList: { remove: jest.fn(), add: jest.fn() } };
+      (global as any).document = { querySelector: jest.fn() };
+    });
+
+    afterEach(() => {
+      delete (global as any).document;
+    });
+
+    it("no-ops when img element is not found", () => {
+      (global as any).document.querySelector.mockReturnValue(null);
+      expect(() => applyQrCodeUpdate("data:image/png;base64,abc")).not.toThrow();
+    });
+
+    it("sets src and removes is-empty when value is a non-empty string", () => {
+      mockImg.closest.mockReturnValue(mockContainer);
+      (global as any).document.querySelector.mockReturnValue(mockImg);
+      applyQrCodeUpdate("data:image/png;base64,abc");
+      expect(mockImg.src).toBe("data:image/png;base64,abc");
+      expect(mockContainer.classList.remove).toHaveBeenCalledWith("is-empty");
+    });
+
+    it("clears src and adds is-empty when value is an empty string", () => {
+      mockImg.closest.mockReturnValue(mockContainer);
+      (global as any).document.querySelector.mockReturnValue(mockImg);
+      applyQrCodeUpdate("");
+      expect(mockImg.removeAttribute).toHaveBeenCalledWith("src");
+      expect(mockContainer.classList.add).toHaveBeenCalledWith("is-empty");
+    });
+
+    it("clears src and adds is-empty when value is non-string", () => {
+      mockImg.closest.mockReturnValue(mockContainer);
+      (global as any).document.querySelector.mockReturnValue(mockImg);
+      applyQrCodeUpdate(null);
+      expect(mockImg.removeAttribute).toHaveBeenCalledWith("src");
+      expect(mockContainer.classList.add).toHaveBeenCalledWith("is-empty");
+    });
+
+    it("handles absent container without throwing when setting src", () => {
+      mockImg.closest.mockReturnValue(null);
+      (global as any).document.querySelector.mockReturnValue(mockImg);
+      applyQrCodeUpdate("data:image/png;base64,abc");
+      expect(mockImg.src).toBe("data:image/png;base64,abc");
+    });
+
+    it("handles absent container without throwing when clearing src", () => {
+      mockImg.closest.mockReturnValue(null);
+      (global as any).document.querySelector.mockReturnValue(mockImg);
+      applyQrCodeUpdate(null);
+      expect(mockImg.removeAttribute).toHaveBeenCalledWith("src");
+    });
+  });
+
+  describe("applyIrnUpdate", () => {
+    let mockEl: { textContent: string };
+
+    beforeEach(() => {
+      mockEl = { textContent: "" };
+      (global as any).document = { querySelector: jest.fn() };
+    });
+
+    afterEach(() => {
+      delete (global as any).document;
+    });
+
+    it("no-ops when IRN element is not found", () => {
+      (global as any).document.querySelector.mockReturnValue(null);
+      expect(() => applyIrnUpdate("IRN12345")).not.toThrow();
+    });
+
+    it("sets textContent when value is a string", () => {
+      (global as any).document.querySelector.mockReturnValue(mockEl);
+      applyIrnUpdate("IRN12345678901234567890");
+      expect(mockEl.textContent).toBe("IRN12345678901234567890");
+    });
+
+    it("sets textContent to empty string for non-string value", () => {
+      (global as any).document.querySelector.mockReturnValue(mockEl);
+      applyIrnUpdate(null);
+      expect(mockEl.textContent).toBe("");
+      applyIrnUpdate(42);
+      expect(mockEl.textContent).toBe("");
     });
   });
 
