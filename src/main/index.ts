@@ -43,7 +43,7 @@ const renderDocument = async () => {
     const encodedApiUrl = getQueryParam("apiUrl");
     if (!encodedApiUrl) {
       throw new Error(
-        "Missing required parameter: ?apiUrl=<base64-encoded-url>"
+        "Missing required parameter: ?apiUrl=<base64-encoded-url>",
       );
     }
 
@@ -57,13 +57,13 @@ const renderDocument = async () => {
     const { assets } = templateManifest;
     if (!assets || !assets.js) {
       throw new Error(
-        "Template manifest does not contain required 'assets.js' field"
+        "Template manifest does not contain required 'assets.js' field",
       );
     }
 
     const manifestBaseUrl = templateManifestUrl.substring(
       0,
-      templateManifestUrl.lastIndexOf("/")
+      templateManifestUrl.lastIndexOf("/"),
     );
     const jsUrl = `${manifestBaseUrl}/${assets.js}`;
     const cssUrl = assets.css ? `${manifestBaseUrl}/${assets.css}` : null;
@@ -99,7 +99,7 @@ const renderDocument = async () => {
 
       if (typeof template !== "function") {
         throw new Error(
-          "Template bundle did not export window.CeresTemplate. The template bundle may have failed to load or initialize properly."
+          "Template bundle did not export window.CeresTemplate. The template bundle may have failed to load or initialize properly.",
         );
       }
 
