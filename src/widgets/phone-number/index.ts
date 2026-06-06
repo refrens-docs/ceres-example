@@ -5,7 +5,7 @@ function formatPhoneNumberIntl(phone: string): string | undefined {
   const parsed = parsePhoneNumberFromString(normalized);
   const formatted = parsed?.formatInternational();
   // Wrap with LTR isolate characters to prevent RTL distortion (same as disco)
-  return formatted ? `⁦${formatted}⁩` : undefined;
+  return formatted ? `\u2066${formatted}\u2069` : undefined;
 }
 
 function getHB(): any {
@@ -17,8 +17,12 @@ function register() {
   if (!HB) return;
 
   HB.registerHelper("formatPhoneNumber", (phone: any) => {
-    if (!phone) return "";
-    return formatPhoneNumberIntl(String(phone)) ?? String(phone);
+    if (typeof phone !== "string" && typeof phone !== "number") {
+      return "";
+    }
+    const phoneStr = String(phone).trim();
+    if (!phoneStr) return "";
+    return formatPhoneNumberIntl(phoneStr) ?? phoneStr;
   });
 
   (window as any).CeresWidgets = (window as any).CeresWidgets || {};
@@ -31,4 +35,4 @@ try {
   /* noop */
 }
 
-export {};
+export default formatPhoneNumberIntl;
