@@ -21,6 +21,11 @@ if (hb) {
     "taxTableVisible",
     (view: any) => view === "TABLE" || view === "BOTH"
   );
+  // hsnSummaryVisible: True when hsnSummaryView is true in advance settings
+  hb.registerHelper(
+    "hsnSummaryVisible",
+    (view: any) => !!view
+  );
 }
 
 // Export template to global for main renderer to consume
