@@ -769,19 +769,6 @@ export const applyAdvanceOptionsUpdate = (value: unknown): void => {
       container.style.display = opts.showHsnSummary ? "" : "none";
     }
   }
-
-  if (opts.hsnView !== undefined) {
-    const data = (window as any).ceresInvoiceData;
-    if (!data) return;
-
-    reRenderPartial(
-      "[data-ceres-hsn-summary]",
-      "computeHsnSummary",
-      [data.items || []],
-      { isIgst: !!data.isIgst, isUtgst: !!data.isUtgst },
-      "HsnSummaryTable"
-    );
-  }
 };
 
 export const extractTemplateStyleOptions = (

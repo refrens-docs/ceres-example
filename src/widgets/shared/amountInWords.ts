@@ -67,9 +67,15 @@ function toWords(n: number): string {
 }
 
 export default function amountInWords(amount: number): string {
+  if (typeof amount !== "number" || !Number.isFinite(amount)) {
+    return "ZERO RUPEES ONLY";
+  }
+  if (amount < 0) {
+    return `MINUS ${amountInWords(Math.abs(amount))}`;
+  }
   const rupees = Math.floor(amount);
   const paise = Math.round((amount - rupees) * 100);
-  let words = `${toWords(rupees)} Rupees`;
-  if (paise > 0) words += ` And ${toWords(paise)} Paise`;
+  let words = `${toWords(rupees)} ${rupees === 1 ? "Rupee" : "Rupees"}`;
+  if (paise > 0) words += ` And ${toWords(paise)} ${paise === 1 ? "Paisa" : "Paise"}`;
   return `${words} Only`.toUpperCase();
 }
