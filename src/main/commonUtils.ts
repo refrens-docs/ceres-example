@@ -471,15 +471,17 @@ export const applyPreviewStyles = (options: PlainObject | null | undefined) => {
     const customText = toNonEmptyString(watermark.customText);
 
     if (logo) {
-      // Image watermark: set logo URL and clear any stale text attribute.
+      // Image watermark: set logo URL, raise z-index so image overlays content, clear stale text.
       root.style.setProperty("--watermark-logo", `url(${toAssetUrl(logo)})`);
+      root.style.setProperty("--watermark-z-index", "5");
       outputEl?.removeAttribute("data-watermark-text");
       document.body?.removeAttribute("data-watermark-text");
     } else if (customText) {
-      // Text watermark: clear logo var, set data attribute on both elements.
+      // Text watermark: clear logo var and z-index override; set data attribute on both elements.
       // outputEl (#documentOutput) drives the screen ::before pseudo-element.
       // document.body drives the print ::before pseudo-element (position:fixed).
       root.style.removeProperty("--watermark-logo");
+      root.style.removeProperty("--watermark-z-index");
       outputEl?.setAttribute("data-watermark-text", customText);
       document.body?.setAttribute("data-watermark-text", customText);
     }
@@ -707,12 +709,79 @@ export const applyDocumentQrUpdate = (value: unknown): void => {
  * @param value - IRN string, or null/undefined to clear
  */
 export const applyIrnUpdate = (value: unknown): void => {
-  const irnEl = document.querySelector<HTMLElement>(
-    '[data-ceres-field="irn"]'
-  );
+  const irnEl = document.querySelector<HTMLElement>('[data-ceres-field="irn"]');
   if (!irnEl) return;
 
   irnEl.textContent = typeof value === "string" ? value : "";
+};
+
+const reRenderPartial = (
+  containerSelector: string,
+  helperName: string,
+  helperArgs: unknown[],
+  helperHash: Record<string, unknown>,
+  partialName: string
+): void => {
+  const hb = (window as any).Handlebars;
+  if (!hb) return;
+
+  const container = document.querySelector<HTMLElement>(containerSelector);
+  if (!container) return;
+
+  const helper = hb.helpers[helperName];
+  const partial = hb.partials[partialName];
+  if (typeof helper !== "function" || typeof partial !== "function") return;
+
+  const context = helper(...helperArgs, { hash: helperHash });
+  container.innerHTML = partial(context);
+};
+
+export const applyAdvanceOptionsUpdate = (value: unknown): void => {
+  if (!isPlainObject(value)) return;
+
+  const opts = value as Record<string, unknown>;
+
+  if (typeof opts.showPaymentsTable === "boolean") {
+    const container = document.querySelector<HTMLElement>(
+      "[data-ceres-payment-table]"
+    );
+    if (container) {
+      container.style.display = opts.showPaymentsTable ? "" : "none";
+    }
+  }
+
+  if (typeof opts.taxSummaryView === "string") {
+    const show =
+      opts.taxSummaryView === "TABLE" || opts.taxSummaryView === "BOTH";
+    const container = document.querySelector<HTMLElement>(
+      "[data-ceres-tax-summary]"
+    );
+    if (container) {
+      container.style.display = show ? "" : "none";
+    }
+  }
+
+  if (typeof opts.showHsnSummary === "boolean") {
+    const container = document.querySelector<HTMLElement>(
+      "[data-ceres-hsn-summary]"
+    );
+    if (container) {
+      container.style.display = opts.showHsnSummary ? "" : "none";
+    }
+  }
+
+  if (opts.hsnView !== undefined) {
+    const data = (window as any).ceresInvoiceData;
+    if (!data) return;
+
+    reRenderPartial(
+      "[data-ceres-hsn-summary]",
+      "computeHsnSummary",
+      [data.items || []],
+      { isIgst: !!data.isIgst, isUtgst: !!data.isUtgst },
+      "HsnSummaryTable"
+    );
+  }
 };
 
 export const extractTemplateStyleOptions = (
