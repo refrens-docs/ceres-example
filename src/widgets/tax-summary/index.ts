@@ -4,6 +4,7 @@ import template from "./TaxSummaryTable.hbs";
 import "./styles.css";
 import { computeTaxSummary } from "./utils";
 import amountInWords from "../shared/amountInWords";
+import registerFormatCurrencyHelper from "../shared/registerFormatCurrencyHelper";
 
 function getHB(): any {
   return (window as any).Handlebars;
@@ -23,6 +24,8 @@ function register(): void {
   HB.registerHelper("amountInWords", function (amount: any) {
     return amountInWords(parseFloat(amount) || 0);
   });
+
+  registerFormatCurrencyHelper(HB);
 
   HB.registerPartial("TaxSummaryTable", template);
 

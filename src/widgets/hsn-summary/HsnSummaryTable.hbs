@@ -34,36 +34,36 @@
       {{#each hsnList}}
       <tr>
         <td>{{hsn}}</td>
-        <td>{{taxableValue}}</td>
+        <td>{{formatCurrency taxableValue}}</td>
         {{#if ../isIgst}}
         <td>{{igstRate}}%</td>
-        <td>{{igstAmount}}</td>
+        <td>{{formatCurrency igstAmount}}</td>
         {{else}}
         <td>{{cgstRate}}%</td>
-        <td>{{cgstAmount}}</td>
+        <td>{{formatCurrency cgstAmount}}</td>
         <td>{{sgstRate}}%</td>
-        <td>{{sgstAmount}}</td>
+        <td>{{formatCurrency sgstAmount}}</td>
         {{/if}}
-        {{#if ../hasCess}}<td>{{cessRate}}%</td><td>{{cessAmount}}</td>{{/if}}
-        <td>{{taxAmount}}</td>
+        {{#if ../hasCess}}<td>{{cessRate}}%</td><td>{{formatCurrency cessAmount}}</td>{{/if}}
+        <td>{{formatCurrency taxAmount}}</td>
       </tr>
       {{/each}}
     </tbody>
     <tfoot>
       <tr>
         <td><strong>Total</strong></td>
-        <td><strong>{{totalTaxableValue}}</strong></td>
+        <td><strong>{{formatCurrency totalTaxableValue}}</strong></td>
         {{#if isIgst}}
         <td></td>
-        <td><strong>{{totalIgstAmount}}</strong></td>
+        <td><strong>{{formatCurrency totalIgstAmount}}</strong></td>
         {{else}}
         <td></td>
-        <td><strong>{{totalCgstAmount}}</strong></td>
+        <td><strong>{{formatCurrency totalCgstAmount}}</strong></td>
         <td></td>
-        <td><strong>{{totalSgstAmount}}</strong></td>
+        <td><strong>{{formatCurrency totalSgstAmount}}</strong></td>
         {{/if}}
-        {{#if hasCess}}<td></td><td><strong>{{totalCessAmount}}</strong></td>{{/if}}
-        <td><strong>{{totalTaxAmount}}</strong></td>
+        {{#if hasCess}}<td></td><td><strong>{{formatCurrency totalCessAmount}}</strong></td>{{/if}}
+        <td><strong>{{formatCurrency totalTaxAmount}}</strong></td>
       </tr>
       <tr>
         <td colspan="99" class="ceres-table-words">Total Tax In Words: {{amountInWords totalTaxAmount}}</td>

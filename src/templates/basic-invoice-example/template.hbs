@@ -176,11 +176,11 @@
           {{/if}}
         </td>
         <td class="text-right">{{quantity}}</td>
-        <td class="text-right">{{rate}}</td>
+        <td class="text-right">{{formatCurrency rate}}</td>
         <td class="text-right">{{gstRate}}%</td>
-        <td class="text-right">{{amount}}</td>
-        <td class="text-right">{{igst}}</td>
-        <td class="text-right"><strong>{{total}}</strong></td>
+        <td class="text-right">{{formatCurrency amount}}</td>
+        <td class="text-right">{{formatCurrency igst}}</td>
+        <td class="text-right"><strong>{{formatCurrency total}}</strong></td>
       </tr>
       {{/each}}
     </tbody>
@@ -189,47 +189,47 @@
   <div class="totals-full-width-section">
     <div class="total-line">
       <span class="label">{{customLabels.subTotal}}:</span>
-      <span class="value">{{totals.subTotal}}</span>
+      <span class="value">{{formatCurrency totals.subTotal}}</span>
     </div>
     {{#if totals.discount}}
     <div class="total-line">
       <span class="label">Discount:</span>
-      <span class="value">- {{totals.discount}}</span>
+      <span class="value">- {{formatCurrency totals.discount}}</span>
     </div>
     {{/if}}
     {{#if totals.igst}}
     <div class="total-line">
       <span class="label">IGST:</span>
-      <span class="value">{{totals.igst}}</span>
+      <span class="value">{{formatCurrency totals.igst}}</span>
     </div>
     {{/if}}
     {{#if totals.cgst}}
     <div class="total-line">
       <span class="label">CGST:</span>
-      <span class="value">{{totals.cgst}}</span>
+      <span class="value">{{formatCurrency totals.cgst}}</span>
     </div>
     {{/if}}
     {{#if totals.sgst}}
     <div class="total-line">
       <span class="label">SGST:</span>
-      <span class="value">{{totals.sgst}}</span>
+      <span class="value">{{formatCurrency totals.sgst}}</span>
     </div>
     {{/if}}
     {{#if totals.amountRoundOff}}
     <div class="total-line">
       <span class="label">Amount Round Off:</span>
-      <span class="value">{{totals.amountRoundOff}}</span>
+      <span class="value">{{formatCurrency totals.amountRoundOff}}</span>
     </div>
     {{/if}}
     {{#if totals.totalRoundOff}}
     <div class="total-line">
       <span class="label">Total Round Off:</span>
-      <span class="value">{{totals.totalRoundOff}}</span>
+      <span class="value">{{formatCurrency totals.totalRoundOff}}</span>
     </div>
     {{/if}}
     <div class="total-line grand">
       <span class="label">{{customLabels.total}}:</span>
-      <span class="value">{{totals.total}}</span>
+      <span class="value">{{formatCurrency totals.total}}</span>
     </div>
     {{#if latePaymentFee}}
     {{#if dueDate}}

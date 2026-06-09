@@ -10,6 +10,7 @@ import "../../widgets/refrens-branding";
 import "../../widgets/tax-summary";
 import "../../widgets/hsn-summary";
 import "../../widgets/payment-table";
+import "../../widgets/currency-format";
 
 // Template-level Handlebars utility helpers
 const hb = (window as any).Handlebars;
@@ -22,10 +23,7 @@ if (hb) {
     (view: any) => view === "TABLE" || view === "BOTH"
   );
   // hsnSummaryVisible: True when hsnSummaryView is true in advance settings
-  hb.registerHelper(
-    "hsnSummaryVisible",
-    (view: any) => !!view
-  );
+  hb.registerHelper("hsnSummaryVisible", (view: any) => !!view);
 }
 
 // Export template to global for main renderer to consume

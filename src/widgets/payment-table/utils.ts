@@ -1,3 +1,5 @@
+import formatCurrency from "../shared/formatCurrency";
+
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   ACCOUNT_TRANSFER: "Account Transfer",
   UPI: "UPI",
@@ -51,7 +53,7 @@ export type PaymentTableResult = {
 
 export function computePaymentColumns(
   payments: Payment[],
-  options: { businessCurrency?: string; currency?: string } = {},
+  options: { businessCurrency?: string; currency?: string } = {}
 ): PaymentTableResult {
   const { currency: invCurrency = "" } = options;
 
@@ -59,11 +61,11 @@ export function computePaymentColumns(
   let bizCurrency = options.businessCurrency || "";
   if (!bizCurrency && Array.isArray(payments)) {
     const firstPaymentWithRate = payments.find(
-      (p) => p.conversionRates && Object.keys(p.conversionRates).length > 0,
+      (p) => p.conversionRates && Object.keys(p.conversionRates).length > 0
     );
     if (firstPaymentWithRate) {
       bizCurrency = Object.keys(
-        firstPaymentWithRate.conversionRates!,
+        firstPaymentWithRate.conversionRates!
       )[0] as string;
     }
   }
@@ -121,18 +123,7 @@ export function computePaymentColumns(
         amountInBizCurrency,
         amountInBizCurrencyFormatted:
           isForexInvoice && amountInBizCurrency > 0
-            ? (() => {
-                try {
-                  return new Intl.NumberFormat("en-US", {
-                    style: "currency",
-                    currency: bizCurrency,
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  }).format(amountInBizCurrency);
-                } catch (_) {
-                  return bizCurrency + " " + amountInBizCurrency.toFixed(2);
-                }
-              })()
+            ? formatCurrency(amountInBizCurrency, bizCurrency, "en-US", 2)
             : "",
       };
     });
