@@ -715,60 +715,43 @@ export const applyIrnUpdate = (value: unknown): void => {
   irnEl.textContent = typeof value === "string" ? value : "";
 };
 
-const reRenderPartial = (
-  containerSelector: string,
-  helperName: string,
-  helperArgs: unknown[],
-  helperHash: Record<string, unknown>,
-  partialName: string
-): void => {
-  const hb = (window as any).Handlebars;
-  if (!hb) return;
+const applyShowPaymentsTableUpdate = (value: unknown): void => {
+  if (typeof value !== "boolean") return;
+  const container = document.querySelector<HTMLElement>(
+    "[data-ceres-payment-table]"
+  );
+  if (container) {
+    container.style.display = value ? "" : "none";
+  }
+};
 
-  const container = document.querySelector<HTMLElement>(containerSelector);
-  if (!container) return;
+const applyTaxSummaryViewUpdate = (value: unknown): void => {
+  if (typeof value !== "string") return;
+  const show = value === "TABLE" || value === "BOTH";
+  const container = document.querySelector<HTMLElement>(
+    "[data-ceres-tax-summary]"
+  );
+  if (container) {
+    container.style.display = show ? "" : "none";
+  }
+};
 
-  const helper = hb.helpers[helperName];
-  const partial = hb.partials[partialName];
-  if (typeof helper !== "function" || typeof partial !== "function") return;
-
-  const context = helper(...helperArgs, { hash: helperHash });
-  container.innerHTML = partial(context);
+const applyShowHsnSummaryUpdate = (value: unknown): void => {
+  if (typeof value !== "boolean") return;
+  const container = document.querySelector<HTMLElement>(
+    "[data-ceres-hsn-summary]"
+  );
+  if (container) {
+    container.style.display = value ? "" : "none";
+  }
 };
 
 export const applyAdvanceOptionsUpdate = (value: unknown): void => {
   if (!isPlainObject(value)) return;
-
   const opts = value as Record<string, unknown>;
-
-  if (typeof opts.showPaymentsTable === "boolean") {
-    const container = document.querySelector<HTMLElement>(
-      "[data-ceres-payment-table]"
-    );
-    if (container) {
-      container.style.display = opts.showPaymentsTable ? "" : "none";
-    }
-  }
-
-  if (typeof opts.taxSummaryView === "string") {
-    const show =
-      opts.taxSummaryView === "TABLE" || opts.taxSummaryView === "BOTH";
-    const container = document.querySelector<HTMLElement>(
-      "[data-ceres-tax-summary]"
-    );
-    if (container) {
-      container.style.display = show ? "" : "none";
-    }
-  }
-
-  if (typeof opts.showHsnSummary === "boolean") {
-    const container = document.querySelector<HTMLElement>(
-      "[data-ceres-hsn-summary]"
-    );
-    if (container) {
-      container.style.display = opts.showHsnSummary ? "" : "none";
-    }
-  }
+  applyShowPaymentsTableUpdate(opts.showPaymentsTable);
+  applyTaxSummaryViewUpdate(opts.taxSummaryView);
+  applyShowHsnSummaryUpdate(opts.showHsnSummary);
 };
 
 export const extractTemplateStyleOptions = (
