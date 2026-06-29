@@ -606,7 +606,7 @@ export function initLydiaBridge(
   registerInvoiceFieldHandler("lhdnQrCode", applyLhdnQrCodeUpdate);
   registerInvoiceFieldHandler("documentQr", applyDocumentQrUpdate);
   registerInvoiceFieldHandler("advanceOptions", (value: unknown) => {
-    applyAdvanceOptionsUpdate(value);
+    applyAdvanceOptionsUpdate(value as unknown);
     reportContentHeight("advance-options-update");
   });
 

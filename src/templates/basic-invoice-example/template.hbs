@@ -260,7 +260,7 @@
   {{> TaxSummaryTable (computeTaxSummary items isIgst=isIgst isUtgst=isUtgst) }}
   </div>
 
-  <div data-ceres-hsn-summary {{#unless (hsnSummaryVisible advanceOptions.hsnSummaryView)}} style="display:none"{{/unless}}>
+  <div data-ceres-hsn-summary{{#unless advanceOptions.showHSNSummaryInInvoice}} style="display:none"{{/unless}}>
   {{> HsnSummaryTable (computeHsnSummary items isIgst=isIgst isUtgst=isUtgst) }}
   </div>
 
