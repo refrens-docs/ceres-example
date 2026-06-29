@@ -20,6 +20,7 @@
  */
 
 import {
+  applyAdvanceOptionsUpdate,
   applyPreviewAssets,
   applyPreviewStyles,
   applyQrCodeUpdate,
@@ -55,7 +56,10 @@ export interface LydiaBridgeOptions {
 export interface LydiaBridgeHandle {
   reportContentHeight: (reason?: string) => void;
   triggerPrint: (reason?: string) => void;
-  registerInvoiceFieldHandler: (field: string, handler: (value: unknown) => void) => void;
+  registerInvoiceFieldHandler: (
+    field: string,
+    handler: (value: unknown) => void
+  ) => void;
   notifyReady: () => void;
   destroy: () => void;
 }
@@ -201,7 +205,7 @@ export function initLydiaBridge(
       force ||
       lastReportedHeight == null ||
       Math.abs(nextReportedHeight - lastReportedHeight) >
-      HEIGHT_CHANGE_THRESHOLD;
+        HEIGHT_CHANGE_THRESHOLD;
 
     if (!shouldPost) {
       return;
@@ -389,7 +393,12 @@ export function initLydiaBridge(
 
   const isInvoiceUpdateMessage = (
     data: unknown
-  ): data is { source: "lydia"; type: "lydia:invoice-update"; fields: Record<string, unknown>; reason?: string } => {
+  ): data is {
+    source: "lydia";
+    type: "lydia:invoice-update";
+    fields: Record<string, unknown>;
+    reason?: string;
+  } => {
     if (!isPlainObject(data)) return false;
     return (
       data.source === "lydia" &&
@@ -596,6 +605,10 @@ export function initLydiaBridge(
   registerInvoiceFieldHandler("zatcaQrCode", applyZatcaQrCodeUpdate);
   registerInvoiceFieldHandler("lhdnQrCode", applyLhdnQrCodeUpdate);
   registerInvoiceFieldHandler("documentQr", applyDocumentQrUpdate);
+  registerInvoiceFieldHandler("advanceOptions", (value: unknown) => {
+    applyAdvanceOptionsUpdate(value as unknown);
+    reportContentHeight("advance-options-update");
+  });
 
   // Called by the renderer after the template HTML is injected into the DOM.
   // Sending ceres:ready at that point ensures Lydia's queued invoice-update messages

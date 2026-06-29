@@ -471,15 +471,17 @@ export const applyPreviewStyles = (options: PlainObject | null | undefined) => {
     const customText = toNonEmptyString(watermark.customText);
 
     if (logo) {
-      // Image watermark: set logo URL and clear any stale text attribute.
+      // Image watermark: set logo URL, raise z-index so image overlays content, clear stale text.
       root.style.setProperty("--watermark-logo", `url(${toAssetUrl(logo)})`);
+      root.style.setProperty("--watermark-z-index", "5");
       outputEl?.removeAttribute("data-watermark-text");
       document.body?.removeAttribute("data-watermark-text");
     } else if (customText) {
-      // Text watermark: clear logo var, set data attribute on both elements.
+      // Text watermark: clear logo var and z-index override; set data attribute on both elements.
       // outputEl (#documentOutput) drives the screen ::before pseudo-element.
       // document.body drives the print ::before pseudo-element (position:fixed).
       root.style.removeProperty("--watermark-logo");
+      root.style.removeProperty("--watermark-z-index");
       outputEl?.setAttribute("data-watermark-text", customText);
       document.body?.setAttribute("data-watermark-text", customText);
     }
@@ -707,12 +709,49 @@ export const applyDocumentQrUpdate = (value: unknown): void => {
  * @param value - IRN string, or null/undefined to clear
  */
 export const applyIrnUpdate = (value: unknown): void => {
-  const irnEl = document.querySelector<HTMLElement>(
-    '[data-ceres-field="irn"]'
-  );
+  const irnEl = document.querySelector<HTMLElement>('[data-ceres-field="irn"]');
   if (!irnEl) return;
 
   irnEl.textContent = typeof value === "string" ? value : "";
+};
+
+const applyShowPaymentsTableUpdate = (value: unknown): void => {
+  if (typeof value !== "boolean") return;
+  const container = document.querySelector<HTMLElement>(
+    "[data-ceres-payment-table]"
+  );
+  if (container) {
+    container.style.display = value ? "" : "none";
+  }
+};
+
+const applyTaxSummaryViewUpdate = (value: unknown): void => {
+  if (typeof value !== "string") return;
+  const show = value === "TABLE" || value === "BOTH";
+  const container = document.querySelector<HTMLElement>(
+    "[data-ceres-tax-summary]"
+  );
+  if (container) {
+    container.style.display = show ? "" : "none";
+  }
+};
+
+const applyShowHsnSummaryUpdate = (value: unknown): void => {
+  if (typeof value !== "boolean") return;
+  const container = document.querySelector<HTMLElement>(
+    "[data-ceres-hsn-summary]"
+  );
+  if (container) {
+    container.style.display = value ? "" : "none";
+  }
+};
+
+export const applyAdvanceOptionsUpdate = (value: unknown): void => {
+  if (!isPlainObject(value)) return;
+  const opts = value as Record<string, unknown>;
+  applyShowPaymentsTableUpdate(opts.showPaymentsTable);
+  applyTaxSummaryViewUpdate(opts.taxSummaryView);
+  applyShowHsnSummaryUpdate(opts.showHsnSummary);
 };
 
 export const extractTemplateStyleOptions = (
