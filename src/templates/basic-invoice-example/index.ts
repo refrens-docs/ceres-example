@@ -8,6 +8,21 @@ import "../../widgets/markdown-viewer";
 import "../../widgets/watermark";
 import "../../widgets/refrens-branding";
 import "../../widgets/phone-number";
+import "../../widgets/tax-summary";
+import "../../widgets/hsn-summary";
+import "../../widgets/payment-table";
+
+// Template-level Handlebars utility helpers
+const hb = (window as any).Handlebars;
+if (hb) {
+  // eq: strict equality — lets templates check boolean false or specific strings
+  hb.registerHelper("eq", (a: any, b: any) => a === b);
+  // taxTableVisible: true when taxSummaryView is TABLE or BOTH
+  hb.registerHelper(
+    "taxTableVisible",
+    (view: any) => view === "TABLE" || view === "BOTH"
+  );
+}
 
 // Export template to global for main renderer to consume
 window.CeresTemplate = template;

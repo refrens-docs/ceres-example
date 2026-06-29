@@ -262,31 +262,20 @@
     </div>
   </div>
 
-  {{#if allPayments.length}}
-  <div class="payments-section">
-    <h3>Payments</h3>
-    <table class="item-table-modern">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Mode</th>
-          <th class="text-right">Amount</th>
-          <th class="text-right">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{#each allPayments}}
-        <tr>
-          <td>{{formateShortDateWithOffset paymentDate ../ownerOffset}}</td>
-          <td>{{paymentMethod}}</td>
-          <td class="text-right">{{amount}}</td>
-          <td class="text-right">{{status}}</td>
-        </tr>
-        {{/each}}
-      </tbody>
-    </table>
+  <div data-ceres-tax-summary{{#unless (taxTableVisible advanceOptions.taxSummaryView)}} style="display:none"{{/unless}}>
+  {{> TaxSummaryTable (computeTaxSummary items isIgst=isIgst isUtgst=isUtgst) }}
   </div>
-  {{/if}}
+
+  <div data-ceres-hsn-summary{{#unless advanceOptions.showHSNSummaryInInvoice}} style="display:none"{{/unless}}>
+  {{> HsnSummaryTable (computeHsnSummary items isIgst=isIgst isUtgst=isUtgst) }}
+  </div>
+
+  <div data-ceres-payment-table{{#if (eq advanceOptions.showPaymentsTable false)}} style="display:none"{{/if}}>
+  {{> PaymentTable (computePaymentColumns allPayments businessCurrency=businessCurrency currency=currency)
+      ownerOffset=ownerOffset
+      heading="Payments"
+  }}
+  </div>
 
   <div class="notes-terms-modern-section">
     {{#if notes}}
