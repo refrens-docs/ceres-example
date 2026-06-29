@@ -106,12 +106,12 @@ const renderDocument = async () => {
       const mapper = (window as any).CeresTemplateDataMapper;
       const mappedPayload =
         typeof mapper === "function" ? mapper(payload) : payload;
+      // Store before rendering so formatCurrency helper can read currency/locale from it
+      (window as any).ceresInvoiceData = mappedPayload;
       const html = template(mappedPayload);
 
       if (outputDiv) {
         outputDiv.innerHTML = html;
-        // Store for dynamic partial re-renders triggered by lydia:invoice-update messages.
-        (window as any).ceresInvoiceData = mappedPayload;
         outputDiv.classList.remove("loading-message");
         // DOM elements (data-ceres-field targets) now exist — safe to tell Lydia we're ready.
         // Lydia will flush its queue (e.g. qrCode/irn updates) in response to ceres:ready.

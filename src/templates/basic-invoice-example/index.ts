@@ -11,6 +11,7 @@ import "../../widgets/phone-number";
 import "../../widgets/tax-summary";
 import "../../widgets/hsn-summary";
 import "../../widgets/payment-table";
+import "../../widgets/currency-format";
 
 // Template-level Handlebars utility helpers
 const hb = (window as any).Handlebars;

@@ -18,11 +18,11 @@
         <td>{{formateShortDateWithOffset paymentDate ../ownerOffset}}</td>
         <td>{{paymentMethodLabel}}</td>
         <td>
-          {{amount}}{{#if ../showBizAmount}}{{#if amountInBizCurrencyFormatted}}<br/><small>({{amountInBizCurrencyFormatted}})</small>{{/if}}{{/if}}
+          {{formatCurrency amount}}{{#if ../showBizAmount}}{{#if amountInBizCurrencyFormatted}}<br/><small>({{amountInBizCurrencyFormatted}})</small>{{/if}}{{/if}}
         </td>
         <td>{{paymentAccountName}}</td>
-        {{#if ../showTds}}<td>{{tds}}</td>{{/if}}
-        {{#if ../showTransactionCharge}}<td>{{transactionCharge}}</td>{{/if}}
+        {{#if ../showTds}}<td>{{formatCurrency tds}}</td>{{/if}}
+        {{#if ../showTransactionCharge}}<td>{{formatCurrency transactionCharge}}</td>{{/if}}
       </tr>
       {{/each}}
     </tbody>
@@ -30,10 +30,10 @@
       <tr>
         <td><strong>Total</strong></td>
         <td></td>
-        <td><strong>{{totalAmount}}</strong></td>
+        <td><strong>{{formatCurrency totalAmount}}</strong></td>
         <td></td>
-        {{#if showTds}}<td><strong>{{totalTds}}</strong></td>{{/if}}
-        {{#if showTransactionCharge}}<td><strong>{{totalTransactionCharge}}</strong></td>{{/if}}
+        {{#if showTds}}<td><strong>{{formatCurrency totalTds}}</strong></td>{{/if}}
+        {{#if showTransactionCharge}}<td><strong>{{formatCurrency totalTransactionCharge}}</strong></td>{{/if}}
       </tr>
     </tfoot>
   </table>

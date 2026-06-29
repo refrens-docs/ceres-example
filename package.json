@@ -23,7 +23,7 @@
     "lint:fix": "run-s lint:js:fix lint:css:fix",
     "test:coverage": "jest --coverage --silent --verbose --collectCoverageFrom='src/**/*.{ts,js}'",
     "test:coverage:view": "npx http-server -c-1 -o coverage/lcov-report",
-    "test:staged": "cross-env JEST_CI_RUN=1 jest --bail --ci --silent --coverage --passWithNoTests --forceExit --findRelatedTests",
+    "test:staged": "cross-env JEST_CI_RUN=1 jest --bail --ci --silent --passWithNoTests --forceExit --findRelatedTests",
     "commit": "git-cz"
   },
   "browserslist": [
