@@ -7,6 +7,7 @@ import "../../widgets/date-time";
 import "../../widgets/markdown-viewer";
 import "../../widgets/watermark";
 import "../../widgets/refrens-branding";
+import "../../widgets/phone-number";
 import "../../widgets/tax-summary";
 import "../../widgets/hsn-summary";
 import "../../widgets/payment-table";

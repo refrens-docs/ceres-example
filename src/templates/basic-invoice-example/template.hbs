@@ -99,6 +99,9 @@
         {{billedBy.vatNumber}}
       </p>
       {{/if}}
+      {{#if billedBy.phone}}
+        <p>Phone: {{formatPhoneNumber billedBy.phone}}</p>
+      {{/if}}
     </div>
 
     <div class="info-section billed-to">
@@ -110,6 +113,9 @@
       </p>
       {{#if billedTo.gstin}}
       <p>GSTIN: {{billedTo.gstin}}</p>
+      {{/if}}
+      {{#if billedTo.phone}}
+        <p>Phone: {{formatPhoneNumber billedTo.phone}}</p>
       {{/if}}
     </div>
 
@@ -307,7 +313,7 @@
     <p>&copy; 2025 {{billedBy.name}}. All rights reserved.</p>
   </div>
 
-  {{> RefrensBranding}}
+    {{> RefrensBranding}}
 
   </div>
 
