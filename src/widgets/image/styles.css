@@ -24,8 +24,8 @@
 
 /* Thumbnails — small fixed squares, cropped to fit (mirrors Lydia line-item thumbnails). */
 .ceres-image-gallery-thumbnail .ceres-image {
-  width: 200px;
-  height: 200px;
+  width: 65px;
+  height: 65px;
   object-fit: cover;
   border-radius: 4px;
   border: 1px solid #e5e7eb;
