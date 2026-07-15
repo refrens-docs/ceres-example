@@ -46,9 +46,11 @@ export interface ImageGalleryPayload {
  * @param input
  */
 export function toImageSrc(input: ImageInput): string | null {
+  const isSafe = (url: string) => !/^(?:javascript|vbscript|file):/i.test(url);
+
   if (typeof input === "string") {
     const trimmed = input.trim();
-    return trimmed.length > 0 ? trimmed : null;
+    return trimmed.length > 0 && isSafe(trimmed) ? trimmed : null;
   }
 
   if (input && typeof input === "object") {
@@ -62,7 +64,7 @@ export function toImageSrc(input: ImageInput): string | null {
 
     if (candidate) {
       const trimmed = candidate.trim();
-      return trimmed.length > 0 ? trimmed : null;
+      return trimmed.length > 0 && isSafe(trimmed) ? trimmed : null;
     }
   }
 

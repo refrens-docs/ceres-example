@@ -28,6 +28,13 @@ describe("toImageSrc", () => {
     expect(toImageSrc("   ")).toBeNull();
   });
 
+  it("returns null for unsafe protocols", () => {
+    // eslint-disable-next-line no-script-url -- intentional unsafe-URL fixture, never executed
+    expect(toImageSrc("javascript:alert(1)")).toBeNull();
+    expect(toImageSrc("vbscript:msgbox")).toBeNull();
+    expect(toImageSrc("file:///etc/passwd")).toBeNull();
+  });
+
   it("returns null for null / undefined / empty object", () => {
     expect(toImageSrc(null)).toBeNull();
     expect(toImageSrc(undefined)).toBeNull();
