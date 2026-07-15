@@ -98,15 +98,19 @@ export function normalizeImages(
  * @param images
  * @param options
  */
+/** Allowed values for `variant` — anything else falls back to "default" rather than being interpolated as-is into a CSS class name. */
+const ALLOWED_GALLERY_VARIANTS = ["thumbnail", "original", "default"];
+
 export function prepareImageGallery(
   images: unknown,
   options: GalleryOptions & { variant?: string } = {}
 ): ImageGalleryPayload {
   const normalized = normalizeImages(images, options);
-  const variant =
-    typeof options.variant === "string" && options.variant.trim().length > 0
-      ? options.variant.trim()
-      : "default";
+  const requestedVariant =
+    typeof options.variant === "string" ? options.variant.trim() : "";
+  const variant = ALLOWED_GALLERY_VARIANTS.includes(requestedVariant)
+    ? requestedVariant
+    : "default";
 
   return {
     hasImages: normalized.length > 0,

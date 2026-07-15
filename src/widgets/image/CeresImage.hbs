@@ -12,9 +12,9 @@
 {{#if src}}
 {{#if href}}
 <a class="ceres-image-link" href="{{href}}" target="_blank" rel="noopener noreferrer" aria-label="{{#if alt}}{{alt}}{{else}}Open image{{/if}}">
-  <img class="ceres-image{{#if class}} {{class}}{{/if}}" src="{{src}}" alt="{{alt}}" loading="lazy"{{#if width}} width="{{width}}"{{/if}}{{#if height}} height="{{height}}"{{/if}} />
+  <img referrerpolicy="no-referrer" class="ceres-image{{#if class}} {{class}}{{/if}}" src="{{src}}" alt="{{alt}}" {{#if width}} width="{{width}}"{{/if}}{{#if height}} height="{{height}}"{{/if}} />
 </a>
 {{else}}
-<img class="ceres-image{{#if class}} {{class}}{{/if}}" src="{{src}}" alt="{{alt}}" loading="lazy"{{#if width}} width="{{width}}"{{/if}}{{#if height}} height="{{height}}"{{/if}} />
+<img referrerpolicy="no-referrer" class="ceres-image{{#if class}} {{class}}{{/if}}" src="{{src}}" alt="{{alt}}" {{#if width}} width="{{width}}"{{/if}}{{#if height}} height="{{height}}"{{/if}} />
 {{/if}}
 {{/if}}

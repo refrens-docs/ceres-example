@@ -37,11 +37,13 @@ function register(): void {
     "prepareImageGallery",
     function (images: unknown, options: any) {
       const hash = options?.hash || {};
+      // link defaults to true; pass link=false (bare boolean) to render plain
+      // (non-linked) images. A quoted "false" string is also accepted.
+      const linkDisabled = hash.link === false || hash.link === "false";
       return prepareImageGallery(images, {
         variant: hash.variant,
         alt: hash.alt,
-        // link defaults to true; pass link=false to render plain (non-linked) images
-        link: hash.link !== false,
+        link: !linkDisabled,
       });
     }
   );
@@ -55,8 +57,8 @@ function register(): void {
 
 try {
   register();
-} catch (_) {
-  /* noop */
+} catch (error) {
+  console.error("Image widget registration failed:", error);
 }
 
 export {};
