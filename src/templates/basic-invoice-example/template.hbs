@@ -180,6 +180,12 @@
               {{> MarkdownViewer (prepareMarkdownViewerData description) }}
             </div>
           {{/if}}
+          {{#if images}}
+            {{> CeresImageGallery (prepareImageGallery images variant="thumbnail" alt=name) }}
+          {{/if}}
+          {{#if originalImages}}
+            {{> CeresImageGallery (prepareImageGallery originalImages variant="original" alt=name) }}
+          {{/if}}
         </td>
         <td class="text-right">{{quantity}}</td>
         <td class="text-right">{{formatCurrency rate}}</td>

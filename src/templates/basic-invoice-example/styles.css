@@ -242,6 +242,7 @@ body {
 .item-table-modern tbody td {
   border-bottom: 1px solid #eef2f5;
   background-color: var(--secondary-background);
+  vertical-align: top;
 }
 
 .item-table-modern tbody tr:last-child td {
