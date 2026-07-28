@@ -1,5 +1,6 @@
 import initDibellaBridge from "./dibellaBridge";
 import { initLydiaBridge } from "./lydiaBridge";
+import { initDevBridge } from "./ceresDevBridge";
 import {
   applyPreviewStyles,
   decodeBase64,
@@ -15,11 +16,27 @@ const OUTPUT_ELEMENT_ID = "documentOutput";
 const LYDIA_MODE_PARAM = "isLydiaMode";
 const DIBELLA_MODE_PARAM = "isDibellaMode";
 const DEBUG_STYLES_PARAM = "debugStyles";
+const DEBUG_MAPPING_PARAM = "debugMapping";
 
 const isLydiaMode = Boolean(getQueryParam(LYDIA_MODE_PARAM));
 const isDibellaMode = Boolean(getQueryParam(DIBELLA_MODE_PARAM));
+const isDevMode = Boolean(getQueryParam("devMode"));
 
 const shouldDebugStyles = getQueryParam(DEBUG_STYLES_PARAM) !== null;
+const shouldDebugMapping = getQueryParam(DEBUG_MAPPING_PARAM) !== null;
+
+const getTopLevelKeys = (value: unknown): string[] => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+
+  return Object.keys(value as Record<string, unknown>).sort();
+};
+
+let shouldRender = true;
+if (isDevMode) {
+  shouldRender = !initDevBridge();
+}
 
 if (isDibellaMode && !isLydiaMode && typeof document !== "undefined") {
   document.body?.classList.add("isDibella");
@@ -43,7 +60,7 @@ const renderDocument = async () => {
     const encodedApiUrl = getQueryParam("apiUrl");
     if (!encodedApiUrl) {
       throw new Error(
-        "Missing required parameter: ?apiUrl=<base64-encoded-url>"
+        "Missing required parameter: ?apiUrl=<base64-encoded-url>",
       );
     }
 
@@ -57,13 +74,13 @@ const renderDocument = async () => {
     const { assets } = templateManifest;
     if (!assets || !assets.js) {
       throw new Error(
-        "Template manifest does not contain required 'assets.js' field"
+        "Template manifest does not contain required 'assets.js' field",
       );
     }
 
     const manifestBaseUrl = templateManifestUrl.substring(
       0,
-      templateManifestUrl.lastIndexOf("/")
+      templateManifestUrl.lastIndexOf("/"),
     );
     const jsUrl = `${manifestBaseUrl}/${assets.js}`;
     const cssUrl = assets.css ? `${manifestBaseUrl}/${assets.css}` : null;
@@ -99,13 +116,22 @@ const renderDocument = async () => {
 
       if (typeof template !== "function") {
         throw new Error(
-          "Template bundle did not export window.CeresTemplate. The template bundle may have failed to load or initialize properly."
+          "Template bundle did not export window.CeresTemplate. The template bundle may have failed to load or initialize properly.",
         );
       }
 
       const mapper = (window as any).CeresTemplateDataMapper;
       const mappedPayload =
         typeof mapper === "function" ? mapper(payload) : payload;
+
+      if (shouldDebugMapping) {
+        console.debug("[CeresMapping]", {
+          hasMapper: typeof mapper === "function",
+          sourceTopLevelKeys: getTopLevelKeys(payload),
+          mappedTopLevelKeys: getTopLevelKeys(mappedPayload),
+        });
+      }
+
       // Store before rendering so formatCurrency helper can read currency/locale from it
       (window as any).ceresInvoiceData = mappedPayload;
       const html = template(mappedPayload);
