@@ -1,6 +1,5 @@
 import initDibellaBridge from "./dibellaBridge";
 import { initLydiaBridge } from "./lydiaBridge";
-import { initDevBridge } from "./ceresDevBridge";
 import {
   applyPreviewStyles,
   decodeBase64,
@@ -16,27 +15,11 @@ const OUTPUT_ELEMENT_ID = "documentOutput";
 const LYDIA_MODE_PARAM = "isLydiaMode";
 const DIBELLA_MODE_PARAM = "isDibellaMode";
 const DEBUG_STYLES_PARAM = "debugStyles";
-const DEBUG_MAPPING_PARAM = "debugMapping";
 
 const isLydiaMode = Boolean(getQueryParam(LYDIA_MODE_PARAM));
 const isDibellaMode = Boolean(getQueryParam(DIBELLA_MODE_PARAM));
-const isDevMode = Boolean(getQueryParam("devMode"));
 
 const shouldDebugStyles = getQueryParam(DEBUG_STYLES_PARAM) !== null;
-const shouldDebugMapping = getQueryParam(DEBUG_MAPPING_PARAM) !== null;
-
-const getTopLevelKeys = (value: unknown): string[] => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return [];
-  }
-
-  return Object.keys(value as Record<string, unknown>).sort();
-};
-
-let shouldRender = true;
-if (isDevMode) {
-  shouldRender = !initDevBridge();
-}
 
 if (isDibellaMode && !isLydiaMode && typeof document !== "undefined") {
   document.body?.classList.add("isDibella");
@@ -113,7 +96,6 @@ const renderDocument = async () => {
       }
 
       const template = (window as any).CeresTemplate;
-      const mapper = (window as any).CeresTemplateDataMapper;
 
       if (typeof template !== "function") {
         throw new Error(
@@ -121,21 +103,19 @@ const renderDocument = async () => {
         );
       }
 
+      const mapper = (window as any).CeresTemplateDataMapper;
       const mappedPayload =
         typeof mapper === "function" ? mapper(payload) : payload;
-
-      if (shouldDebugMapping) {
-        console.debug("[CeresMapping]", {
-          hasMapper: typeof mapper === "function",
-          sourceTopLevelKeys: getTopLevelKeys(payload),
-          mappedTopLevelKeys: getTopLevelKeys(mappedPayload),
-        });
-      }
-
+      // Store before rendering so formatCurrency helper can read currency/locale from it
+      (window as any).ceresInvoiceData = mappedPayload;
       const html = template(mappedPayload);
+
       if (outputDiv) {
         outputDiv.innerHTML = html;
         outputDiv.classList.remove("loading-message");
+        // DOM elements (data-ceres-field targets) now exist — safe to tell Lydia we're ready.
+        // Lydia will flush its queue (e.g. qrCode/irn updates) in response to ceres:ready.
+        lydiaBridge?.notifyReady();
       }
 
       const fontsReady =
@@ -172,8 +152,6 @@ const renderDocument = async () => {
   }
 };
 
-if (shouldRender) {
-  renderDocument();
-}
+renderDocument();
 
-export { };
+export {};
