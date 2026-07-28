@@ -5,3 +5,5 @@
 const Handlebars = require("handlebars/dist/handlebars.runtime");
 
 (window as any).Handlebars = Handlebars.default || Handlebars;
+
+export {};

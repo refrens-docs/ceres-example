@@ -362,8 +362,7 @@ let systemEntries = {};
 if (ONLY_TEMPLATES || ONLY_TEMPLATE) systemEntries = {};
 else if (ONLY_MAIN)
   systemEntries = { "main-renderer/renderer": "./src/main/index.ts" };
-else if (ONLY_WIDGETS || ONLY_VENDOR)
-  systemEntries = {};
+else if (ONLY_WIDGETS || ONLY_VENDOR) systemEntries = {};
 else
   systemEntries = {
     "main-renderer/renderer": "./src/main/index.ts",
@@ -420,6 +419,34 @@ class AssetManifestPlugin {
             return null;
           };
 
+          // Helper to copy samples.json if exists
+          const copySamples = (templateName) => {
+            const srcPath = path.join(
+              __dirname,
+              "src",
+              "templates",
+              templateName,
+              "samples.json",
+            );
+            if (fs.existsSync(srcPath)) {
+              try {
+                const samplesContent = fs.readFileSync(srcPath);
+                const samplesAssetPath = `templates/${templateName}/samples.json`;
+                compilation.emitAsset(
+                  samplesAssetPath,
+                  new RawSource(samplesContent),
+                );
+                return true;
+              } catch (e) {
+                console.warn(
+                  `Failed to copy samples for ${templateName}:`,
+                  e.message,
+                );
+              }
+            }
+            return false;
+          };
+
           // Helper to copy thumbnail if exists
           const copyThumbnail = (templateName, version) => {
             const srcPath = path.join(
@@ -427,7 +454,7 @@ class AssetManifestPlugin {
               "src",
               "templates",
               templateName,
-              "thumbnail.png"
+              "thumbnail.png",
             );
             if (fs.existsSync(srcPath)) {
               try {
@@ -435,13 +462,13 @@ class AssetManifestPlugin {
                 const thumbnailAssetPath = `templates/${templateName}/${version}/thumbnail.png`;
                 compilation.emitAsset(
                   thumbnailAssetPath,
-                  new RawSource(thumbnailContent)
+                  new RawSource(thumbnailContent),
                 );
                 return "thumbnail.png";
               } catch (e) {
                 console.warn(
                   `Failed to copy thumbnail for ${templateName}:`,
-                  e.message
+                  e.message,
                 );
               }
             }
@@ -466,7 +493,7 @@ class AssetManifestPlugin {
               // Emit flat main manifest
               compilation.emitAsset(
                 "main-manifest.json",
-                new RawSource(JSON.stringify(assetRecord, null, 2))
+                new RawSource(JSON.stringify(assetRecord, null, 2)),
               );
               continue;
             }
@@ -479,6 +506,8 @@ class AssetManifestPlugin {
 
                 // Copy thumbnail to version directory
                 const thumbnailPath = copyThumbnail(templateName, version);
+                // Copy samples to root template directory
+                copySamples(templateName);
 
                 // Create versioned manifest structure
                 const assets = {
@@ -503,7 +532,7 @@ class AssetManifestPlugin {
                 // Emit per-version manifest
                 compilation.emitAsset(
                   `templates/${templateName}/${version}/manifest.json`,
-                  new RawSource(JSON.stringify(versionedManifest, null, 2))
+                  new RawSource(JSON.stringify(versionedManifest, null, 2)),
                 );
 
                 // Store for per-template root manifest with direct asset URLs
@@ -544,7 +573,7 @@ class AssetManifestPlugin {
           const emitJSON = (name, obj) =>
             compilation.emitAsset(
               name,
-              new RawSource(JSON.stringify(obj, null, 2))
+              new RawSource(JSON.stringify(obj, null, 2)),
             );
 
           // Emit per-template root manifests instead of global manifest
@@ -553,10 +582,16 @@ class AssetManifestPlugin {
               const templateManifest = globalTemplatesManifest[templateName];
               emitJSON(
                 `templates/${templateName}/manifest.json`,
-                templateManifest
+                templateManifest,
               );
             });
           }
+
+          // Emit templates-list.json (array of template names)
+          emitJSON(
+            "templates-list.json",
+            Object.keys(globalTemplatesManifest).sort(),
+          );
 
           // Widgets: per-widget manifest (with version) and a summary manifest mapping
           const widgetsSummary = {};
@@ -597,7 +632,7 @@ class AssetManifestPlugin {
                   .filter(
                     (d) =>
                       fs.statSync(path.join(templateDir, d)).isDirectory() &&
-                      /^\d+\.\d+\.\d+$/.test(d)
+                      /^\d+\.\d+\.\d+$/.test(d),
                   );
 
                 for (const versionDir of versionDirs) {
@@ -606,7 +641,7 @@ class AssetManifestPlugin {
                       console.log(
                         "[purge] keep template version",
                         tpl,
-                        versionDir
+                        versionDir,
                       );
                     continue;
                   }
@@ -631,7 +666,7 @@ class AssetManifestPlugin {
                       console.log(
                         "[purge] removed old template version",
                         tpl,
-                        versionDir
+                        versionDir,
                       );
                   } catch (err) {
                     if (DEBUG)
@@ -639,7 +674,7 @@ class AssetManifestPlugin {
                         "[purge] failed remove template version",
                         tpl,
                         versionDir,
-                        err && err.message
+                        err && err.message,
                       );
                   }
                 }
@@ -648,7 +683,7 @@ class AssetManifestPlugin {
                   console.warn(
                     "[purge] error scanning template",
                     tpl,
-                    e && e.message
+                    e && e.message,
                   );
               }
             }
@@ -686,7 +721,7 @@ class AssetManifestPlugin {
                       console.warn(
                         "[purge] failed remove widget",
                         f,
-                        err && err.message
+                        err && err.message,
                       );
                   }
                 }
@@ -695,12 +730,12 @@ class AssetManifestPlugin {
                   console.warn(
                     "[purge] error scanning widget",
                     w,
-                    e && e.message
+                    e && e.message,
                   );
               }
             }
           }
-        }
+        },
       );
     });
   }
@@ -737,11 +772,9 @@ class CspMetaPlugin {
           }
 
           // Build CSP directives
-          const scriptSrc = [
-            ...hashes,
-            "'self'",
-            "https://*.github.io",
-          ].join(" ");
+          const scriptSrc = [...hashes, "'self'", "https://*.github.io"].join(
+            " ",
+          );
 
           const csp = [
             `script-src ${scriptSrc}`,
@@ -755,13 +788,10 @@ class CspMetaPlugin {
           const metaTag = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
 
           // Inject right after <head> (or after existing <meta> tags)
-          data.html = html.replace(
-            /(<head[^>]*>)/i,
-            `$1\n    ${metaTag}`
-          );
+          data.html = html.replace(/(<head[^>]*>)/i, `$1\n    ${metaTag}`);
 
           cb(null, data);
-        }
+        },
       );
     });
   }

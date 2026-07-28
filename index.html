@@ -44,6 +44,11 @@
       }
     </style>
   </head>
+  <script>
+    if (!window.location.search) {
+      window.location.replace("?devMode=1");
+    }
+  </script>
   <body>
     <div id="documentOutput" class="loading-message">
       Trying to load document...
