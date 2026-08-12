@@ -27,7 +27,8 @@
     "test:staged": "cross-env JEST_CI_RUN=1 jest --bail --ci --silent --passWithNoTests --forceExit --findRelatedTests",
     "commit": "git-cz",
     "generate:schemas": "node scripts/generate-schemas.mjs",
-    "check:schemas": "node scripts/generate-schemas.mjs --check"
+    "check:schemas": "node scripts/generate-schemas.mjs --check",
+    "validate:templates": "node scripts/validate-templates.mjs"
   },
   "browserslist": [
     "ie 11",
@@ -115,6 +116,9 @@
     ],
     "**/*.{css,scss}": [
       "stylelint --fix --quiet"
+    ],
+    "src/{templates,widgets}/**/*.{hbs,ts}": [
+      "npm run validate:templates --"
     ]
   }
 }
