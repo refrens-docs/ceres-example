@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const { execFileSync } = require("child_process");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const CssMinimizerPlugin = require("css-minimizer-webpack-plugin");
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
@@ -799,6 +800,92 @@ class CspMetaPlugin {
   }
 }
 
+// Reports the static template validator's diagnostics through webpack, so a
+// template mistake surfaces in the dev-server overlay while the author is
+// still editing rather than at commit time.
+//
+// It shells out to validate-templates.mjs rather than importing it: this file
+// is CommonJS, the validator is ESM, and NF5 requires the script stay
+// byte-identical with `ceres`, so exporting a function from it is not an
+// option. A full run measures 60-70ms, so there is no incremental logic.
+class TemplateValidationPlugin {
+  constructor({ strict } = {}) {
+    this.strict = Boolean(strict);
+  }
+
+  apply(compiler) {
+    compiler.hooks.thisCompilation.tap(
+      "TemplateValidationPlugin",
+      (compilation) => {
+        const context = compiler.context || __dirname;
+
+        // Nothing imports schemas/*.json, so webpack's module graph never
+        // reaches it and a regenerated contract would not retrigger
+        // validation. Registered before the run so it happens even if the
+        // validator itself falls over. (EC8)
+        const schemasDir = path.join(context, "schemas");
+        if (fs.existsSync(schemasDir)) {
+          fs.readdirSync(schemasDir)
+            .filter((name) => name.endsWith(".json"))
+            .forEach((name) =>
+              compilation.fileDependencies.add(path.join(schemasDir, name)),
+            );
+        }
+
+        let stdout;
+        let stderr;
+        try {
+          stdout = execFileSync(
+            "node",
+            [
+              "scripts/validate-templates.mjs",
+              "--format",
+              "json",
+              ...(this.strict ? ["--strict"] : []),
+            ],
+            { cwd: context, encoding: "utf8" },
+          );
+        } catch (e) {
+          // The validator exits 1 by design on an error-severity diagnostic,
+          // and execFileSync throws on any non-zero exit — so the throw is the
+          // interesting path, not the failure path. The JSON is still on
+          // stdout.
+          stdout = e.stdout;
+          stderr = e.stderr;
+        }
+
+        let diagnostics;
+        try {
+          diagnostics = JSON.parse(stdout);
+        } catch (e) {
+          // A plugin that swallows its own crash leaves the author staring at
+          // a stale overlay.
+          compilation.errors.push(
+            new Error(
+              `validate-templates failed to produce JSON: ${String(
+                stderr || e.message || "",
+              ).trim()}`,
+            ),
+          );
+          return;
+        }
+        if (!Array.isArray(diagnostics)) return;
+
+        // Pure transport: under strict the validator has already promoted
+        // unknown-field to error severity, so re-implementing the promotion
+        // here would be a second copy of a rule 2A locked with S30.
+        diagnostics.forEach((d) => {
+          const entry = new Error(
+            `${d.file}:${d.line}:${d.column}  ${d.rule}  ${d.message}`,
+          );
+          if (d.severity === "error") compilation.errors.push(entry);
+          else compilation.warnings.push(entry);
+        });
+      },
+    );
+  }
+}
+
 // Build dynamic partialDirs for all widgets subfolders
 /**
  *
@@ -900,6 +987,14 @@ module.exports = {
     }),
     new CspMetaPlugin(),
     new AssetManifestPlugin(),
+    // WEBPACK_SERVE is set by `webpack serve` itself, so `npm run watch` gets
+    // strict and `npm run build` — including phase 3's CI build — does not.
+    // Watch is where a field typo costs nothing to fix, and the overlay below
+    // is configured `warnings: false`, so a field typo reported as a warning
+    // would be invisible in the browser. (R13)
+    new TemplateValidationPlugin({
+      strict: process.env.WEBPACK_SERVE === "true",
+    }),
   ],
   optimization: {
     usedExports: true,
