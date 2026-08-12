@@ -362,8 +362,7 @@ let systemEntries = {};
 if (ONLY_TEMPLATES || ONLY_TEMPLATE) systemEntries = {};
 else if (ONLY_MAIN)
   systemEntries = { "main-renderer/renderer": "./src/main/index.ts" };
-else if (ONLY_WIDGETS || ONLY_VENDOR)
-  systemEntries = {};
+else if (ONLY_WIDGETS || ONLY_VENDOR) systemEntries = {};
 else
   systemEntries = {
     "main-renderer/renderer": "./src/main/index.ts",
@@ -427,7 +426,7 @@ class AssetManifestPlugin {
               "src",
               "templates",
               templateName,
-              "samples.json"
+              "samples.json",
             );
             if (fs.existsSync(srcPath)) {
               try {
@@ -435,13 +434,13 @@ class AssetManifestPlugin {
                 const samplesAssetPath = `templates/${templateName}/samples.json`;
                 compilation.emitAsset(
                   samplesAssetPath,
-                  new RawSource(samplesContent)
+                  new RawSource(samplesContent),
                 );
                 return true;
               } catch (e) {
                 console.warn(
                   `Failed to copy samples for ${templateName}:`,
-                  e.message
+                  e.message,
                 );
               }
             }
@@ -455,7 +454,7 @@ class AssetManifestPlugin {
               "src",
               "templates",
               templateName,
-              "thumbnail.png"
+              "thumbnail.png",
             );
             if (fs.existsSync(srcPath)) {
               try {
@@ -463,13 +462,13 @@ class AssetManifestPlugin {
                 const thumbnailAssetPath = `templates/${templateName}/${version}/thumbnail.png`;
                 compilation.emitAsset(
                   thumbnailAssetPath,
-                  new RawSource(thumbnailContent)
+                  new RawSource(thumbnailContent),
                 );
                 return "thumbnail.png";
               } catch (e) {
                 console.warn(
                   `Failed to copy thumbnail for ${templateName}:`,
-                  e.message
+                  e.message,
                 );
               }
             }
@@ -494,7 +493,7 @@ class AssetManifestPlugin {
               // Emit flat main manifest
               compilation.emitAsset(
                 "main-manifest.json",
-                new RawSource(JSON.stringify(assetRecord, null, 2))
+                new RawSource(JSON.stringify(assetRecord, null, 2)),
               );
               continue;
             }
@@ -533,7 +532,7 @@ class AssetManifestPlugin {
                 // Emit per-version manifest
                 compilation.emitAsset(
                   `templates/${templateName}/${version}/manifest.json`,
-                  new RawSource(JSON.stringify(versionedManifest, null, 2))
+                  new RawSource(JSON.stringify(versionedManifest, null, 2)),
                 );
 
                 // Store for per-template root manifest with direct asset URLs
@@ -574,7 +573,7 @@ class AssetManifestPlugin {
           const emitJSON = (name, obj) =>
             compilation.emitAsset(
               name,
-              new RawSource(JSON.stringify(obj, null, 2))
+              new RawSource(JSON.stringify(obj, null, 2)),
             );
 
           // Emit per-template root manifests instead of global manifest
@@ -583,15 +582,16 @@ class AssetManifestPlugin {
               const templateManifest = globalTemplatesManifest[templateName];
               emitJSON(
                 `templates/${templateName}/manifest.json`,
-                templateManifest
+                templateManifest,
               );
             });
-            // Emit templates-list.json (array of template names)
-            emitJSON(
-              "templates-list.json",
-              Object.keys(globalTemplatesManifest).sort()
-            );
           }
+
+          // Emit templates-list.json (array of template names)
+          emitJSON(
+            "templates-list.json",
+            Object.keys(globalTemplatesManifest).sort(),
+          );
 
           // Widgets: per-widget manifest (with version) and a summary manifest mapping
           const widgetsSummary = {};
@@ -632,7 +632,7 @@ class AssetManifestPlugin {
                   .filter(
                     (d) =>
                       fs.statSync(path.join(templateDir, d)).isDirectory() &&
-                      /^\d+\.\d+\.\d+$/.test(d)
+                      /^\d+\.\d+\.\d+$/.test(d),
                   );
 
                 for (const versionDir of versionDirs) {
@@ -641,7 +641,7 @@ class AssetManifestPlugin {
                       console.log(
                         "[purge] keep template version",
                         tpl,
-                        versionDir
+                        versionDir,
                       );
                     continue;
                   }
@@ -666,7 +666,7 @@ class AssetManifestPlugin {
                       console.log(
                         "[purge] removed old template version",
                         tpl,
-                        versionDir
+                        versionDir,
                       );
                   } catch (err) {
                     if (DEBUG)
@@ -674,7 +674,7 @@ class AssetManifestPlugin {
                         "[purge] failed remove template version",
                         tpl,
                         versionDir,
-                        err && err.message
+                        err && err.message,
                       );
                   }
                 }
@@ -683,7 +683,7 @@ class AssetManifestPlugin {
                   console.warn(
                     "[purge] error scanning template",
                     tpl,
-                    e && e.message
+                    e && e.message,
                   );
               }
             }
@@ -721,7 +721,7 @@ class AssetManifestPlugin {
                       console.warn(
                         "[purge] failed remove widget",
                         f,
-                        err && err.message
+                        err && err.message,
                       );
                   }
                 }
@@ -730,12 +730,12 @@ class AssetManifestPlugin {
                   console.warn(
                     "[purge] error scanning widget",
                     w,
-                    e && e.message
+                    e && e.message,
                   );
               }
             }
           }
-        }
+        },
       );
     });
   }
@@ -772,30 +772,28 @@ class CspMetaPlugin {
           }
 
           // Build CSP directives
-          const scriptSrc = [
-            ...hashes,
-            "'self'",
-          ].join(" ");
+          const scriptSrc = [...hashes, "'self'", "https://*.github.io"].join(
+            " ",
+          );
 
           const csp = [
             `script-src ${scriptSrc}`,
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://*.github.io",
             "font-src 'self' https://fonts.gstatic.com",
             "connect-src *",
-            "img-src 'self' data: https:",
+            // https: covers production/CDN images. http://localhost:* and 127.0.0.1
+            // let local dev load images served by a local Serana over plain http.
+            "img-src 'self' data: https: http://localhost:* http://127.0.0.1:*",
             "default-src 'self'",
           ].join("; ");
 
           const metaTag = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
 
           // Inject right after <head> (or after existing <meta> tags)
-          data.html = html.replace(
-            /(<head[^>]*>)/i,
-            `$1\n    ${metaTag}`
-          );
+          data.html = html.replace(/(<head[^>]*>)/i, `$1\n    ${metaTag}`);
 
           cb(null, data);
-        }
+        },
       );
     });
   }
@@ -913,4 +911,25 @@ module.exports = {
     minimizer: ["...", new CssMinimizerPlugin()],
   },
   devtool: false,
+  // Used only by `npm run watch` (webpack serve). Ignored by a normal build.
+  // Serves the compiled assets from memory on :1337, rebuilds on any source
+  // change, and full-page-reloads the browser. Nothing is cached, so you never
+  // have to hard-refresh or restart the server.
+  devServer: {
+    host: "localhost",
+    port: 1337,
+    open: false, // Ceres needs ?template=..&apiUrl=.. so bare "/" can't auto-open usefully
+    hot: false, // templates are plain IIFE bundles — full reload is correct, not HMR
+    liveReload: true,
+    static: false, // every asset (incl. *-manifest.json) is emitted by webpack, so nothing extra to serve
+    devMiddleware: {
+      writeToDisk: false, // serve from memory → no stale dist files, no caching
+    },
+    headers: {
+      "Cache-Control": "no-store",
+    },
+    client: {
+      overlay: { errors: true, warnings: false },
+    },
+  },
 };
