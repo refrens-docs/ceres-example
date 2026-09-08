@@ -1,0 +1,96 @@
+{{!--
+  The totals block. Every value here is already formatted by computeSubtotalRows — do not
+  wrap anything in formatCurrency and never concatenate a currency symbol onto a number.
+
+  Every row is always in the DOM. `hideTotals` and `hideTaxes` only set initial visibility,
+  because the Lydia host toggles them live by flipping the same attributes:
+
+    [data-ceres-subtotal]            the whole block
+    [data-ceres-subtotal-row]        one row, carrying its model key
+    [data-ceres-subtotal-taxes]      a tax row, hidden by hideTaxes
+    [data-ceres-subtotal-keep]       survives hideTotals (additional charges)
+    [data-ceres-total-in-words]      the words line, hidden by hideTotalInWords
+
+  Drop one of those and its setting silently stops working. See src/main/commonUtils.ts.
+--}}
+<div class="ceres-subtotal" data-ceres-subtotal>
+  <table class="ceres-subtotal-table">
+    <tbody>
+      {{#each groups.main}}
+        <tr
+          class="ceres-subtotal-row ceres-subtotal-row-{{emphasis}}"
+          data-ceres-subtotal-row="{{key}}"
+          {{#if isTaxRow}}data-ceres-subtotal-taxes{{/if}}
+          {{#if survivesHideTotals}}data-ceres-subtotal-keep{{/if}}
+          {{#if ../hidden}}{{#unless survivesHideTotals}}style="display:none"{{/unless}}{{else}}{{#if isTaxRow}}{{#if ../hideTaxes}}style="display:none"{{/if}}{{/if}}{{/if}}
+        >
+          <th class="ceres-subtotal-label">
+            {{label}}
+            {{#if note}}<div class="ceres-subtotal-note">{{note}}</div>{{/if}}
+          </th>
+          <td class="ceres-subtotal-value">
+            {{value}}
+            {{#if converted}}<div class="ceres-subtotal-converted">{{converted}}</div>{{/if}}
+            {{#if extra}}
+              <div class="ceres-subtotal-extra">
+                {{extra.value}}
+                {{#if extra.converted}}<div class="ceres-subtotal-converted">{{extra.converted}}</div>{{/if}}
+              </div>
+            {{/if}}
+          </td>
+        </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  {{#if hasExtra}}
+    <table class="ceres-subtotal-table ceres-subtotal-table-extra">
+      <tbody>
+        {{#each groups.extra}}
+          <tr
+            class="ceres-subtotal-row"
+            data-ceres-subtotal-row="{{key}}"
+            {{#if ../hidden}}style="display:none"{{/if}}
+          >
+            <th class="ceres-subtotal-label">{{label}}</th>
+            <td class="ceres-subtotal-value">
+              {{value}}
+              {{#if converted}}<div class="ceres-subtotal-converted">{{converted}}</div>{{/if}}
+            </td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  {{/if}}
+
+  {{#if hasDue}}
+    <table class="ceres-subtotal-table ceres-subtotal-table-due">
+      <tbody>
+        {{#each groups.due}}
+          <tr
+            class="ceres-subtotal-row ceres-subtotal-row-{{emphasis}}"
+            data-ceres-subtotal-row="{{key}}"
+            {{#if ../hidden}}style="display:none"{{/if}}
+          >
+            <th class="ceres-subtotal-label">{{label}}</th>
+            <td class="ceres-subtotal-value">
+              {{value}}
+              {{#if converted}}<div class="ceres-subtotal-converted">{{converted}}</div>{{/if}}
+            </td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  {{/if}}
+
+  {{#if totalInWords}}
+    <div
+      class="ceres-subtotal-words"
+      data-ceres-total-in-words
+      {{#unless showTotalInWords}}style="display:none"{{/unless}}
+    >
+      <span class="ceres-subtotal-words-label">{{totalInWords.label}}:</span>
+      <span class="ceres-subtotal-words-value">{{totalInWords.value}}</span>
+    </div>
+  {{/if}}
+</div>

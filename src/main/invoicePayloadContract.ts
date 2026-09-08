@@ -53,11 +53,30 @@ export interface InvoiceTemplateConfig {
 }
 
 export interface InvoiceAdvanceOptions {
+  // DEPRECATED here. On refrens.com these three sit at the invoice root, not under
+  // advanceOptions — `hideTaxes`/`hideTotals` are destructured straight off the invoice
+  // in lydia/src/components/widgets/invoice/balance.js, and `hideCurrencyCode` is not a
+  // document field at all (it is BusinessData.configuration.experimental.hideCurrencyCode,
+  // written by the "Hide Currency Code in Totals" business setting). Declared here only
+  // so a host still sending the old shape stays within the contract; readers must prefer
+  // the canonical homes. Remove once no host sends these.
   hideTaxes?: boolean;
   hideTotals?: boolean;
   hideCurrencyCode?: boolean;
   reverseCharge?: boolean;
-  taxSummaryView?: "DETAILED" | "SUMMARY" | string;
+  // Gates the informational reverse-charge tax row on an RCM document. Denormalised onto
+  // the document from the business "Enable RCM Summary View" setting.
+  rcmSummaryView?: boolean;
+  // "TABLE"/"BOTH" render the tax summary table; "BOTH"/"INVOICE_SUMMARY" switch the
+  // totals tax rows to a per-rate breakup. The named members are the values producers
+  // actually send; the string fallback stays because the list is host-driven.
+  taxSummaryView?:
+    | "TABLE"
+    | "BOTH"
+    | "INVOICE_SUMMARY"
+    | "DETAILED"
+    | "SUMMARY"
+    | string;
   showSkuInInvoice?: boolean;
   showThumbnailAsColumn?: boolean;
   hideGroupSubTotal?: boolean;
@@ -66,6 +85,16 @@ export interface InvoiceAdvanceOptions {
   itemNameFullWidth?: boolean;
   isDescriptionFullWidth?: boolean;
   hideCountryOfSupply?: boolean;
+  showHSNSummaryInInvoice?: boolean;
+  // The Lydia live-update bridge emits this alias instead of showHSNSummaryInInvoice;
+  // declared so bridge deltas stay within the contract until the host sends the
+  // canonical key.
+  showHsnSummary?: boolean;
+  showStockSummary?: boolean;
+  showCreatorInInvoice?: boolean;
+  showSerialNumbersInDescription?: boolean;
+  showBatchColumnsInInvoice?: boolean;
+  showPaymentsTable?: boolean;
   [key: string]: unknown;
 }
 
@@ -116,17 +145,21 @@ export interface InvoiceData {
   subTotal: number;
   discount?: number;
   toPay?: number | { full: number; [key: string]: any };
-  finalTotal: Record<string, any>;
-  totals?: Record<string, any>;
-  balance?: {
-    paid?: number | string;
-    due?: number | string;
-    transactionCharge?: number | string;
-    settledAmount?: number | string;
-    tds?: number | string;
-    credit?: number | string;
-    [key: string]: any;
-  };
+  finalTotal: InvoiceTotals;
+  totals?: InvoiceTotals;
+  balance?: InvoiceBalance;
+  // Canonical homes for the totals hide settings — the invoice root, matching
+  // refrens.com. The advanceOptions copies above are the deprecated fallback.
+  hideTotals?: boolean;
+  hideTaxes?: boolean;
+  // Multiplier per target currency, used to render the converted amount beside each
+  // totals figure on a foreign-currency document: `amount * conversionRates[businessCurrency]`.
+  // Distinct from `totalConversions`, which carries already-converted totals and cannot
+  // produce a converted subtotal or tax row.
+  conversionRates?: Record<string, number>;
+  // "EXPWOP" = export without payment of tax. Suppresses a tax row whose figure is also
+  // zero, which is the only case where refrens.com drops a tax row on a tax document.
+  supplyType?: string;
   taxType?: string;
   taxName?: string;
   isIgst?: boolean;
@@ -148,6 +181,13 @@ export interface InvoiceData {
     defaultValue?: string;
     [key: string]: any;
   }>;
+  // Extra key/value rows rendered in the totals section.
+  extraTotalFields?: Array<{
+    label: string;
+    value: string;
+    key?: string;
+    [key: string]: any;
+  }>;
   customLabels?: Record<string, string>;
   contact?: { email?: string; phone?: string; [key: string]: any };
   owner?: BusinessData;
@@ -155,6 +195,7 @@ export interface InvoiceData {
   roundOffQuantity?: boolean;
   roundOffRate?: boolean;
   showTotalsRow?: boolean;
+  hideTotalInWords?: boolean;
   templateName?: string;
   transportDetails?: TransportDetails;
   bankAccount?: BankDetails;
@@ -164,7 +205,7 @@ export interface InvoiceData {
   paymentOptions?: InvoicePaymentOptions;
   reminders?: { sent?: boolean; [key: string]: any };
   creditNoteStatus?: string;
-  linkedInvoices?: Array<any>;
+  linkedInvoices?: LinkedInvoice[];
   documentReason?: string;
   placeOfSupply?: string;
   pos?: string;
@@ -179,17 +220,126 @@ export interface InvoiceData {
   zatcaQrCode?: string;
   lhdnQrCode?: string;
   documentQr?: string;
+  // IRN QR data URL at the invoice root. Never part of the fetched payload — the Lydia
+  // host overlays it at runtime, so templates must treat it as optional.
+  qrCode?: string;
+  sharedDocumentId?: string;
+  share?: {
+    link?: string;
+    name?: string;
+    fileName?: string;
+    pdf?: string;
+    printLabels?: Array<{ label: string; pdf: string }>;
+  };
+  // Document-level stock summary; the API includes it only for batch-tracked documents
+  // with advanceOptions.showStockSummary enabled.
+  batchSummary?: DocumentBatchSummaryEntry[];
+  creditDiscount?: number;
+  beforeDiscountPay?: number | { full: number; [key: string]: any };
+  earlyPayDiscount?: {
+    enabled?: boolean;
+    applied?: boolean;
+    totals?: Record<string, any>;
+    [key: string]: any;
+  };
+  vendorFields?: Record<string, any>;
+  hasPgPayments?: boolean;
+  totalConversions?: Record<string, any>;
+  lastPaymentDate?: string | Date;
+}
+
+// Amount buckets are numbers in the API payload, but some hosts (and the Lydia
+// live-update bridge) send them as numeric strings, and an unset bucket serialises
+// as null. All three are accepted because every reader funnels them through
+// toNumberValue, which coerces the lot to a number — the constraint that earns its
+// keep is rejecting objects and arrays here, not rejecting null.
+type MoneyValue = number | string | null;
+
+export interface InvoiceTotals {
+  subTotal?: MoneyValue;
+  total?: MoneyValue;
+  amount?: MoneyValue;
+  discount?: MoneyValue;
+  totalDiscount?: MoneyValue;
+  cgst?: MoneyValue;
+  sgst?: MoneyValue;
+  igst?: MoneyValue;
+  utgst?: MoneyValue;
+  cess?: MoneyValue;
+  totalCess?: MoneyValue;
+  // Keyed by cess name — a Mongoose Map on the document, so it serialises to a
+  // plain object and never to a scalar. The bucket values are read through
+  // toNumberValue and are left unconstrained: the document declares the map as
+  // `of: Boolean` while producers write numbers into it.
+  cessTotal?: Record<string, any>;
+  amountRoundOff?: MoneyValue;
+  // Both round-off buckets exist in the payload but no refrens.com template renders a
+  // round-off row — rounding is already folded into `total`. Kept declared, never rendered.
+  totalRoundOff?: MoneyValue;
+  // Reverse-charge tax on an RCM document, shown as a separate informational row.
+  rcmTax?: MoneyValue;
+  // Early-pay discount already applied to this document, shown under the Sub Total.
+  earlyDiscount?: MoneyValue;
+  // Suffixed onto the Discount row label as "(N%)" when the discount was entered as a rate.
+  discountPercentage?: MoneyValue;
+  [key: string]: any;
+}
+
+export interface InvoiceBalance {
+  paid?: MoneyValue;
+  due?: MoneyValue;
+  transactionCharge?: MoneyValue;
+  settledAmount?: MoneyValue;
+  tds?: MoneyValue;
+  credit?: MoneyValue;
+  // Active refund principal on a credit note.
+  refund?: MoneyValue;
+  [key: string]: any;
+}
+
+export interface LinkedInvoice {
+  _id?: string;
+  billType?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string | Date;
+  finalTotal?: InvoiceTotals;
+  [key: string]: any;
+}
+
+export interface DocumentBatchSummaryEntry {
+  inventory?: string;
+  itemName?: string;
+  sku?: string;
+  batch?: Record<string, any>;
+  warehouse?: string;
+  warehouseName?: string;
+  quantity?: number;
+  [key: string]: any;
 }
 
 export interface BusinessData {
   _id: string;
   name?: string;
   country?: string;
+  // The iframe fetches the document with `populateBusiness: true`, which drops the field
+  // projection and populates the whole business onto `owner`. These two are the only place
+  // a ceres template can read the business's own currency and locale: the host's
+  // `businessCurrency`/`businessLocale` live on CeresTemplatePayload and never reach the
+  // iframe, so the converted-amount row would otherwise never render.
+  currency?: string;
+  locale?: string;
   configuration?: {
     units?: any;
     einvoice?: any;
     eway?: any;
     indexedCustomFields?: any;
+    // Business-level experimental toggles. `hideCurrencyCode` is the canonical home of the
+    // "Hide Currency Code in Totals" setting — it drops the "(INR)" suffix from the Total
+    // row's label and is not a per-document field.
+    experimental?: {
+      hideCurrencyCode?: boolean;
+      [key: string]: unknown;
+    };
     [key: string]: any;
   };
   _systemMeta?: {
@@ -225,6 +375,21 @@ export interface BillerDetails {
   phoneShowInInvoice?: boolean;
   fieldVisibility?: Record<string, boolean>;
   logo?: string;
+  // Generic tax identifier for non-GST / non-VAT geographies.
+  taxId?: string;
+  taxPayerType?: string;
+  clientType?: string;
+  industry?: string;
+  // Contact-person block rendered alongside the biller details.
+  contactPerson?: {
+    contact?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    role?: string;
+    department?: string;
+    displayFields?: string[];
+  };
   additionalIds?: Array<{
     _id?: string;
     label: string;
@@ -270,6 +435,13 @@ export interface LineItem {
   classification?: string;
   inventoryTxn?: string;
   custom?: Record<string, any>;
+  hidden?: boolean;
+  total?: number;
+  taxCategory?: {
+    label?: string;
+    code?: string;
+    reason?: { label?: string; code?: string };
+  };
   batchSummary?: Array<{
     _id?: string;
     itemName?: string;
@@ -307,6 +479,7 @@ export interface CessCharge {
   cessAmountKey?: string;
   cessName?: string;
   isApplied?: boolean;
+  cessType?: string;
 }
 
 export interface TaxSummary {
@@ -372,6 +545,7 @@ export interface TransportDetails {
   distance?: number | string;
   transactionType?: string;
   subSupplyType?: string;
+  subSupplyDesc?: string;
   extraInformation?: string;
   transporterId?: string;
   transporterName?: string;
@@ -429,38 +603,21 @@ export interface ColumnDef {
   isHidden?: boolean;
 }
 
-export interface FlattenedInvoicePayload extends InvoiceData {
-  business?: BusinessData;
-  ownerBusiness?: BusinessData;
-  store?: CeresTemplatePayload["store"];
-  payUrl?: string;
-  hideEarlyPay?: boolean;
-  showExpenseNumber?: boolean;
-  isEarlyPayApplicable?: boolean;
-  showItemNameFullWidth?: boolean;
-  invoiceValueProps?: CeresTemplatePayload["invoiceValueProps"];
-  ownerTimeZone?: string;
-  businessTimeZone?: string;
-  showBankAccount?: boolean;
-  showUpi?: boolean;
-  businessLocale?: string;
-  businessCurrency?: string;
-  isBusinessUser?: boolean;
-  hideHashInDocumentNumber?: boolean;
-  showPaymentsTable?: boolean;
-  isPublicView?: boolean;
-  isDescriptionFullWidth?: boolean;
-  irnPosition?: CeresTemplatePayload["irnPosition"];
-  showStockSummary?: boolean;
-  showVendorBankAccount?: boolean;
-  defaultBatchColumns?: CeresTemplatePayload["defaultBatchColumns"];
-  query?: Record<string, string>;
-  copy?: string;
-  ewayConfig?: EwayConfig;
-  einvoiceConfig?: EinvoiceConfig;
-}
+// Host-level keys of the wrapped payload, minus the two that are resolved rather
+// than copied: `invoice` is spread into the root and `template` (a bare name)
+// collides with InvoiceData's template config. Derived rather than re-listed so a
+// new field on CeresTemplatePayload cannot silently miss the flattened shape.
+export type HostPayloadFields = Partial<
+  Omit<CeresTemplatePayload, "invoice" | "template">
+>;
 
-export type InvoicePayloadInput = CeresTemplatePayload | FlattenedInvoicePayload;
+export interface FlattenedInvoicePayload
+  extends InvoiceData,
+    HostPayloadFields {}
+
+export type InvoicePayloadInput =
+  | CeresTemplatePayload
+  | FlattenedInvoicePayload;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -494,39 +651,26 @@ export const normalizeInvoicePayload = (
   payload: InvoicePayloadInput
 ): FlattenedInvoicePayload => {
   if (!isWrappedInvoicePayload(payload)) {
+    // A flat payload may still carry the wrapped shape's bare template name. Left
+    // as a string it reads back as an empty config, which silently resolves the
+    // template to "default" and changes which columns render.
+    const flatTemplate: unknown = payload.template;
+    if (typeof flatTemplate === "string") {
+      return { ...payload, template: normalizeTemplateConfig(flatTemplate) };
+    }
+
     return payload;
   }
 
+  // Rest capture rather than a hand-maintained key list: every host-level field
+  // carries over by construction, so adding one to CeresTemplatePayload needs no
+  // change here. Host fields are applied last, matching the precedence the explicit
+  // assignments had.
+  const { invoice, template, ...hostFields } = payload;
+
   return {
-    ...payload.invoice,
-    business: payload.business,
-    ownerBusiness: payload.ownerBusiness,
-    store: payload.store,
-    payUrl: payload.payUrl,
-    hideEarlyPay: payload.hideEarlyPay,
-    showExpenseNumber: payload.showExpenseNumber,
-    isEarlyPayApplicable: payload.isEarlyPayApplicable,
-    showItemNameFullWidth: payload.showItemNameFullWidth,
-    invoiceValueProps: payload.invoiceValueProps,
-    ownerTimeZone: payload.ownerTimeZone,
-    businessTimeZone: payload.businessTimeZone,
-    showBankAccount: payload.showBankAccount,
-    showUpi: payload.showUpi,
-    businessLocale: payload.businessLocale,
-    businessCurrency: payload.businessCurrency,
-    isBusinessUser: payload.isBusinessUser,
-    hideHashInDocumentNumber: payload.hideHashInDocumentNumber,
-    showPaymentsTable: payload.showPaymentsTable,
-    isPublicView: payload.isPublicView,
-    isDescriptionFullWidth: payload.isDescriptionFullWidth,
-    irnPosition: payload.irnPosition,
-    showStockSummary: payload.showStockSummary,
-    showVendorBankAccount: payload.showVendorBankAccount,
-    defaultBatchColumns: payload.defaultBatchColumns,
-    query: payload.query,
-    copy: payload.copy,
-    ewayConfig: payload.ewayConfig,
-    einvoiceConfig: payload.einvoiceConfig,
-    template: payload.invoice.template ?? normalizeTemplateConfig(payload.template),
+    ...invoice,
+    ...hostFields,
+    template: invoice.template ?? normalizeTemplateConfig(template),
   };
 };
