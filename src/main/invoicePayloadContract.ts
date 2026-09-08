@@ -154,6 +154,10 @@ export interface InvoiceData {
   invoiceAccepted?: string;
   roundOffQuantity?: boolean;
   roundOffRate?: boolean;
+  // Gates whether a percentage discount is padded to subUnitLength decimals
+  // (`12.00%`) or printed exactly as entered (`12%`). Named after the field
+  // lydia's own line-items table reads (src/components/widgets/invoice/lineItems.js).
+  applyNumberFormatToDiscounts?: boolean;
   showTotalsRow?: boolean;
   templateName?: string;
   transportDetails?: TransportDetails;
@@ -247,7 +251,11 @@ export interface LineItem {
   rate: number;
   amount: number;
   subTotal?: number;
-  discount?: number;
+  // A plain number is a legacy/simplified shape carrying no discount kind, so it
+  // renders as no discount at all (see lineItemCells.ts) rather than being
+  // guessed at; the real shape production sends is the object form, matching
+  // serana's item.discount.{discountType,amount} (PERCENTAGE | FIXED_AMOUNT).
+  discount?: number | { discountType?: string; amount?: number };
   hsn?: string;
   images?: string[];
   originalImages?: string[];
@@ -460,7 +468,9 @@ export interface FlattenedInvoicePayload extends InvoiceData {
   einvoiceConfig?: EinvoiceConfig;
 }
 
-export type InvoicePayloadInput = CeresTemplatePayload | FlattenedInvoicePayload;
+export type InvoicePayloadInput =
+  | CeresTemplatePayload
+  | FlattenedInvoicePayload;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -527,6 +537,7 @@ export const normalizeInvoicePayload = (
     copy: payload.copy,
     ewayConfig: payload.ewayConfig,
     einvoiceConfig: payload.einvoiceConfig,
-    template: payload.invoice.template ?? normalizeTemplateConfig(payload.template),
+    template:
+      payload.invoice.template ?? normalizeTemplateConfig(payload.template),
   };
 };

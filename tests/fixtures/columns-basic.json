@@ -1,0 +1,595 @@
+{
+  "template": "simple",
+  "payUrl": "https://refrens.com/business-name/invoice/INV-2026-001/pay",
+  "hideEarlyPay": false,
+  "showExpenseNumber": false,
+  "isEarlyPayApplicable": true,
+  "showItemNameFullWidth": true,
+  "isDescriptionFullWidth": true,
+  "ownerTimeZone": "Asia/Kolkata",
+  "businessTimeZone": "Asia/Kolkata",
+  "showBankAccount": true,
+  "showUpi": true,
+  "businessLocale": "en-IN",
+  "businessCurrency": "INR",
+  "isBusinessUser": false,
+  "hideHashInDocumentNumber": false,
+  "showPaymentsTable": true,
+  "isPublicView": true,
+  "irnPosition": "ABOVE_LINEITEMS",
+  "showStockSummary": true,
+  "showVendorBankAccount": false,
+  "copy": "ORIGINAL FOR RECIPIENT",
+  "store": {
+    "asideCollapsed": false
+  },
+  "invoiceValueProps": {
+    "hsn": {
+      "visible": true
+    },
+    "discount": {
+      "visible": true
+    },
+    "quantity": {
+      "visible": true
+    },
+    "rate": {
+      "visible": true
+    },
+    "amount": {
+      "visible": true
+    }
+  },
+  "defaultBatchColumns": [
+    {
+      "key": "batchName",
+      "label": "Batch",
+      "system": true
+    },
+    {
+      "key": "manufacturingDate",
+      "label": "Mfg. Date",
+      "system": true
+    },
+    {
+      "key": "expiryDate",
+      "label": "Exp. Date",
+      "system": true
+    }
+  ],
+  "ewayConfig": {
+    "billNumber": true,
+    "billDate": true,
+    "billValidTillDate": true,
+    "billCancelledDate": true
+  },
+  "einvoiceConfig": {
+    "irnNumber": true,
+    "irnAcknowledgementNumber": true,
+    "irnAcknowledgementDate": true,
+    "irnCancelledDate": true
+  },
+  "ownerBusiness": {
+    "_id": "biz_123456789",
+    "name": "Saga Engineering Consultants",
+    "_systemMeta": {
+      "indexedFieldsEnabled": true,
+      "showExtraIndexedField": true
+    }
+  },
+  "business": {
+    "_id": "biz_123456789",
+    "name": "Saga Engineering Consultants",
+    "_systemMeta": {
+      "indexedFieldsEnabled": true,
+      "showExtraIndexedField": true
+    }
+  },
+  "invoice": {
+    "_id": "inv_987654321",
+    "billType": "INVOICE",
+    "isExpenditure": false,
+    "status": "PARTIAL",
+    "isRemoved": false,
+    "isOverdue": false,
+    "invoiceNumber": "INV-2026-001",
+    "purchaseOrderNumber": "PO-998877",
+    "invoiceDate": "2026-03-12T05:30:00.000Z",
+    "dueDate": "2026-04-12T05:30:00.000Z",
+    "invoiceTitle": "Tax Invoice",
+    "invoiceSubTitle": "For Software Services rendered",
+    "currency": "INR",
+    "subUnitLength": 2,
+    "taxType": "INDIA",
+    "taxName": "GST",
+    "isIgst": false,
+    "isUtgst": false,
+    "customCurrencySymbol": "\u20b9",
+    "billedBy": {
+      "name": "Saga Engineering Consultants",
+      "email": "finance@saga.example.com",
+      "phone": "+91 9999988888",
+      "building": "123 Tech Park",
+      "street": "Phase 1, Whitefield",
+      "city": "Bengaluru",
+      "district": "Bangalore Urban",
+      "state": "Karnataka",
+      "stateCode": "29",
+      "gstState": "29-KARNATAKA",
+      "country": "IN",
+      "pincode": "560100",
+      "gstin": "29AABCS1429B1Z",
+      "panNumber": "AABCS1429B",
+      "taxId": "29AABCS1429B1Z",
+      "taxPayerType": "REGULAR",
+      "clientType": "BUSINESS",
+      "industry": "Professional Services",
+      "contactPerson": {
+        "contact": "cnt_5521",
+        "name": "Rhea Menon",
+        "email": "rhea@saga.example.com",
+        "phone": "+91 9999911111",
+        "role": "Finance Lead",
+        "department": "Accounts",
+        "displayFields": [
+          "name",
+          "email"
+        ]
+      },
+      "emailShowInInvoice": true,
+      "phoneShowInInvoice": true,
+      "fieldVisibility": {
+        "showPanWhenEmpty": true,
+        "showGstWhenEmpty": true
+      },
+      "additionalIds": [
+        {
+          "label": "Vendor Code",
+          "value": "VND-4001",
+          "showInInvoice": true
+        }
+      ],
+      "customFields": [],
+      "customHeaders": []
+    },
+    "billedTo": {
+      "name": "Acme Corp Ltd.",
+      "email": "accounts@acme.example.com",
+      "phone": "+91 7777766666",
+      "building": "456 Enterprise Tower",
+      "street": "HSR Layout",
+      "city": "Bengaluru",
+      "state": "Karnataka",
+      "stateCode": "29",
+      "gstState": "29-KARNATAKA",
+      "country": "IN",
+      "pincode": "560102",
+      "gstin": "29DEFGA5566C1Z",
+      "panNumber": "DEFGA5566C",
+      "emailShowInInvoice": true,
+      "phoneShowInInvoice": false,
+      "fieldVisibility": {
+        "showPanWhenEmpty": true,
+        "showGstWhenEmpty": true
+      },
+      "additionalIds": [],
+      "customFields": [],
+      "customHeaders": []
+    },
+    "shippedTo": {
+      "name": "Acme Corp Ltd. (Warehouse)",
+      "building": "789 Industrial Estate",
+      "street": "Peenya Industrial Area",
+      "city": "Bengaluru",
+      "state": "Karnataka",
+      "country": "IN",
+      "pincode": "560058",
+      "additionalIds": [],
+      "customFields": [],
+      "customHeaders": []
+    },
+    "items": [
+      {
+        "_id": "grp_a",
+        "name": "Group A",
+        "group": true
+      },
+      {
+        "_id": "item_a1",
+        "name": "Design Retainer",
+        "rate": 10000,
+        "quantity": 2,
+        "sku": "SKU-A1",
+        "amount": 20000,
+        "warranty": "12 months"
+      },
+      {
+        "_id": "item_a2",
+        "name": "Onboarding Service",
+        "rate": 5000,
+        "quantity": 1,
+        "sku": "SKU-A2",
+        "amount": 5000,
+        "warranty": "6 months"
+      },
+      {
+        "_id": "grp_b",
+        "name": "Group B",
+        "group": true
+      },
+      {
+        "_id": "item_b1",
+        "name": "Support Plan",
+        "rate": 3000,
+        "quantity": 4,
+        "sku": "SKU-B1",
+        "amount": 12000,
+        "warranty": ""
+      },
+      {
+        "_id": "ac_1",
+        "name": "Packing Charges",
+        "isAdditionalCharge": true,
+        "amount": 500
+      }
+    ],
+    "subTotal": 130000,
+    "discount": 5000,
+    "cgst": 11250,
+    "sgst": 11250,
+    "igst": 0,
+    "utgst": 0,
+    "finalTotal": {
+      "total": 147500,
+      "amount": 125000,
+      "subTotal": 130000,
+      "discount": 5000,
+      "cgst": 11250,
+      "sgst": 11250,
+      "igst": 0
+    },
+    "toPay": {
+      "full": 47500,
+      "amount": 47500
+    },
+    "balance": {
+      "paid": 100000,
+      "due": 47500,
+      "transactionCharge": 0,
+      "settledAmount": 0,
+      "tds": 0,
+      "credit": 0
+    },
+    "columns": [
+      {
+        "key": "rate",
+        "label": "Rate",
+        "dataType": "number"
+      },
+      {
+        "key": "name",
+        "label": "Item",
+        "dataType": "text"
+      },
+      {
+        "key": "quantity",
+        "label": "Qty",
+        "dataType": "number"
+      },
+      {
+        "key": "sku",
+        "label": "SKU",
+        "dataType": "text",
+        "isHidden": true
+      },
+      {
+        "key": "amount",
+        "label": "Line Total",
+        "dataType": "number"
+      },
+      {
+        "key": "warranty",
+        "label": "Warranty",
+        "dataType": "text"
+      }
+    ],
+    "customLabels": {
+      "invoiceNumber": "Invoice No",
+      "invoiceDate": "Invoice Date",
+      "dueDate": "Due Date",
+      "purchaseOrderNumber": "PO No",
+      "billedTo": "Bill To",
+      "billedBy": "Bill From",
+      "shippedTo": "Ship To",
+      "shippedFrom": "Ship From",
+      "transportName": "Transport Name",
+      "totalInWords": "Total (in words)",
+      "terms": "Terms and Conditions",
+      "notes": "Additional Notes",
+      "attachment": "Attachments",
+      "signature": "Authorised Signatory"
+    },
+    "customHeaders": [
+      {
+        "label": "Project Code",
+        "value": "PRJ-SEC-26-09"
+      }
+    ],
+    "customFooters": [
+      {
+        "label": "Support Portal",
+        "value": "support.saga.example.com"
+      }
+    ],
+    "contact": {
+      "email": "finance@saga.example.com",
+      "phone": "+91 9999988888"
+    },
+    "allPayments": [
+      {
+        "paymentDate": "2026-03-15T09:30:00.000Z",
+        "paymentMethod": "Bank Transfer",
+        "amount": 100000,
+        "status": "COMPLETED"
+      }
+    ],
+    "taxSummary": [
+      {
+        "tax": 18,
+        "taxableValue": 125000,
+        "cgst": 11250,
+        "sgst": 11250,
+        "igst": 0,
+        "utgst": 0
+      }
+    ],
+    "hsnSummary": [
+      {
+        "hsn": "998311",
+        "tax": 18,
+        "taxableValue": 95000,
+        "cgst": 8550,
+        "sgst": 8550,
+        "igst": 0,
+        "utgst": 0
+      },
+      {
+        "hsn": "998312",
+        "tax": 18,
+        "taxableValue": 30000,
+        "cgst": 2700,
+        "sgst": 2700,
+        "igst": 0,
+        "utgst": 0
+      }
+    ],
+    "additionalCharges": [
+      {
+        "_id": "ac_1",
+        "name": "Integration Surcharge",
+        "amount": 2000,
+        "tax": 18,
+        "hsn": "99999",
+        "cgst": 180,
+        "sgst": 180,
+        "igst": 0
+      }
+    ],
+    "cesses": [
+      {
+        "_id": "cess_1",
+        "name": "Compensation Cess",
+        "cessKey": "compensationCess",
+        "cessAmountKey": "compensationCessAmount",
+        "cessName": "Comp. Cess",
+        "cessType": "CENTRAL",
+        "isApplied": false,
+        "amount": 0
+      }
+    ],
+    "latePaymentFee": {
+      "enabled": true,
+      "showInInvoice": true,
+      "isApplied": false,
+      "when": 15,
+      "finalAmount": 1000
+    },
+    "irn": {
+      "Irn": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2",
+      "AckNo": "123456789012345",
+      "AckDt": "2026-03-12T05:30:00.000Z",
+      "qrCode": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    },
+    "notes": "**Note:** Please clear the pending partial amount within the next 30 days to avoid service interruption.\n*Thank you for your business!*",
+    "terms": [
+      {
+        "label": "Payment Terms",
+        "terms": [
+          "100% advance for hardware.",
+          "Net 30 days for services."
+        ]
+      }
+    ],
+    "attachments": [
+      "https://example.com/s3/attachments/service_agreement.pdf"
+    ],
+    "customFields": [
+      {
+        "label": "Project Code",
+        "value": "PRJ-SEC-26-09",
+        "dataType": "string",
+        "params": {
+          "showInInvoice": true
+        }
+      }
+    ],
+    "vendorFields": {
+      "vendorCode": "VND-114"
+    },
+    "transportDetails": {
+      "transportMode": "Road",
+      "vehicleNumber": "KA-01-AB-1234",
+      "vehicleType": "Regular",
+      "challanNumber": "CH-001",
+      "challanDate": "2026-03-12T05:30:00.000Z",
+      "distance": "35",
+      "transactionType": "Regular",
+      "subSupplyType": "Supply",
+      "subSupplyDesc": "Outward supply against a tax invoice",
+      "extraInformation": "Handle with care",
+      "transporter": {
+        "name": "BlueDart Logistics",
+        "transporterId": "TRN-9876"
+      }
+    },
+    "bankAccount": {
+      "name": "Saga Engineering Consultants",
+      "accountNo": "987654321000",
+      "ifsc": "HDFC0001234",
+      "bank": "HDFC Bank",
+      "swift": "HDFCINBB",
+      "accountType": "Current Account",
+      "sortCode": "",
+      "iban": "",
+      "customLabels": {
+        "bankDetails": "Bank Details",
+        "accountHolderName": "Account Holder",
+        "accountNumber": "Account No",
+        "ifsc": "IFSC Code",
+        "bankName": "Bank Name",
+        "swiftCode": "Swift Code"
+      },
+      "customFields": []
+    },
+    "upi": {
+      "upi": "saga@hdfcbank",
+      "vpa": "saga@hdfcbank",
+      "qr": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    },
+    "paymentOptions": {
+      "accountTransfer": true,
+      "upi": true
+    },
+    "signature": "https://example.com/s3/signatures/auth_sign.png",
+    "advanceOptions": {
+      "hideTaxes": false,
+      "hideTotals": false,
+      "hideCurrencyCode": false,
+      "reverseCharge": false,
+      "taxSummaryView": "TABLE",
+      "showSkuInInvoice": false,
+      "showThumbnailAsColumn": false,
+      "hideGroupSubTotal": false,
+      "unitColumn": "MERGE_QUANTITY",
+      "hsnView": "DEFAULT",
+      "hideCountryOfSupply": false,
+      "showHSNSummaryInInvoice": true,
+      "showHsnSummary": true,
+      "showStockSummary": true,
+      "showPaymentsTable": true,
+      "showCreatorInInvoice": true,
+      "showSerialNumbersInDescription": false,
+      "showBatchColumnsInInvoice": true
+    },
+    "reminders": {
+      "sent": true
+    },
+    "placeOfSupply": "29-KARNATAKA",
+    "pos": "29",
+    "invoiceType": "INVOICE",
+    "owner": {
+      "_id": "own_123",
+      "country": "IN"
+    },
+    "letterHead": "https://example.com/s3/letterhead.png",
+    "letterHeadFooter": "https://example.com/s3/letterhead_footer.png",
+    "showBranding": false,
+    "template": {
+      "parentTemplate": "simple",
+      "template": "simple",
+      "upiShrink": false,
+      "pdfOptions": {
+        "letterHeadOnFirstPage": true,
+        "footerOnLastPage": true
+      }
+    },
+    "qrCode": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "totals": {
+      "subTotal": 130000,
+      "discount": 5000,
+      "cgst": 11250,
+      "sgst": 11250,
+      "igst": 0,
+      "amountRoundOff": 0,
+      "totalRoundOff": null,
+      "totalCess": 0,
+      "cessTotal": {
+        "compensationCess": 0
+      },
+      "total": 147500
+    },
+    "linkedInvoices": [
+      {
+        "_id": "inv_linked_1",
+        "billType": "CREDIT_NOTE",
+        "invoiceNumber": "CN-2026-0002",
+        "invoiceDate": "2026-03-18T05:30:00.000Z",
+        "finalTotal": {
+          "total": 2500
+        }
+      }
+    ],
+    "sharedDocumentId": "shr_9f2c1a",
+    "share": {
+      "link": "https://example.com/share/shr_9f2c1a",
+      "name": "Invoice INV-2026-0007",
+      "fileName": "INV-2026-0007.pdf",
+      "pdf": "https://example.com/s3/invoices/INV-2026-0007.pdf",
+      "printLabels": [
+        {
+          "label": "Original for Recipient",
+          "pdf": "https://example.com/s3/invoices/INV-2026-0007-original.pdf"
+        }
+      ]
+    },
+    "batchSummary": [
+      {
+        "inventory": "inv_item_1",
+        "itemName": "Design Retainer",
+        "sku": "SKU-001",
+        "batch": {
+          "batchNumber": "B-2026-01",
+          "expiryDate": "2027-01-31"
+        },
+        "warehouse": "wh_blr_1",
+        "warehouseName": "Bengaluru Main",
+        "quantity": 1
+      }
+    ],
+    "creditDiscount": 0,
+    "beforeDiscountPay": {
+      "full": 152500
+    },
+    "earlyPayDiscount": {
+      "enabled": true,
+      "applied": false,
+      "totals": {
+        "discount": 2500,
+        "total": 145000
+      }
+    },
+    "hasPgPayments": true,
+    "totalConversions": {
+      "USD": 1750.25
+    },
+    "lastPaymentDate": "2026-03-20T05:30:00.000Z",
+    "extraTotalFields": [
+      {
+        "key": "packing",
+        "label": "Packing Charges",
+        "value": "500"
+      }
+    ],
+    "hideTotalInWords": false
+  }
+}
