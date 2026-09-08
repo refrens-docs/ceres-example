@@ -412,7 +412,11 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
   // a short set for the document type rather than every column — the same
   // split refrens.com makes from this flag (lydia InvoiceTable's
   // `isColumnsModified` branch). Absent flag means untouched columns.
-  const columnsCustomised = Boolean(invoice.isColumnsModified);
+  // Fail open: the short set applies only when the payload positively says the
+  // columns are untouched. An absent flag is not a "no" — treating it as one
+  // hid genuinely configured columns on a phone for every document the server
+  // has not stamped, which is worse than showing more columns than needed.
+  const columnsCustomised = invoice.isColumnsModified !== false;
   const shortSetKeys = new Set<string>(
     isTaxInvoice
       ? ["amount", "gstRate", "sgst", "cgst", "igst", "total"]

@@ -23,25 +23,31 @@ interface UnitDefinition {
 
 const shippedUnits = shippedUnitsData as UnitDefinition[];
 
-// Columns the product ships and already prints correctly through its own
-// formatting elsewhere (money) or is out of scope for this phase entirely —
-// everything else is a business-added column, formatted by its declared
-// dataType. Kept separate from quantity/rate/gstRate/discount/unit, which
-// get their own bespoke formatting below.
-const UNFORMATTED_SYSTEM_COLUMN_KEYS = new Set([
-  "name",
-  "item",
+// The money columns the product ships. S3 says money cells stay as the
+// product already formats them — that means they keep printing as money, not
+// that they go unformatted: the hand-built table this replaces printed every
+// one of them through formatCurrency.
+const MONEY_SYSTEM_COLUMN_KEYS = new Set([
   "amount",
-  "hsn",
   "sgst",
   "cgst",
   "igst",
   "utgst",
   "total",
+  "tax",
+]);
+
+// System columns that are plain identifiers or free text — printed as stored.
+// Everything outside both sets is a business-added column, formatted by its
+// declared dataType. quantity/rate/gstRate/discount/unit get their own
+// bespoke formatting below.
+const TEXT_SYSTEM_COLUMN_KEYS = new Set([
+  "name",
+  "item",
+  "hsn",
   "classification",
   "msic",
   "sku",
-  "tax",
 ]);
 
 const DEFAULT_LOCALE = "en-IN";
@@ -472,7 +478,12 @@ const formatByKind = (
       // must resolve to an empty cell, not leak the identifier (SC34).
       return resolveUnitLabel(item.unit, context.unitLabels);
     default:
-      if (UNFORMATTED_SYSTEM_COLUMN_KEYS.has(column.key)) {
+      if (MONEY_SYSTEM_COLUMN_KEYS.has(column.key)) {
+        const amount = toFiniteNumber(item[column.key]);
+        return amount === null ? "" : formatMoney(amount, context);
+      }
+
+      if (TEXT_SYSTEM_COLUMN_KEYS.has(column.key)) {
         return toStringValue(item[column.key]);
       }
 

@@ -12,7 +12,8 @@ import { normalizeInvoiceTemplateState } from "../src/main/invoiceTemplateNormal
 // e2e/fixtures/columns-basic.json (used by its "basic-invoice-example — line
 // items table (SC8)" spec). The expected values below were captured by
 // running ceres's normalizeInvoiceTemplateState against this exact fixture
-// on this ticket's branch (commit 8a5379e) — they are ceres's real output,
+// on this ticket's branch (re-captured at commit 9ec04da, after money
+// formatting was corrected) — they are ceres's real output,
 // not a guess. If either repo's normalization changes what it resolves for
 // this fixture, this test or ceres's SC8 spec (or both) will catch the drift.
 describe("line items contract parity with ceres (SC54)", () => {
@@ -70,7 +71,7 @@ describe("line items contract parity with ceres (SC54)", () => {
           { key: "rate", text: "10,000" },
           { key: "name", text: "Design Retainer" },
           { key: "quantity", text: "2" },
-          { key: "amount", text: "20000" },
+          { key: "amount", text: "\u20b9 20,000.00" },
           { key: "warranty", text: "12 months" },
         ],
         lineNumber: 1,
@@ -82,7 +83,7 @@ describe("line items contract parity with ceres (SC54)", () => {
           { key: "rate", text: "5,000" },
           { key: "name", text: "Onboarding Service" },
           { key: "quantity", text: "1" },
-          { key: "amount", text: "5000" },
+          { key: "amount", text: "\u20b9 5,000.00" },
           { key: "warranty", text: "6 months" },
         ],
         lineNumber: 2,
@@ -94,7 +95,7 @@ describe("line items contract parity with ceres (SC54)", () => {
           { key: "rate", text: "" },
           { key: "name", text: "Sub total" },
           { key: "quantity", text: "3.00" },
-          { key: "amount", text: "₹ 25,000.00" },
+          { key: "amount", text: "\u20b9 25,000.00" },
           { key: "warranty", text: "" },
         ],
         lineNumber: null,
@@ -118,7 +119,7 @@ describe("line items contract parity with ceres (SC54)", () => {
           { key: "rate", text: "3,000" },
           { key: "name", text: "Support Plan" },
           { key: "quantity", text: "4" },
-          { key: "amount", text: "12000" },
+          { key: "amount", text: "\u20b9 12,000.00" },
           { key: "warranty", text: "" },
         ],
         lineNumber: 1,
@@ -130,7 +131,7 @@ describe("line items contract parity with ceres (SC54)", () => {
           { key: "rate", text: "" },
           { key: "name", text: "Packing Charges" },
           { key: "quantity", text: "" },
-          { key: "amount", text: "500" },
+          { key: "amount", text: "\u20b9 500.00" },
           { key: "warranty", text: "" },
         ],
         lineNumber: null,
@@ -142,7 +143,7 @@ describe("line items contract parity with ceres (SC54)", () => {
           { key: "rate", text: "" },
           { key: "name", text: "Sub total" },
           { key: "quantity", text: "4.00" },
-          { key: "amount", text: "₹ 12,000.00" },
+          { key: "amount", text: "\u20b9 12,000.00" },
           { key: "warranty", text: "" },
         ],
         lineNumber: null,
