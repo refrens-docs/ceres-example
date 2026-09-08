@@ -23,10 +23,9 @@ interface UnitDefinition {
 
 const shippedUnits = shippedUnitsData as UnitDefinition[];
 
-// The money columns the product ships. S3 says money cells stay as the
-// product already formats them — that means they keep printing as money, not
-// that they go unformatted: the hand-built table this replaces printed every
-// one of them through formatCurrency.
+// The money columns the product ships, kept printing as money rather than
+// raw numbers: the hand-built table this replaces printed every one of them
+// through formatCurrency.
 const MONEY_SYSTEM_COLUMN_KEYS = new Set([
   "amount",
   "sgst",
