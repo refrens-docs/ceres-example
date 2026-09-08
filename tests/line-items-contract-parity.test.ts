@@ -154,11 +154,9 @@ describe("line items contract parity with ceres (SC54)", () => {
   });
 
   it("keeps every configured column at narrow width when the payload does not say the columns are untouched", () => {
-    // The mirror of ceres's short-set gate was untested here: reverting it to
-    // its buggy form left this repo's whole suite green. An absent
-    // isColumnsModified must not be read as "untouched" — doing so hid
-    // genuinely configured columns on a phone for every document the server
-    // had not stamped.
+    // An absent isColumnsModified must not be read as "untouched" — doing so
+    // hid genuinely configured columns on a phone for every document the
+    // server had not stamped.
     const fixtureInvoice = (fixture as Record<string, unknown>)
       .invoice as Record<string, unknown>;
     expect(fixtureInvoice.isColumnsModified).toBeUndefined();
