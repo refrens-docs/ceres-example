@@ -158,6 +158,11 @@ export interface InvoiceData {
   // (`12.00%`) or printed exactly as entered (`12%`). Named after the field
   // lydia's own line-items table reads (src/components/widgets/invoice/lineItems.js).
   applyNumberFormatToDiscounts?: boolean;
+  // True once a business has customised its line-item columns. Persisted by
+  // the server (talos invoices schema) and read by refrens.com to decide the
+  // narrow-width short column set (S13); never typed here before, so it is
+  // read defensively and the short set simply does not apply when absent.
+  isColumnsModified?: boolean;
   showTotalsRow?: boolean;
   templateName?: string;
   transportDetails?: TransportDetails;

@@ -5,6 +5,8 @@ import type {
 } from "./invoicePayloadContract";
 import {
   buildRowCells,
+  buildCellContext,
+  buildUnitLabelMap,
   resolveUnitLabel,
   buildSummaryRow,
   buildGroupSubTotalRow,
@@ -31,6 +33,10 @@ export interface InvoiceTemplateCell {
   key: string;
   text: string;
   className: string;
+  // True on the one cell that carries the item itself — its name, SKU, merged
+  // notes and thumbnail. Which column that is, is a document decision, so it
+  // is made here once rather than re-derived from the key in the template.
+  isItemCell: boolean;
   // The column's own resolved header label (already renamed/relabelled per
   // S1) carried onto every cell — the narrow-width stacked view (S13) prints
   // it beside the value via CSS attr(), so a cell never has to be matched
@@ -129,6 +135,9 @@ export interface InvoiceTemplateVisibility {
   footerOnLastPage: boolean;
   itemNameFullWidth: boolean;
   isDescriptionFullWidth: boolean;
+  // S13: true while the business has not customised its columns, so the
+  // stacked view shows the standard short set for the document type.
+  usesShortSet: boolean;
   showStatusTagInPrint: boolean;
   visibleColumnCount: number;
   // S12: a short table grows to fill the page's blank space instead of
@@ -172,6 +181,12 @@ export interface NormalizedInvoiceTemplateState {
   mapped: InvoiceTemplateMappedState;
   derived: InvoiceTemplateDerivedState;
 }
+
+// The column that names the line, and the unit column that qualifies its
+// quantity. Both are read by the layout context (the S13 short set) and by
+// the column injectors further down, so they are declared once, up here.
+const ITEM_COLUMN_KEYS = new Set(["name", "item"]);
+const UNIT_COLUMN_KEY = "unit";
 
 const COLUMN_CLASS_MAP: Record<string, string> = {
   item: "col-item",
@@ -393,6 +408,25 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
       0
     )
   );
+  // S13: until a business customises its columns, the narrow-width view shows
+  // a short set for the document type rather than every column — the same
+  // split refrens.com makes from this flag (lydia InvoiceTable's
+  // `isColumnsModified` branch). Absent flag means untouched columns.
+  const columnsCustomised = Boolean(invoice.isColumnsModified);
+  const shortSetKeys = new Set<string>(
+    isTaxInvoice
+      ? ["amount", "gstRate", "sgst", "cgst", "igst", "total"]
+      : ["quantity", "rate", "amount"]
+  );
+  if (discountEnabled) {
+    shortSetKeys.add("discount");
+  }
+  // The unit qualifies the quantity rather than competing with it: dropping it
+  // from the stacked view would print "3" where the table says "3 ctn", which
+  // is the ambiguity S6 exists to remove. S13's own unit rule says the stacked
+  // view resolves the business's wording, so it has to survive the short set.
+  shortSetKeys.add(UNIT_COLUMN_KEY);
+
   const hsnView = toStringValue(advanceOptions.hsnView, "DEFAULT");
   const ownerCountry =
     toStringValue(asRecord(invoice.owner).country) ||
@@ -445,8 +479,11 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
     asRecord(pickFirstValue(invoice.ownerBusiness, invoice.business))
       .configuration
   ).units;
+  // One lookup for the whole document — every later unit resolution, in the
+  // cells and in the item cell, reads this rather than rebuilding the merge.
+  const unitLabels = buildUnitLabelMap(businessUnits);
   const hasAnyUnit = asArray(invoice.items).some((entry) =>
-    Boolean(resolveUnitLabel(asRecord(entry).unit, businessUnits))
+    Boolean(resolveUnitLabel(asRecord(entry).unit, unitLabels))
   );
 
   // Batch columns are gated twice (S9): the business switch, and at least one
@@ -507,6 +544,8 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
     pdfOptions,
     advanceOptions,
     isTaxInvoice,
+    columnsCustomised,
+    shortSetKeys,
     igstTax,
     discountEnabled,
     taxType,
@@ -518,7 +557,7 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
     showUnitInName,
     unitColumnMode,
     showUnitInQuantity,
-    businessUnits,
+    unitLabels,
     hasAnyUnit,
     showBatchColumns,
     defaultBatchColumns,
@@ -538,7 +577,6 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
 // printed header and body in step without writing anything back to the
 // document. A business with no saved columns at all stays that way (SC4);
 // injecting a lone unit column would print a table whose only column is Unit.
-const UNIT_COLUMN_KEY = "unit";
 
 const injectUnitColumn = (
   columns: UnknownRecord[],
@@ -587,7 +625,13 @@ const injectBatchColumns = (
   showBatchColumns: boolean,
   defaultBatchColumns: UnknownRecord[]
 ): UnknownRecord[] => {
-  if (!showBatchColumns || defaultBatchColumns.length === 0) {
+  // A document with no saved columns stays with none (S1) — injecting batch
+  // columns into an empty list prints the table of defaults the story forbids.
+  if (
+    !showBatchColumns ||
+    defaultBatchColumns.length === 0 ||
+    columns.length === 0
+  ) {
     return columns;
   }
 
@@ -626,7 +670,8 @@ const injectCessColumns = (
   columns: UnknownRecord[],
   appliedCesses: UnknownRecord[]
 ): UnknownRecord[] => {
-  if (appliedCesses.length === 0) {
+  // Same rule as the batch columns: an empty saved column list stays empty (S1).
+  if (appliedCesses.length === 0 || columns.length === 0) {
     return columns;
   }
 
@@ -725,7 +770,19 @@ const normalizeInvoiceColumns = (
         key === "sgst" && Boolean(invoice.utgst)
           ? "UTGST"
           : toStringValue(column.label),
-      className: getColumnClass(key),
+      // S13: the narrow-width view shows only the short set until the
+      // business customises its columns. Marking the column here means the
+      // cells inherit it — one markup, one visibility decision, so a column
+      // hidden on the desktop table cannot reappear on a phone.
+      className: [
+        getColumnClass(key),
+        !context.columnsCustomised &&
+        (context.shortSetKeys.has(key) || ITEM_COLUMN_KEYS.has(key))
+          ? "col-short-set"
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
       isHidden: Boolean(column.isHidden) || !visible,
       dataType,
       fxReturnType,
@@ -759,7 +816,7 @@ const buildItemCell = (
     const mergedNotes: string[] = [];
 
     if (context.showUnitInName) {
-      const unitLabel = resolveUnitLabel(item.unit, context.businessUnits);
+      const unitLabel = resolveUnitLabel(item.unit, context.unitLabels);
       if (unitLabel) {
         mergedNotes.push(
           formatMergedNote(showSku, showSku ? `Unit: ${unitLabel}` : unitLabel)
@@ -948,6 +1005,8 @@ const buildFillerRow = (
     text: "",
     className: column.className,
     label: column.label,
+    // Blank by construction — the filler row carries no item.
+    isItemCell: false,
   })),
   lineNumber: null,
   isGroupHeading: false,
@@ -971,6 +1030,13 @@ const buildRows = (
 ): InvoiceTemplateRow[] => {
   const rawItems = asArray(invoice.items).map((entry) => asRecord(entry));
   const rows: InvoiceTemplateRow[] = [];
+  // Built once per document, not per row: every value on it is immutable for
+  // the whole render, and it carries the unit lookup the cells need.
+  const cellContext = buildCellContext(
+    invoice,
+    context.unitColumnMode,
+    context.unitLabels
+  );
 
   let nextIndex = 1;
   let isGroupItem = false;
@@ -987,7 +1053,7 @@ const buildRows = (
     }
 
     const cells: InvoiceTemplateCell[] = buildRowCells(
-      invoice,
+      cellContext,
       visibleColumns,
       item
     );
@@ -1027,7 +1093,7 @@ const buildRows = (
     ) {
       rows.push(
         buildTotalsRow(
-          buildGroupSubTotalRow(invoice, visibleColumns, groupItems),
+          buildGroupSubTotalRow(cellContext, visibleColumns, groupItems),
           "row-group-subtotal"
         )
       );
@@ -1044,7 +1110,7 @@ const buildRows = (
   if (context.showTotalsRow) {
     rows.push(
       buildTotalsRow(
-        buildSummaryRow(invoice, visibleColumns, rawItems),
+        buildSummaryRow(cellContext, visibleColumns, rawItems),
         "row-summary"
       )
     );
@@ -1188,6 +1254,7 @@ export const normalizeInvoiceTemplateState = (
           columns.filter((column) => !column.isHidden).length + 1,
         tableStretchEnabled: context.tableStretchEnabled,
         textWrapEnabled: context.textWrapEnabled,
+        usesShortSet: !context.columnsCustomised,
       },
     },
     derived: {

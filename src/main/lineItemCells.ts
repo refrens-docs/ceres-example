@@ -57,7 +57,10 @@ export interface CellContext {
   applyNumberFormatToDiscounts: boolean;
   ownerTimeZone?: string;
   showUnitInQuantity: boolean;
-  businessUnits: unknown;
+  // Built once per document from the business's overrides over the shipped
+  // list, so a unit lookup is O(1) per line rather than a fresh concat and
+  // linear scan of ~380 entries on every cell that needs one.
+  unitLabels: Map<string, string>;
   // The second-currency amount (S10) is gated on both a currency mismatch and
   // a usable rate — `rate` is null whenever either is missing, so callers
   // never have to re-derive the gate themselves.
@@ -131,21 +134,6 @@ const asRecord = (value: unknown): UnknownRecord =>
 const asArray = (value: unknown): unknown[] =>
   Array.isArray(value) ? value : [];
 
-// The unit display mode default lives here too — see invoiceTemplateNormalization's
-// own copy of this rule (S6). Kept independent rather than imported so this
-// module never depends on the layout-context shape, only on the raw payload.
-const getUnitColumnMode = (invoice: FlattenedInvoicePayload): string => {
-  const record = invoice as unknown as UnknownRecord;
-  const advanceOptions = asRecord(record.advanceOptions);
-  return toNonEmptyString(advanceOptions.unitColumn) ?? "SEPARATE_COLUMN";
-};
-
-const getBusinessUnits = (invoice: FlattenedInvoicePayload): unknown => {
-  const record = invoice as unknown as UnknownRecord;
-  const business = asRecord(record.ownerBusiness ?? record.business);
-  return asRecord(business.configuration).units;
-};
-
 // conversionRates never made it into ceres's own payload contract (it exists
 // only on the unrelated payment-table type), so it is read here by the name
 // refrens.com uses — invoice.conversionRates keyed by currency code, exactly
@@ -172,7 +160,11 @@ const getSecondCurrency = (
   };
 };
 
-const buildCellContext = (invoice: FlattenedInvoicePayload): CellContext => {
+export const buildCellContext = (
+  invoice: FlattenedInvoicePayload,
+  unitColumnMode: string,
+  unitLabels: Map<string, string>
+): CellContext => {
   const record = invoice as unknown as UnknownRecord;
 
   return {
@@ -189,8 +181,8 @@ const buildCellContext = (invoice: FlattenedInvoicePayload): CellContext => {
     roundOffRate: Boolean(invoice.roundOffRate),
     applyNumberFormatToDiscounts: Boolean(invoice.applyNumberFormatToDiscounts),
     ownerTimeZone: toNonEmptyString(record.ownerTimeZone) ?? undefined,
-    showUnitInQuantity: getUnitColumnMode(invoice) === "MERGE_QUANTITY",
-    businessUnits: getBusinessUnits(invoice),
+    showUnitInQuantity: unitColumnMode === "MERGE_QUANTITY",
+    unitLabels,
     secondCurrency: getSecondCurrency(invoice),
   };
 };
@@ -200,28 +192,44 @@ const buildCellContext = (invoice: FlattenedInvoicePayload): CellContext => {
 // underneath — a business override always wins over the shipped entry with
 // the same key. A code absent from both resolves to nothing: never the raw
 // stored code (SC34).
-export const resolveUnitLabel = (unitCode: unknown, units: unknown): string => {
+// Builds the lookup once per document: the business's own units win over the
+// shipped list, and a code the business has since deleted resolves to nothing
+// rather than printing raw (S6).
+export const buildUnitLabelMap = (units: unknown): Map<string, string> => {
+  const map = new Map<string, string>();
+
+  try {
+    [...shippedUnits, ...(Array.isArray(units) ? units : [])].forEach(
+      (entry) => {
+        if (!entry || typeof entry !== "object") {
+          return;
+        }
+
+        const { key, code } = entry as UnitDefinition;
+        if (typeof key !== "string" || key.trim().length === 0) {
+          return;
+        }
+
+        map.set(key, typeof code === "string" ? code.trim().toLowerCase() : "");
+      }
+    );
+  } catch (_) {
+    return map;
+  }
+
+  return map;
+};
+
+export const resolveUnitLabel = (
+  unitCode: unknown,
+  unitLabels: Map<string, string>
+): string => {
   try {
     if (typeof unitCode !== "string" || unitCode.trim().length === 0) {
       return "";
     }
 
-    const businessUnits = Array.isArray(units) ? units : [];
-    const merged = [...businessUnits, ...shippedUnits];
-
-    const match = merged.find(
-      (entry) =>
-        entry &&
-        typeof entry === "object" &&
-        (entry as UnitDefinition).key === unitCode
-    );
-
-    if (!match) {
-      return "";
-    }
-
-    const { code } = match as UnitDefinition;
-    return typeof code === "string" ? code.trim().toLowerCase() : "";
+    return unitLabels.get(unitCode) ?? "";
   } catch (_) {
     return "";
   }
@@ -288,7 +296,7 @@ const formatQuantity = (item: UnknownRecord, context: CellContext): string => {
     return formatted;
   }
 
-  const unitLabel = resolveUnitLabel(item.unit, context.businessUnits);
+  const unitLabel = resolveUnitLabel(item.unit, context.unitLabels);
   return unitLabel ? `${formatted} (${unitLabel})` : formatted;
 };
 
@@ -360,9 +368,10 @@ const formatDiscount = (item: UnknownRecord, context: CellContext): string => {
 // Batch data lives on the line the same way serials do (S8's own gated
 // field, `item.allocations`) — lydia reads the first allocation's batchData
 // the same way (InvoiceProps' showBatchColumns/getValue in
-// customColumns/invoiceValue.js). Only expiry and manufacturing dates print
-// as dates; every other standard batch column is free text.
-const BATCH_DATE_COLUMN_KEYS = new Set(["expiryDate", "manufacturingDate"]);
+// customColumns/invoiceValue.js). Which batch columns are dates is decided
+// once, where the columns are built (invoiceTemplateNormalization's
+// injectBatchColumns sets dataType), so this reads the type off the column
+// rather than keeping a second copy of the key list.
 
 const getBatchData = (item: UnknownRecord): UnknownRecord => {
   const allocations = asArray(item.allocations).map((entry) => asRecord(entry));
@@ -380,7 +389,7 @@ const formatBatchColumn = (
     return "";
   }
 
-  return BATCH_DATE_COLUMN_KEYS.has(column.key)
+  return column.dataType === "date"
     ? formatShortDate(raw, context)
     : toStringValue(raw);
 };
@@ -461,7 +470,7 @@ const formatByKind = (
     case "unit":
       // Never the raw stored code — a code the business has since deleted
       // must resolve to an empty cell, not leak the identifier (SC34).
-      return resolveUnitLabel(item.unit, context.businessUnits);
+      return resolveUnitLabel(item.unit, context.unitLabels);
     default:
       if (UNFORMATTED_SYSTEM_COLUMN_KEYS.has(column.key)) {
         return toStringValue(item[column.key]);
@@ -516,18 +525,22 @@ const resolveSecondaryAmountText = (
   }
 };
 
+// The item/name column carries the row's own label ("Total"/"Sub total")
+// rather than a sum.
+const LABEL_COLUMN_KEYS = new Set(["name", "item"]);
+
 export const buildRowCells = (
-  invoice: FlattenedInvoicePayload,
+  context: CellContext,
   columns: InvoiceTemplateColumn[],
   item: UnknownRecord
 ): InvoiceTemplateCell[] => {
-  const context = buildCellContext(invoice);
   return columns.map((column) => {
     const cell: InvoiceTemplateCell = {
       key: column.key,
       text: formatCellValue(column, item, context),
       className: column.className,
       label: column.label,
+      isItemCell: LABEL_COLUMN_KEYS.has(column.key),
     };
 
     if (column.key === "amount") {
@@ -565,10 +578,6 @@ const NEVER_TOTAL_KEYS = new Set([
 // quantity, amount, line subtotal (subTotal) and the document total (total)
 // are always summed when the row is configured to show one at all (S11).
 const ALWAYS_TOTAL_KEYS = new Set(["quantity", "amount", "subTotal", "total"]);
-
-// The item/name column carries the row's own label ("Total"/"Sub total")
-// rather than a sum.
-const LABEL_COLUMN_KEYS = new Set(["name", "item"]);
 
 const isAdditionalChargeRow = (row: UnknownRecord): boolean =>
   Boolean(row.isAdditionalCharge);
@@ -624,13 +633,11 @@ const isSummableBusinessColumn = (column: InvoiceTemplateColumn): boolean =>
   column.summarise === true;
 
 const buildTotalsCells = (
-  invoice: FlattenedInvoicePayload,
+  context: CellContext,
   columns: InvoiceTemplateColumn[],
   rows: UnknownRecord[],
   label: string
 ): InvoiceTemplateCell[] => {
-  const context = buildCellContext(invoice);
-
   return columns.map((column) => {
     let text = "";
 
@@ -660,6 +667,8 @@ const buildTotalsCells = (
       text,
       className: column.className,
       label: column.label,
+      // A totals row prints its own label and sums; it never carries an item.
+      isItemCell: false,
     };
   });
 };
@@ -669,16 +678,16 @@ const buildTotalsCells = (
 // blank; totals a business column only when it opted in and holds numbers
 // throughout. Additional-charge lines are excluded from every total.
 export const buildSummaryRow = (
-  invoice: FlattenedInvoicePayload,
+  context: CellContext,
   columns: InvoiceTemplateColumn[],
   rows: UnknownRecord[]
-): InvoiceTemplateCell[] => buildTotalsCells(invoice, columns, rows, "Total");
+): InvoiceTemplateCell[] => buildTotalsCells(context, columns, rows, "Total");
 
 // A group's sub-total row (S11): the same totalling rules as the document
 // summary, scoped to the one group's own lines.
 export const buildGroupSubTotalRow = (
-  invoice: FlattenedInvoicePayload,
+  context: CellContext,
   columns: InvoiceTemplateColumn[],
   rows: UnknownRecord[]
 ): InvoiceTemplateCell[] =>
-  buildTotalsCells(invoice, columns, rows, "Sub total");
+  buildTotalsCells(context, columns, rows, "Sub total");
