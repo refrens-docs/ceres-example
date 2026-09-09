@@ -162,12 +162,20 @@ export interface InvoiceData {
   supplyType?: string;
   taxType?: string;
   taxName?: string;
+  // Inter-state sale and union-territory flags. These are the real document fields —
+  // lydia writes `igst: !!totalIgst` (src/helpers/getInvoiceDataFromEntry.js), serana
+  // projects `igst` (src/lib/app-invoice-response.js), and both balance.js and serana's
+  // report class rename them locally (`igst: igstTax`, `utgst: enableUtgst`). They are
+  // booleans, not amounts: the tax figures live on `finalTotal`.
+  igst?: boolean;
+  utgst?: boolean;
+  // DEPRECATED. No producer has ever sent these; they were ceres's own invention and
+  // reading them meant the inter-state flag was always undefined. Kept as a fallback for
+  // a host built against the older contract. Remove once none send them.
   isIgst?: boolean;
   isUtgst?: boolean;
-  igst?: number;
   cgst?: number;
   sgst?: number;
-  utgst?: number;
   irn?: IrnDetails;
   notes?: string;
   terms?: Array<{ label: string; terms: string[] }>;

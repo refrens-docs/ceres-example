@@ -16,12 +16,26 @@
  * already see on 14 templates:
  *
  *   - Tax rows exist only on a tax document (`invoiceType === "INVOICE"`).
- *   - A domestic Indian sale (`!isIgst && taxType === "INDIA"`) shows CGST + SGST;
- *     everything else shows IGST. There is no third state and no "neither".
+ *   - A CGST + SGST split happens only on a domestic Indian *GST* sale: the document is
+ *     not inter-state, `taxType === "INDIA"`, and `taxName` is GST. Everything else —
+ *     inter-state, a non-India tax type, or an Indian document whose tax is VAT/SST/
+ *     anything but GST — shows the single combined row instead. That last term is what
+ *     `getAggregateTaxTotals(items, key, igstTax || taxName !== 'GST')` encodes on
+ *     refrens.com (lydia/src/helpers/taxAggregateSummary.js); without it a VAT invoice
+ *     prints CGST and SGST rows, which is what QA reported on REF-25603.
  *   - `hideTaxes` suppresses the rows.
  *   - An export without payment of tax (`supplyType === "EXPWOP"`) suppresses a tax row
  *     whose figure is also zero. A non-zero figure still renders — this is the only place
  *     an amount participates in the decision.
+ *
+ * The inter-state flag is `invoice.igst`, a boolean, NOT `invoice.isIgst`. Nothing writes
+ * `isIgst` onto a document: lydia sets `igst: !!totalIgst`
+ * (src/helpers/getInvoiceDataFromEntry.js), serana projects `igst`
+ * (src/lib/app-invoice-response.js) and both balance.js and serana's report class rename it
+ * locally (`igst: igstTax`, `igst: isIgst`). Reading `isIgst` meant the flag was always
+ * undefined, so every inter-state invoice rendered a zero CGST and a zero SGST row and
+ * dropped its IGST row entirely. `isIgst` stays as a fallback only for a host that was
+ * built against the older ceres contract.
  *
  * Note what is deliberately absent: the row is NOT gated on the figure being non-zero. A
  * domestic tax invoice with a genuine zero CGST shows a zero CGST row, because the reader
@@ -37,9 +51,12 @@ import { asFlag, asText, toAmount } from "./payloadValues";
 export interface TaxVisibilityInput {
   invoiceType?: unknown;
   taxType?: unknown;
-  isIgst?: unknown;
+  /* The document's inter-state flag — `invoice.igst`, with `invoice.isIgst` as fallback. */
+  isInterState?: unknown;
+  taxName?: unknown;
   supplyType?: unknown;
   hideTaxes?: unknown;
+  /* Amounts off `finalTotal`, used only by the export-without-payment suppression. */
   cgst?: unknown;
   sgst?: unknown;
   igst?: unknown;
@@ -57,7 +74,8 @@ export interface TaxVisibilityOptions {
 
 export interface TaxVisibility {
   isTaxDocument: boolean;
-  isDomesticIndia: boolean;
+  /* A domestic Indian GST sale — the only shape that splits its tax into CGST + SGST. */
+  isSplitTaxSale: boolean;
   showCgstSgst: boolean;
   showIgst: boolean;
 }
@@ -67,13 +85,17 @@ export const resolveTaxVisibility = (
   options: TaxVisibilityOptions = {}
 ): TaxVisibility => {
   const isTaxDocument = asText(input.invoiceType) === "INVOICE";
-  const isDomesticIndia =
-    !asFlag(input.isIgst) && asText(input.taxType) === "INDIA";
+  /* Absent taxName means GST, matching balance.js's `taxName = 'GST'` default. */
+  const taxName = asText(input.taxName) || "GST";
+  const isSplitTaxSale =
+    !asFlag(input.isInterState) &&
+    asText(input.taxType) === "INDIA" &&
+    taxName === "GST";
 
   if (!isTaxDocument) {
     return {
       isTaxDocument,
-      isDomesticIndia,
+      isSplitTaxSale,
       showCgstSgst: false,
       showIgst: false,
     };
@@ -82,16 +104,16 @@ export const resolveTaxVisibility = (
   if (!options.applySuppressions) {
     return {
       isTaxDocument,
-      isDomesticIndia,
-      showCgstSgst: isDomesticIndia,
-      showIgst: !isDomesticIndia,
+      isSplitTaxSale,
+      showCgstSgst: isSplitTaxSale,
+      showIgst: !isSplitTaxSale,
     };
   }
 
   if (asFlag(input.hideTaxes)) {
     return {
       isTaxDocument,
-      isDomesticIndia,
+      isSplitTaxSale,
       showCgstSgst: false,
       showIgst: false,
     };
@@ -99,12 +121,12 @@ export const resolveTaxVisibility = (
 
   const isExportWithoutPayment = asText(input.supplyType) === "EXPWOP";
 
-  if (isDomesticIndia) {
+  if (isSplitTaxSale) {
     const emptyExport =
       isExportWithoutPayment && !toAmount(input.cgst) && !toAmount(input.sgst);
     return {
       isTaxDocument,
-      isDomesticIndia,
+      isSplitTaxSale,
       showCgstSgst: !emptyExport,
       showIgst: false,
     };
@@ -113,7 +135,7 @@ export const resolveTaxVisibility = (
   const emptyExport = isExportWithoutPayment && !toAmount(input.igst);
   return {
     isTaxDocument,
-    isDomesticIndia,
+    isSplitTaxSale,
     showCgstSgst: false,
     showIgst: !emptyExport,
   };

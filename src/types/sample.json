@@ -200,8 +200,8 @@
     "discount": 5000,
     "cgst": 11250,
     "sgst": 11250,
-    "igst": 0,
-    "utgst": 0,
+    "igst": false,
+    "utgst": false,
     "finalTotal": {
       "total": 147500,
       "amount": 125000,

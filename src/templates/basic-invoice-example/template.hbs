@@ -237,11 +237,11 @@
   {{/if}}
 
   <div data-ceres-tax-summary{{#unless (taxTableVisible advanceOptions.taxSummaryView)}} style="display:none"{{/unless}}>
-  {{> TaxSummaryTable (computeTaxSummary items isIgst=isIgst isUtgst=isUtgst) }}
+  {{> TaxSummaryTable (computeTaxSummary items isIgst=igst isUtgst=utgst) }}
   </div>
 
   <div data-ceres-hsn-summary{{#unless advanceOptions.showHSNSummaryInInvoice}} style="display:none"{{/unless}}>
-  {{> HsnSummaryTable (computeHsnSummary items isIgst=isIgst isUtgst=isUtgst) }}
+  {{> HsnSummaryTable (computeHsnSummary items isIgst=igst isUtgst=utgst) }}
   </div>
 
   <div data-ceres-payment-table{{#if (eq advanceOptions.showPaymentsTable false)}} style="display:none"{{/if}}>

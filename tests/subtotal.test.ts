@@ -174,10 +174,37 @@ describe("computeSubtotalRows", () => {
       expect(row(model, "sgst")?.value).toBe("₹0");
     });
 
-    it("shows IGST instead of CGST/SGST on an interstate sale", () => {
+    it("reads the interstate flag from `igst`, the real document field", () => {
+      // Nothing writes `isIgst` onto a document — lydia sets `igst: !!totalIgst`. Reading
+      // the wrong name meant every interstate invoice printed a zero CGST and a zero SGST
+      // row and dropped its IGST row (REF-25603 QA).
+      const model = compute({
+        isIgst: undefined,
+        igst: true,
+        finalTotal: {
+          ...baseInvoice().finalTotal,
+          cgst: 0,
+          sgst: 0,
+          igst: 180,
+        },
+      });
+      expect(keys(model)).toContain("igst");
+      expect(keys(model)).not.toContain("cgst");
+      expect(row(model, "igst")?.value).toBe("₹180");
+    });
+
+    it("still honours the deprecated isIgst from an older host", () => {
       const model = compute({ isIgst: true });
       expect(keys(model)).toContain("igst");
       expect(keys(model)).not.toContain("cgst");
+    });
+
+    it("shows one combined row when an Indian document's tax is not GST", () => {
+      // A VAT invoice must not split into CGST and SGST.
+      const model = compute({ taxName: "VAT" });
+      expect(keys(model)).toContain("igst");
+      expect(keys(model)).not.toContain("cgst");
+      expect(keys(model)).not.toContain("sgst");
     });
 
     it("shows IGST for a non-India tax type", () => {
@@ -208,8 +235,9 @@ describe("computeSubtotalRows", () => {
     });
 
     it("labels the SGST row UTGST for a union territory sale", () => {
-      const model = compute({ isUtgst: true });
-      expect(row(model, "sgst")?.label).toBe("UTGST");
+      // `utgst` is the document field; balance.js destructures `utgst: enableUtgst`.
+      expect(row(compute({ utgst: true }), "sgst")?.label).toBe("UTGST");
+      expect(row(compute({ isUtgst: true }), "sgst")?.label).toBe("UTGST");
     });
   });
 
@@ -441,6 +469,21 @@ describe("computeSubtotalRows", () => {
       expect(keys(model)).toContain("cgst:18");
       expect(keys(model)).toContain("cgst:5");
       expect(keys(model)).toContain("sgst:18");
+    });
+
+    it("prints half the item rate on each split row", () => {
+      // An 18% item is CGST 9% + SGST 9%. refrens.com halves it inside
+      // getAggregateTaxTotals; the row's `gstRate` is the undivided grouping key.
+      const model = compute({
+        advanceOptions: { taxSummaryView: "BOTH" },
+        items: [
+          { _id: "a", total: 1000, gstRate: 18, cgst: 90, sgst: 90 },
+          { _id: "b", total: 500, gstRate: 5, cgst: 12.5, sgst: 12.5 },
+        ],
+      });
+      expect(row(model, "cgst:18")?.label).toBe("CGST (9%)");
+      expect(row(model, "sgst:18")?.label).toBe("SGST (9%)");
+      expect(row(model, "cgst:5")?.label).toBe("CGST (2.5%)");
     });
 
     it("falls back to the flat tax row when no item carries a rate", () => {
@@ -805,7 +848,7 @@ describe("resolveTaxVisibility", () => {
   const doc = {
     invoiceType: "INVOICE",
     taxType: "INDIA",
-    isIgst: false,
+    isInterState: false,
   };
 
   it("returns neither family on a non-tax document", () => {
@@ -825,9 +868,28 @@ describe("resolveTaxVisibility", () => {
   });
 
   it("picks IGST for an interstate sale", () => {
-    expect(resolveTaxVisibility({ ...doc, isIgst: true })).toMatchObject({
+    expect(resolveTaxVisibility({ ...doc, isInterState: true })).toMatchObject({
       showCgstSgst: false,
       showIgst: true,
+    });
+  });
+
+  it("picks IGST for an Indian document whose tax is not GST", () => {
+    // The complaint on REF-25603: a VAT invoice printed CGST and SGST rows. Only a GST
+    // sale splits, which is the `taxName !== 'GST'` term in refrens.com's
+    // getAggregateTaxTotals call.
+    ["VAT", "SST", "SALES_TAX"].forEach((taxName) => {
+      expect(resolveTaxVisibility({ ...doc, taxName })).toMatchObject({
+        showCgstSgst: false,
+        showIgst: true,
+      });
+    });
+  });
+
+  it("treats an absent taxName as GST", () => {
+    expect(resolveTaxVisibility({ ...doc, taxName: undefined })).toMatchObject({
+      showCgstSgst: true,
+      showIgst: false,
     });
   });
 
@@ -863,12 +925,14 @@ describe("resolveTaxVisibility", () => {
         .showCgstSgst
     ).toBe(true);
     expect(
-      resolveTaxVisibility({ ...doc, isIgst: true, supplyType: "EXPWOP" }, opts)
-        .showIgst
+      resolveTaxVisibility(
+        { ...doc, isInterState: true, supplyType: "EXPWOP" },
+        opts
+      ).showIgst
     ).toBe(false);
     expect(
       resolveTaxVisibility(
-        { ...doc, isIgst: true, supplyType: "EXPWOP", igst: 180 },
+        { ...doc, isInterState: true, supplyType: "EXPWOP", igst: 180 },
         opts
       ).showIgst
     ).toBe(true);
@@ -905,7 +969,9 @@ describe("normalizeInvoiceTemplateState tax visibility", () => {
      * while the headers came from mapped.columns.
      */
     [
-      { invoiceType: "INVOICE", taxType: "INDIA", isIgst: false },
+      { invoiceType: "INVOICE", taxType: "INDIA", igst: false },
+      { invoiceType: "INVOICE", taxType: "INDIA", igst: true },
+      { invoiceType: "INVOICE", taxType: "INDIA", taxName: "VAT" },
       { invoiceType: "INVOICE", taxType: "INDIA", isIgst: true },
       { invoiceType: "INVOICE", taxType: "GLOBAL" },
       { invoiceType: "INVOICE", taxType: "MALAYSIA" },
@@ -929,10 +995,20 @@ describe("normalizeInvoiceTemplateState tax visibility", () => {
     expect(state.mapped.visibility.showIgst).toBe(false);
   });
 
-  it("ignores taxName, which used to drive the decision", () => {
-    // A GLOBAL document whose taxName happens to be GST is still an IGST document.
-    const state = build({ taxType: "GLOBAL", taxName: "GST" });
-    expect(state.mapped.visibility.showIgst).toBe(true);
-    expect(state.mapped.visibility.showCgstSgst).toBe(false);
+  it("splits only for GST, and only on an India tax type", () => {
+    // A GLOBAL document whose taxName happens to be GST is still a single-row document,
+    // and an India document whose taxName is VAT is too — the item table must not draw
+    // CGST and SGST columns for it.
+    const global = build({ taxType: "GLOBAL", taxName: "GST" });
+    expect(global.mapped.visibility.showIgst).toBe(true);
+    expect(global.mapped.visibility.showCgstSgst).toBe(false);
+
+    const vat = build({ taxType: "INDIA", taxName: "VAT" });
+    expect(vat.mapped.visibility.showIgst).toBe(true);
+    expect(vat.mapped.visibility.showCgstSgst).toBe(false);
+
+    const gst = build({ taxType: "INDIA", taxName: "GST" });
+    expect(gst.mapped.visibility.showCgstSgst).toBe(true);
+    expect(gst.mapped.visibility.showIgst).toBe(false);
   });
 });

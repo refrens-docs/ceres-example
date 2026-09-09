@@ -360,7 +360,8 @@ export const computeSubtotalRows = (
   const billType = asText(invoice.billType);
   const invoiceType = asText(invoice.invoiceType);
   const isExpenditure = asFlag(invoice.isExpenditure);
-  const isUtgst = asFlag(invoice.isUtgst);
+  /* `utgst` is the document field (balance.js destructures `utgst: enableUtgst`). */
+  const isUtgst = asFlag(pickFirst(invoice.utgst, invoice.isUtgst));
   const reverseCharge = asFlag(
     pickFirst(invoice.reverseCharge, advanceOptions.reverseCharge)
   );
@@ -428,7 +429,8 @@ export const computeSubtotalRows = (
     {
       invoiceType,
       taxType: invoice.taxType,
-      isIgst: invoice.isIgst,
+      isInterState: pickFirst(invoice.igst, invoice.isIgst),
+      taxName: invoice.taxName,
       supplyType: invoice.supplyType,
       cgst: finalTotal.cgst,
       sgst: finalTotal.sgst,
@@ -588,13 +590,20 @@ export const computeSubtotalRows = (
     const rows = summary.taxList;
 
     if (taxVisibility.showCgstSgst) {
+      /*
+       * The rate printed on a split row is half the item's GST rate — an 18% item shows
+       * "CGST (9%)" and "SGST (9%)". computeTaxSummary already halves it onto
+       * `cgstRate`/`sgstRate`; `gstRate` is the undivided rate and only groups the rows.
+       * refrens.com does the same halving inside getAggregateTaxTotals
+       * (lydia/src/helpers/taxAggregateSummary.js).
+       */
       if (rows.length) {
         rows.forEach((row) =>
           main.push(
             makeRow(
               {
                 key: `cgst:${row.gstRate}`,
-                label: `${cgstLabel()} (${row.gstRate}%)`,
+                label: `${cgstLabel()} (${row.cgstRate}%)`,
                 amount: row.cgstAmount,
                 isTaxRow: true,
               },
@@ -607,7 +616,7 @@ export const computeSubtotalRows = (
             makeRow(
               {
                 key: `sgst:${row.gstRate}`,
-                label: `${sgstLabel()} (${row.gstRate}%)`,
+                label: `${sgstLabel()} (${row.sgstRate}%)`,
                 amount: row.sgstAmount,
                 isTaxRow: true,
               },

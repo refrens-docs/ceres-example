@@ -294,7 +294,6 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
   const invoiceType = toStringValue(invoice.invoiceType);
   const taxType = toStringValue(invoice.taxType);
   const isTaxInvoice = invoiceType === "INVOICE";
-  const igstTax = Boolean(invoice.isIgst);
   const discountEnabled = Boolean(
     toNumberValue(
       pickFirstValue(finalTotal.discount, finalTotal.totalDiscount),
@@ -348,7 +347,10 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
   const taxVisibility = resolveTaxVisibility({
     invoiceType,
     taxType,
-    isIgst: invoice.isIgst,
+    // `igst` is the document's inter-state boolean; `isIgst` never existed on a real
+    // document and stays only as a fallback for a host on the older ceres contract.
+    isInterState: pickFirstValue(invoice.igst, invoice.isIgst),
+    taxName: invoice.taxName,
   });
 
   return {
@@ -356,7 +358,6 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
     pdfOptions,
     advanceOptions,
     isTaxInvoice,
-    igstTax,
     discountEnabled,
     taxType,
     showHsnColumn,
@@ -519,7 +520,7 @@ export const normalizeInvoiceTemplateState = (
         contactStrip: hasValue(contact.email) || hasValue(contact.phone),
         showIgst,
         showCgstSgst,
-        isUtgst: Boolean(invoice.isUtgst),
+        isUtgst: Boolean(pickFirstValue(invoice.utgst, invoice.isUtgst)),
         showTaxTable,
         showHsnSummary,
         showSummaryCess,
