@@ -1,6 +1,10 @@
 import { computeSubtotalRows } from "../src/widgets/subtotal/utils";
 import type { SubtotalModel } from "../src/widgets/subtotal/utils";
-import { resolveTaxVisibility } from "../src/widgets/shared/taxVisibility";
+import {
+  resolveTaxVisibility,
+  resolveDocumentTaxVisibility,
+} from "../src/widgets/shared/taxVisibility";
+import { resolveDocumentTaxLabel } from "../src/widgets/shared/taxRowLabels";
 import { normalizeInvoiceTemplateState } from "../src/main/invoiceTemplateNormalization";
 import type { NormalizedInvoiceTemplateState } from "../src/main/invoiceTemplateNormalization";
 
@@ -205,6 +209,28 @@ describe("computeSubtotalRows", () => {
       expect(keys(model)).toContain("igst");
       expect(keys(model)).not.toContain("cgst");
       expect(keys(model)).not.toContain("sgst");
+    });
+
+    it("names the combined row after the document's tax, not IGST", () => {
+      // fence's countyTaxName maps ID to PPN and MY to SST. serana relabels the `igst`
+      // column to the taxName on a GLOBAL tax type, so that label wins; when the column
+      // is archived the taxName is still the right word, and "IGST" never is.
+      const withColumn = compute({
+        taxType: "GLOBAL",
+        taxName: "PPN",
+        columns: [{ key: "igst", label: "PPN" }],
+      });
+      expect(row(withColumn, "igst")?.label).toBe("PPN");
+
+      const withoutColumn = compute({
+        taxType: "GLOBAL",
+        taxName: "PPN",
+        columns: [],
+      });
+      expect(row(withoutColumn, "igst")?.label).toBe("PPN");
+
+      const indianGst = compute({ isIgst: true, columns: [] });
+      expect(row(indianGst, "igst")?.label).toBe("IGST");
     });
 
     it("shows IGST for a non-India tax type", () => {
@@ -948,6 +974,50 @@ describe("resolveTaxVisibility", () => {
   });
 });
 
+describe("resolveDocumentTaxVisibility", () => {
+  const doc = {
+    invoiceType: "INVOICE",
+    taxType: "INDIA",
+    taxName: "GST",
+    igst: false,
+    finalTotal: { cgst: 90, sgst: 90, igst: 0 },
+  };
+
+  it("reads either template root shape", () => {
+    // The root is whatever the template's data mapper returns; both are live.
+    expect(resolveDocumentTaxVisibility(doc).showCgstSgst).toBe(true);
+    expect(resolveDocumentTaxVisibility({ invoice: doc }).showCgstSgst).toBe(
+      true
+    );
+  });
+
+  it("gives the summary tables one combined column for a non-GST document", () => {
+    // What the tables used to get was the raw inter-state flag, false here, so an
+    // Indonesian PPN or Malaysian SST invoice drew CGST and SGST columns.
+    [
+      { taxType: "GLOBAL", taxName: "PPN" },
+      { taxType: "GLOBAL", taxName: "SST" },
+      { taxType: "INDIA", taxName: "VAT" },
+    ].forEach((over) => {
+      const v = resolveDocumentTaxVisibility({ ...doc, ...over });
+      expect(v.showIgst).toBe(true);
+      expect(v.showCgstSgst).toBe(false);
+    });
+  });
+
+  it("ignores hideTaxes so the host's live toggle stays a CSS concern", () => {
+    const v = resolveDocumentTaxVisibility(
+      { ...doc, hideTaxes: true },
+      { applySuppressions: true }
+    );
+    expect(v.showCgstSgst).toBe(true);
+  });
+
+  it("returns nothing renderable for a non-record payload", () => {
+    expect(resolveDocumentTaxVisibility(undefined).isTaxDocument).toBe(false);
+  });
+});
+
 describe("normalizeInvoiceTemplateState tax visibility", () => {
   const build = (over: Record<string, unknown>) =>
     normalizeInvoiceTemplateState({
@@ -1010,5 +1080,46 @@ describe("normalizeInvoiceTemplateState tax visibility", () => {
     const gst = build({ taxType: "INDIA", taxName: "GST" });
     expect(gst.mapped.visibility.showCgstSgst).toBe(true);
     expect(gst.mapped.visibility.showIgst).toBe(false);
+  });
+});
+
+describe("resolveDocumentTaxLabel", () => {
+  it("prefers the document's own column label", () => {
+    const label = resolveDocumentTaxLabel(
+      {
+        taxType: "GLOBAL",
+        taxName: "PPN",
+        columns: [{ key: "igst", label: "PPN 11%" }],
+      },
+      "igst"
+    );
+    expect(label).toBe("PPN 11%");
+  });
+
+  it("falls back to the taxName, never to IGST, on a non-GST document", () => {
+    expect(resolveDocumentTaxLabel({ taxName: "PPN" }, "igst")).toBe("PPN");
+    expect(resolveDocumentTaxLabel({ taxName: "SST" }, "igst")).toBe("SST");
+    expect(resolveDocumentTaxLabel({ taxName: "GST" }, "igst")).toBe("IGST");
+    expect(resolveDocumentTaxLabel({}, "igst")).toBe("IGST");
+  });
+
+  it("keeps UTGST ahead of a saved SGST column label", () => {
+    const doc = { utgst: true, columns: [{ key: "sgst", label: "SGST" }] };
+    expect(resolveDocumentTaxLabel(doc, "sgst")).toBe("UTGST");
+  });
+
+  it("lets a business's custom label win", () => {
+    const doc = {
+      customLabels: { cgst: "Central Tax" },
+      columns: [{ key: "cgst", label: "CGST" }],
+    };
+    expect(resolveDocumentTaxLabel(doc, "cgst")).toBe("Central Tax");
+  });
+
+  it("reads the wrapped root shape and refuses a key it does not own", () => {
+    expect(
+      resolveDocumentTaxLabel({ invoice: { taxName: "PPN" } }, "igst")
+    ).toBe("PPN");
+    expect(resolveDocumentTaxLabel({ taxName: "PPN" }, "total")).toBe("");
   });
 });

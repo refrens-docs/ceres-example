@@ -46,7 +46,8 @@
  * are separate webpack bundles.
  */
 
-import { asFlag, asText, toAmount } from "./payloadValues";
+import { asFlag, asText, isRecord, toAmount } from "./payloadValues";
+import type { UnknownRecord } from "./payloadValues";
 
 export interface TaxVisibilityInput {
   invoiceType?: unknown;
@@ -139,6 +140,57 @@ export const resolveTaxVisibility = (
     showCgstSgst: false,
     showIgst: !emptyExport,
   };
+};
+
+/*
+ * The same decision, taken straight from a document instead of from named inputs.
+ *
+ * A template's root context is whatever its data mapper returns — either the wrapped
+ * `{ invoice, mapped, ... }` shape or the flat payload — so this unwraps both, exactly as
+ * computeSubtotalRows does. Use it anywhere a caller has the document but not the fields:
+ * the tax-summary and HSN-summary tables need the same answer as the totals rows, and
+ * feeding them the raw inter-state flag instead would draw CGST and SGST columns on a
+ * Malaysian SST or an Indonesian PPN document, whose tax is a single combined figure.
+ */
+export const resolveDocumentTaxVisibility = (
+  payload: unknown,
+  options: TaxVisibilityOptions = {}
+): TaxVisibility => {
+  const record = isRecord(payload) ? payload : {};
+  const invoice = isRecord(record.invoice)
+    ? (record.invoice as UnknownRecord)
+    : (record as UnknownRecord);
+  const finalTotal = isRecord(invoice.finalTotal)
+    ? (invoice.finalTotal as UnknownRecord)
+    : {};
+
+  return resolveTaxVisibility(
+    {
+      invoiceType: invoice.invoiceType,
+      taxType: invoice.taxType,
+      isInterState: invoice.igst === undefined ? invoice.isIgst : invoice.igst,
+      taxName: invoice.taxName,
+      supplyType: invoice.supplyType,
+      /*
+       * `hideTaxes` is deliberately not passed. It is a display setting the host toggles
+       * live, so every consumer keeps its tax markup in the DOM and hides it with CSS —
+       * computing it away here would make the toggle a no-op until the next render.
+       */
+      cgst: finalTotal.cgst,
+      sgst: finalTotal.sgst,
+      igst: finalTotal.igst,
+    },
+    options
+  );
+};
+
+/* `utgst` is the document field; `isUtgst` is the deprecated ceres-only name. */
+export const resolveDocumentUtgst = (payload: unknown): boolean => {
+  const record = isRecord(payload) ? payload : {};
+  const invoice = isRecord(record.invoice)
+    ? (record.invoice as UnknownRecord)
+    : (record as UnknownRecord);
+  return asFlag(invoice.utgst === undefined ? invoice.isUtgst : invoice.utgst);
 };
 
 export default resolveTaxVisibility;

@@ -29,7 +29,8 @@ import {
   toAmount,
 } from "../shared/payloadValues";
 import type { UnknownRecord } from "../shared/payloadValues";
-import { resolveTaxVisibility } from "../shared/taxVisibility";
+import { resolveDocumentTaxVisibility } from "../shared/taxVisibility";
+import { resolveTaxLabel } from "../shared/taxRowLabels";
 import { computeTaxSummary } from "../tax-summary/utils";
 
 export type RowEmphasis = "normal" | "grand" | "due";
@@ -358,7 +359,6 @@ export const computeSubtotalRows = (
   const latePaymentFee = asRecord(invoice.latePaymentFee);
 
   const billType = asText(invoice.billType);
-  const invoiceType = asText(invoice.invoiceType);
   const isExpenditure = asFlag(invoice.isExpenditure);
   /* `utgst` is the document field (balance.js destructures `utgst: enableUtgst`). */
   const isUtgst = asFlag(pickFirst(invoice.utgst, invoice.isUtgst));
@@ -425,19 +425,9 @@ export const computeSubtotalRows = (
    * The export-without-payment suppression IS applied, because that is a property of the
    * document rather than a user toggle.
    */
-  const taxVisibility = resolveTaxVisibility(
-    {
-      invoiceType,
-      taxType: invoice.taxType,
-      isInterState: pickFirst(invoice.igst, invoice.isIgst),
-      taxName: invoice.taxName,
-      supplyType: invoice.supplyType,
-      cgst: finalTotal.cgst,
-      sgst: finalTotal.sgst,
-      igst: finalTotal.igst,
-    },
-    { applySuppressions: true }
-  );
+  const taxVisibility = resolveDocumentTaxVisibility(invoice, {
+    applySuppressions: true,
+  });
 
   const main: SubtotalRow[] = [];
 
@@ -518,9 +508,20 @@ export const computeSubtotalRows = (
       ctx
     );
 
-  const cgstLabel = (): string => label("cgst");
-  const sgstLabel = (): string =>
-    isUtgst ? DEFAULT_LABELS.utgst : label("sgst");
+  /*
+   * The three tax words are decided in widgets/shared/taxRowLabels, which the summary
+   * tables also use, so a document can never be told its tax is IGST in one place and PPN
+   * in another. `columns` is passed resolved, because a host may override the document's.
+   */
+  const taxLabelSources = {
+    customLabels,
+    columns: pickFirst(options.columns, invoice.columns),
+    taxName,
+    isUtgst,
+  };
+  const cgstLabel = (): string => resolveTaxLabel("cgst", taxLabelSources);
+  const sgstLabel = (): string => resolveTaxLabel("sgst", taxLabelSources);
+  const igstLabel = (): string => resolveTaxLabel("igst", taxLabelSources);
 
   /* 5-9. Flat tax rows: the taxable Amount, the tax family, then any applied cess. */
   if (taxVisibility.isTaxDocument && !aggView) {
@@ -554,7 +555,7 @@ export const computeSubtotalRows = (
         makeRow(
           {
             key: "igst",
-            label: label("igst"),
+            label: igstLabel(),
             amount: toAmount(finalTotal.igst),
             isTaxRow: true,
           },
@@ -657,7 +658,7 @@ export const computeSubtotalRows = (
             makeRow(
               {
                 key: `igst:${row.gstRate}`,
-                label: `${label("igst")} (${row.gstRate}%)`,
+                label: `${igstLabel()} (${row.igstRate}%)`,
                 amount: row.igstAmount,
                 isTaxRow: true,
               },
@@ -670,7 +671,7 @@ export const computeSubtotalRows = (
           makeRow(
             {
               key: "igst",
-              label: label("igst"),
+              label: igstLabel(),
               amount: toAmount(finalTotal.igst),
               isTaxRow: true,
             },

@@ -5,6 +5,7 @@ import template from "../src/templates/default-template/template.hbs";
 import subtotalPartial from "../src/widgets/subtotal/Subtotal.hbs";
 import { computeSubtotalRows } from "../src/widgets/subtotal/utils";
 import registerFormatCurrencyHelper from "../src/widgets/shared/registerFormatCurrencyHelper";
+import registerTaxFlagHelpers from "../src/widgets/shared/registerTaxFlagHelpers";
 
 beforeAll(() => {
   HandlebarsRuntime.registerPartial("DemoBadge", () => "");
@@ -45,6 +46,7 @@ beforeAll(() => {
       })
   );
   registerFormatCurrencyHelper(HandlebarsRuntime);
+  registerTaxFlagHelpers(HandlebarsRuntime);
 });
 
 describe("default-template", () => {

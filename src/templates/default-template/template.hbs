@@ -177,8 +177,8 @@
           <th class="text-right">QTY</th>
           <th class="text-right">Rate</th>
           <th class="text-right">Amount</th>
-          {{#if mapped.visibility.showIgst}}<th class="text-right">IGST</th>{{/if}}
-          {{#if mapped.visibility.showCgstSgst}}<th class="text-right">CGST</th><th class="text-right">SGST</th>{{/if}}
+          {{#if mapped.visibility.showIgst}}<th class="text-right">{{taxLabel @root "igst"}}</th>{{/if}}
+          {{#if mapped.visibility.showCgstSgst}}<th class="text-right">{{taxLabel @root "cgst"}}</th><th class="text-right">{{taxLabel @root "sgst"}}</th>{{/if}}
           <th class="text-right">Total</th>
         </tr>
       </thead>

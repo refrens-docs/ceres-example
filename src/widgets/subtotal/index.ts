@@ -3,6 +3,7 @@
 import subtotalTemplate from "./Subtotal.hbs";
 import "./styles.css";
 import { computeSubtotalRows } from "./utils";
+import registerTaxFlagHelpers from "../shared/registerTaxFlagHelpers";
 
 /*
  * Registration only. Every decision lives in ./utils so a test can reach it without a DOM —
@@ -42,6 +43,13 @@ function register(): void {
       });
     }
   );
+
+  /*
+   * Registered here as well as in the summary widgets: every template with totals imports
+   * this one, and a template that names its tax columns must not have to import a table
+   * widget it does not render just to get the helper.
+   */
+  registerTaxFlagHelpers(HB);
 
   HB.registerPartial("Subtotal", subtotalTemplate);
 
