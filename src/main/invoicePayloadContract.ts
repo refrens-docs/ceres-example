@@ -66,6 +66,16 @@ export interface InvoiceAdvanceOptions {
   itemNameFullWidth?: boolean;
   isDescriptionFullWidth?: boolean;
   hideCountryOfSupply?: boolean;
+  showHSNSummaryInInvoice?: boolean;
+  // The Lydia live-update bridge emits this alias instead of showHSNSummaryInInvoice;
+  // declared so bridge deltas stay within the contract until the host sends the
+  // canonical key.
+  showHsnSummary?: boolean;
+  showStockSummary?: boolean;
+  showCreatorInInvoice?: boolean;
+  showSerialNumbersInDescription?: boolean;
+  showBatchColumnsInInvoice?: boolean;
+  showPaymentsTable?: boolean;
   [key: string]: unknown;
 }
 
@@ -116,17 +126,9 @@ export interface InvoiceData {
   subTotal: number;
   discount?: number;
   toPay?: number | { full: number; [key: string]: any };
-  finalTotal: Record<string, any>;
-  totals?: Record<string, any>;
-  balance?: {
-    paid?: number | string;
-    due?: number | string;
-    transactionCharge?: number | string;
-    settledAmount?: number | string;
-    tds?: number | string;
-    credit?: number | string;
-    [key: string]: any;
-  };
+  finalTotal: InvoiceTotals;
+  totals?: InvoiceTotals;
+  balance?: InvoiceBalance;
   taxType?: string;
   taxName?: string;
   isIgst?: boolean;
@@ -148,13 +150,30 @@ export interface InvoiceData {
     defaultValue?: string;
     [key: string]: any;
   }>;
+  // Extra key/value rows rendered in the totals section.
+  extraTotalFields?: Array<{
+    label: string;
+    value: string;
+    key?: string;
+    [key: string]: any;
+  }>;
   customLabels?: Record<string, string>;
   contact?: { email?: string; phone?: string; [key: string]: any };
   owner?: BusinessData;
   invoiceAccepted?: string;
   roundOffQuantity?: boolean;
   roundOffRate?: boolean;
+  // Gates whether a percentage discount is padded to subUnitLength decimals
+  // (`12.00%`) or printed exactly as entered (`12%`). Named after the field
+  // lydia's own line-items table reads (src/components/widgets/invoice/lineItems.js).
+  applyNumberFormatToDiscounts?: boolean;
+  // True once a business has customised its line-item columns. Persisted by
+  // the server (talos invoices schema) and read by refrens.com to decide the
+  // narrow-width short column set (S13); never typed here before, so it is
+  // read defensively and the short set simply does not apply when absent.
+  isColumnsModified?: boolean;
   showTotalsRow?: boolean;
+  hideTotalInWords?: boolean;
   templateName?: string;
   transportDetails?: TransportDetails;
   bankAccount?: BankDetails;
@@ -164,7 +183,7 @@ export interface InvoiceData {
   paymentOptions?: InvoicePaymentOptions;
   reminders?: { sent?: boolean; [key: string]: any };
   creditNoteStatus?: string;
-  linkedInvoices?: Array<any>;
+  linkedInvoices?: LinkedInvoice[];
   documentReason?: string;
   placeOfSupply?: string;
   pos?: string;
@@ -179,6 +198,91 @@ export interface InvoiceData {
   zatcaQrCode?: string;
   lhdnQrCode?: string;
   documentQr?: string;
+  // IRN QR data URL at the invoice root. Never part of the fetched payload — the Lydia
+  // host overlays it at runtime, so templates must treat it as optional.
+  qrCode?: string;
+  sharedDocumentId?: string;
+  share?: {
+    link?: string;
+    name?: string;
+    fileName?: string;
+    pdf?: string;
+    printLabels?: Array<{ label: string; pdf: string }>;
+  };
+  // Document-level stock summary; the API includes it only for batch-tracked documents
+  // with advanceOptions.showStockSummary enabled.
+  batchSummary?: DocumentBatchSummaryEntry[];
+  creditDiscount?: number;
+  beforeDiscountPay?: number | { full: number; [key: string]: any };
+  earlyPayDiscount?: {
+    enabled?: boolean;
+    applied?: boolean;
+    totals?: Record<string, any>;
+    [key: string]: any;
+  };
+  vendorFields?: Record<string, any>;
+  hasPgPayments?: boolean;
+  totalConversions?: Record<string, any>;
+  lastPaymentDate?: string | Date;
+}
+
+// Amount buckets are numbers in the API payload, but some hosts (and the Lydia
+// live-update bridge) send them as numeric strings, and an unset bucket serialises
+// as null. All three are accepted because every reader funnels them through
+// toNumberValue, which coerces the lot to a number — the constraint that earns its
+// keep is rejecting objects and arrays here, not rejecting null.
+type MoneyValue = number | string | null;
+
+export interface InvoiceTotals {
+  subTotal?: MoneyValue;
+  total?: MoneyValue;
+  amount?: MoneyValue;
+  discount?: MoneyValue;
+  totalDiscount?: MoneyValue;
+  cgst?: MoneyValue;
+  sgst?: MoneyValue;
+  igst?: MoneyValue;
+  utgst?: MoneyValue;
+  cess?: MoneyValue;
+  totalCess?: MoneyValue;
+  // Keyed by cess name — a Mongoose Map on the document, so it serialises to a
+  // plain object and never to a scalar. The bucket values are read through
+  // toNumberValue and are left unconstrained: the document declares the map as
+  // `of: Boolean` while producers write numbers into it.
+  cessTotal?: Record<string, any>;
+  amountRoundOff?: MoneyValue;
+  totalRoundOff?: MoneyValue;
+  [key: string]: any;
+}
+
+export interface InvoiceBalance {
+  paid?: MoneyValue;
+  due?: MoneyValue;
+  transactionCharge?: MoneyValue;
+  settledAmount?: MoneyValue;
+  tds?: MoneyValue;
+  credit?: MoneyValue;
+  [key: string]: any;
+}
+
+export interface LinkedInvoice {
+  _id?: string;
+  billType?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string | Date;
+  finalTotal?: InvoiceTotals;
+  [key: string]: any;
+}
+
+export interface DocumentBatchSummaryEntry {
+  inventory?: string;
+  itemName?: string;
+  sku?: string;
+  batch?: Record<string, any>;
+  warehouse?: string;
+  warehouseName?: string;
+  quantity?: number;
+  [key: string]: any;
 }
 
 export interface BusinessData {
@@ -225,6 +329,21 @@ export interface BillerDetails {
   phoneShowInInvoice?: boolean;
   fieldVisibility?: Record<string, boolean>;
   logo?: string;
+  // Generic tax identifier for non-GST / non-VAT geographies.
+  taxId?: string;
+  taxPayerType?: string;
+  clientType?: string;
+  industry?: string;
+  // Contact-person block rendered alongside the biller details.
+  contactPerson?: {
+    contact?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    role?: string;
+    department?: string;
+    displayFields?: string[];
+  };
   additionalIds?: Array<{
     _id?: string;
     label: string;
@@ -247,7 +366,11 @@ export interface LineItem {
   rate: number;
   amount: number;
   subTotal?: number;
-  discount?: number;
+  // A plain number is a legacy/simplified shape carrying no discount kind, so it
+  // renders as no discount at all (see lineItemCells.ts) rather than being
+  // guessed at; the real shape production sends is the object form, matching
+  // serana's item.discount.{discountType,amount} (PERCENTAGE | FIXED_AMOUNT).
+  discount?: number | { discountType?: string; amount?: number };
   hsn?: string;
   images?: string[];
   originalImages?: string[];
@@ -270,6 +393,13 @@ export interface LineItem {
   classification?: string;
   inventoryTxn?: string;
   custom?: Record<string, any>;
+  hidden?: boolean;
+  total?: number;
+  taxCategory?: {
+    label?: string;
+    code?: string;
+    reason?: { label?: string; code?: string };
+  };
   batchSummary?: Array<{
     _id?: string;
     itemName?: string;
@@ -307,6 +437,7 @@ export interface CessCharge {
   cessAmountKey?: string;
   cessName?: string;
   isApplied?: boolean;
+  cessType?: string;
 }
 
 export interface TaxSummary {
@@ -372,6 +503,7 @@ export interface TransportDetails {
   distance?: number | string;
   transactionType?: string;
   subSupplyType?: string;
+  subSupplyDesc?: string;
   extraInformation?: string;
   transporterId?: string;
   transporterName?: string;
@@ -429,38 +561,21 @@ export interface ColumnDef {
   isHidden?: boolean;
 }
 
-export interface FlattenedInvoicePayload extends InvoiceData {
-  business?: BusinessData;
-  ownerBusiness?: BusinessData;
-  store?: CeresTemplatePayload["store"];
-  payUrl?: string;
-  hideEarlyPay?: boolean;
-  showExpenseNumber?: boolean;
-  isEarlyPayApplicable?: boolean;
-  showItemNameFullWidth?: boolean;
-  invoiceValueProps?: CeresTemplatePayload["invoiceValueProps"];
-  ownerTimeZone?: string;
-  businessTimeZone?: string;
-  showBankAccount?: boolean;
-  showUpi?: boolean;
-  businessLocale?: string;
-  businessCurrency?: string;
-  isBusinessUser?: boolean;
-  hideHashInDocumentNumber?: boolean;
-  showPaymentsTable?: boolean;
-  isPublicView?: boolean;
-  isDescriptionFullWidth?: boolean;
-  irnPosition?: CeresTemplatePayload["irnPosition"];
-  showStockSummary?: boolean;
-  showVendorBankAccount?: boolean;
-  defaultBatchColumns?: CeresTemplatePayload["defaultBatchColumns"];
-  query?: Record<string, string>;
-  copy?: string;
-  ewayConfig?: EwayConfig;
-  einvoiceConfig?: EinvoiceConfig;
-}
+// Host-level keys of the wrapped payload, minus the two that are resolved rather
+// than copied: `invoice` is spread into the root and `template` (a bare name)
+// collides with InvoiceData's template config. Derived rather than re-listed so a
+// new field on CeresTemplatePayload cannot silently miss the flattened shape.
+export type HostPayloadFields = Partial<
+  Omit<CeresTemplatePayload, "invoice" | "template">
+>;
 
-export type InvoicePayloadInput = CeresTemplatePayload | FlattenedInvoicePayload;
+export interface FlattenedInvoicePayload
+  extends InvoiceData,
+    HostPayloadFields {}
+
+export type InvoicePayloadInput =
+  | CeresTemplatePayload
+  | FlattenedInvoicePayload;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -494,39 +609,26 @@ export const normalizeInvoicePayload = (
   payload: InvoicePayloadInput
 ): FlattenedInvoicePayload => {
   if (!isWrappedInvoicePayload(payload)) {
+    // A flat payload may still carry the wrapped shape's bare template name. Left
+    // as a string it reads back as an empty config, which silently resolves the
+    // template to "default" and changes which columns render.
+    const flatTemplate: unknown = payload.template;
+    if (typeof flatTemplate === "string") {
+      return { ...payload, template: normalizeTemplateConfig(flatTemplate) };
+    }
+
     return payload;
   }
 
+  // Rest capture rather than a hand-maintained key list: every host-level field
+  // carries over by construction, so adding one to CeresTemplatePayload needs no
+  // change here. Host fields are applied last, matching the precedence the explicit
+  // assignments had.
+  const { invoice, template, ...hostFields } = payload;
+
   return {
-    ...payload.invoice,
-    business: payload.business,
-    ownerBusiness: payload.ownerBusiness,
-    store: payload.store,
-    payUrl: payload.payUrl,
-    hideEarlyPay: payload.hideEarlyPay,
-    showExpenseNumber: payload.showExpenseNumber,
-    isEarlyPayApplicable: payload.isEarlyPayApplicable,
-    showItemNameFullWidth: payload.showItemNameFullWidth,
-    invoiceValueProps: payload.invoiceValueProps,
-    ownerTimeZone: payload.ownerTimeZone,
-    businessTimeZone: payload.businessTimeZone,
-    showBankAccount: payload.showBankAccount,
-    showUpi: payload.showUpi,
-    businessLocale: payload.businessLocale,
-    businessCurrency: payload.businessCurrency,
-    isBusinessUser: payload.isBusinessUser,
-    hideHashInDocumentNumber: payload.hideHashInDocumentNumber,
-    showPaymentsTable: payload.showPaymentsTable,
-    isPublicView: payload.isPublicView,
-    isDescriptionFullWidth: payload.isDescriptionFullWidth,
-    irnPosition: payload.irnPosition,
-    showStockSummary: payload.showStockSummary,
-    showVendorBankAccount: payload.showVendorBankAccount,
-    defaultBatchColumns: payload.defaultBatchColumns,
-    query: payload.query,
-    copy: payload.copy,
-    ewayConfig: payload.ewayConfig,
-    einvoiceConfig: payload.einvoiceConfig,
-    template: payload.invoice.template ?? normalizeTemplateConfig(payload.template),
+    ...invoice,
+    ...hostFields,
+    template: invoice.template ?? normalizeTemplateConfig(template),
   };
 };
