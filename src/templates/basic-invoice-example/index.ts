@@ -13,6 +13,8 @@ import "../../widgets/hsn-summary";
 import "../../widgets/payment-table";
 import "../../widgets/currency-format";
 import "../../widgets/image";
+import "../../widgets/line-items";
+import { normalizeInvoiceTemplateState } from "../../main/invoiceTemplateNormalization";
 
 // Template-level Handlebars utility helpers
 const hb = (window as any).Handlebars;
@@ -27,4 +29,5 @@ if (hb) {
 }
 
 // Export template to global for main renderer to consume
+window.CeresTemplateDataMapper = normalizeInvoiceTemplateState as any;
 window.CeresTemplate = template;

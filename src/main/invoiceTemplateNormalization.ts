@@ -345,7 +345,7 @@ const getSummaryCessAmount = (
     return directAmount;
   }
 
-  return getNestedSummaryEntries(record[listKey], listKey).reduce<number>(
+  return getNestedSummaryEntries(record, listKey).reduce<number>(
     (sum, entry) => {
       const row = asRecord(entry);
       return (
@@ -401,7 +401,7 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
   const invoiceType = toStringValue(invoice.invoiceType);
   const taxType = toStringValue(invoice.taxType);
   const isTaxInvoice = invoiceType === "INVOICE";
-  const igstTax = Boolean(invoice.igst);
+  const igstTax = Boolean(invoice.isIgst);
   const discountEnabled = Boolean(
     toNumberValue(
       pickFirstValue(finalTotal.discount, finalTotal.totalDiscount),
@@ -771,7 +771,7 @@ const normalizeInvoiceColumns = (
     return {
       key,
       label:
-        key === "sgst" && Boolean(invoice.utgst)
+        key === "sgst" && Boolean(invoice.isUtgst)
           ? "UTGST"
           : toStringValue(column.label),
       // S13: the narrow-width view shows only the short set until the
@@ -1144,7 +1144,9 @@ export const normalizeInvoiceTemplateState = (
   const irn = asRecord(invoice.irn);
   const upi = asRecord(invoice.upi);
   const irnCancelDate = toNonEmptyString(irn.CancelDate);
-  const irnQr = toNonEmptyString(irn.qrCode);
+  // Root qrCode is the same IRN QR delivered by the Lydia host overlay, so the
+  // CancelDate guard below applies to it equally.
+  const irnQr = toNonEmptyString(pickFirstValue(invoice.qrCode, irn.qrCode));
   const topQr =
     (irnQr && !irnCancelDate ? irnQr : null) ??
     toNonEmptyString(invoice.zatcaQrCode) ??
@@ -1182,7 +1184,18 @@ export const normalizeInvoiceTemplateState = (
   const showTaxTable = ["TABLE", "BOTH"].includes(
     toStringValue(context.advanceOptions.taxSummaryView)
   );
+  // The business toggle gates the section; the data check only avoids rendering an
+  // empty table. The alias is checked first because it is what the Lydia live-update
+  // bridge emits, so when both keys are present it carries the newer user action —
+  // an explicit false from either key still hides the section.
+  const hsnSummaryEnabled = Boolean(
+    pickFirstValue(
+      context.advanceOptions.showHsnSummary,
+      context.advanceOptions.showHSNSummaryInInvoice
+    )
+  );
   const showHsnSummary =
+    hsnSummaryEnabled &&
     getNestedSummaryEntries(invoice.hsnSummary, "hsnList").length > 0;
   const showSummaryCess =
     asArray(invoice.cesses).some((entry) =>
@@ -1192,7 +1205,7 @@ export const normalizeInvoiceTemplateState = (
       getSummaryCessAmount(invoice.taxSummary, "taxList") > 0 ||
       getSummaryCessAmount(invoice.hsnSummary, "hsnList") > 0);
   const showIgst =
-    Boolean(invoice.igst) || toStringValue(invoice.taxName) !== "GST";
+    Boolean(invoice.isIgst) || toStringValue(invoice.taxName) !== "GST";
   const showCgstSgst = !showIgst && toStringValue(invoice.taxName) === "GST";
 
   return {
@@ -1228,7 +1241,7 @@ export const normalizeInvoiceTemplateState = (
         contactStrip: hasValue(contact.email) || hasValue(contact.phone),
         showIgst,
         showCgstSgst,
-        isUtgst: Boolean(invoice.utgst),
+        isUtgst: Boolean(invoice.isUtgst),
         showTaxTable,
         showHsnSummary,
         showSummaryCess,
