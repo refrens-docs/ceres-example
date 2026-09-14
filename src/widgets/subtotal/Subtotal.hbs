@@ -2,8 +2,8 @@
   The totals block. Every value here is already formatted by computeSubtotalRows — do not
   wrap anything in formatCurrency and never concatenate a currency symbol onto a number.
 
-  Every row is always in the DOM. `hideTotals` and `hideTaxes` only set initial visibility,
-  because the Lydia host toggles them live by flipping the same attributes:
+  Every row is always in the DOM. `hideTotals`, `hideTaxes` and `hideTotalInWords` only set
+  initial visibility, because the Lydia host toggles them live by flipping the same classes:
 
     [data-ceres-subtotal]            the whole block
     [data-ceres-subtotal-row]        one row, carrying its model key
@@ -11,18 +11,24 @@
     [data-ceres-subtotal-keep]       survives hideTotals (additional charges)
     [data-ceres-total-in-words]      the words line, hidden by hideTotalInWords
 
-  Drop one of those and its setting silently stops working. See src/main/commonUtils.ts.
+  Visibility is a class per *reason*, never an inline display: a tax row is covered by both
+  hideTotals and hideTaxes, and the words line by both hideTotals and hideTotalInWords, so
+  one shared inline style would let whichever setting is turned off last resurrect what the
+  others still hide. The classes are `is-hidden-by-totals`, `is-hidden-by-taxes`,
+  `is-hidden-by-words-setting` and `is-hidden-by-precision`, resolved in styles.css.
+
+  Drop one of those attributes and its setting silently stops working. See
+  src/main/commonUtils.ts.
 --}}
 <div class="ceres-subtotal" data-ceres-subtotal>
   <table class="ceres-subtotal-table">
     <tbody>
       {{#each groups.main}}
         <tr
-          class="ceres-subtotal-row ceres-subtotal-row-{{emphasis}}"
+          class="ceres-subtotal-row ceres-subtotal-row-{{emphasis}}{{#if ../hidden}}{{#unless survivesHideTotals}} is-hidden-by-totals{{/unless}}{{/if}}{{#if isTaxRow}}{{#if ../hideTaxes}} is-hidden-by-taxes{{/if}}{{/if}}"
           data-ceres-subtotal-row="{{key}}"
           {{#if isTaxRow}}data-ceres-subtotal-taxes{{/if}}
           {{#if survivesHideTotals}}data-ceres-subtotal-keep{{/if}}
-          {{#if ../hidden}}{{#unless survivesHideTotals}}style="display:none"{{/unless}}{{else}}{{#if isTaxRow}}{{#if ../hideTaxes}}style="display:none"{{/if}}{{/if}}{{/if}}
         >
           <th class="ceres-subtotal-label">
             {{label}}
@@ -48,9 +54,8 @@
       <tbody>
         {{#each groups.extra}}
           <tr
-            class="ceres-subtotal-row"
+            class="ceres-subtotal-row{{#if ../hidden}} is-hidden-by-totals{{/if}}"
             data-ceres-subtotal-row="{{key}}"
-            {{#if ../hidden}}style="display:none"{{/if}}
           >
             <th class="ceres-subtotal-label">{{label}}</th>
             <td class="ceres-subtotal-value">
@@ -68,9 +73,8 @@
       <tbody>
         {{#each groups.due}}
           <tr
-            class="ceres-subtotal-row ceres-subtotal-row-{{emphasis}}"
+            class="ceres-subtotal-row ceres-subtotal-row-{{emphasis}}{{#if ../hidden}} is-hidden-by-totals{{/if}}"
             data-ceres-subtotal-row="{{key}}"
-            {{#if ../hidden}}style="display:none"{{/if}}
           >
             <th class="ceres-subtotal-label">{{label}}</th>
             <td class="ceres-subtotal-value">
@@ -85,9 +89,8 @@
 
   {{#if totalInWords}}
     <div
-      class="ceres-subtotal-words"
+      class="ceres-subtotal-words{{#if hidden}} is-hidden-by-totals{{/if}}{{#if hideTotalInWords}} is-hidden-by-words-setting{{/if}}{{#unless wordsFitCurrency}} is-hidden-by-precision{{/unless}}"
       data-ceres-total-in-words
-      {{#unless showTotalInWords}}style="display:none"{{/unless}}
     >
       <span class="ceres-subtotal-words-label">{{totalInWords.label}}:</span>
       <span class="ceres-subtotal-words-value">{{totalInWords.value}}</span>

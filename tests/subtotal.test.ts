@@ -203,12 +203,13 @@ describe("computeSubtotalRows", () => {
       expect(keys(model)).not.toContain("cgst");
     });
 
-    it("shows one combined row when an Indian document's tax is not GST", () => {
-      // A VAT invoice must not split into CGST and SGST.
+    it("keeps the split on an Indian document whatever its tax is called", () => {
+      // The reference's row gate is `!igstTax && taxType === TAX_TYPE.INDIA` with no
+      // taxName term (balance.js:323), and taxName is a free-form user-editable string.
       const model = compute({ taxName: "VAT" });
-      expect(keys(model)).toContain("igst");
-      expect(keys(model)).not.toContain("cgst");
-      expect(keys(model)).not.toContain("sgst");
+      expect(keys(model)).toContain("cgst");
+      expect(keys(model)).toContain("sgst");
+      expect(keys(model)).not.toContain("igst");
     });
 
     it("names the combined row after the document's tax, not IGST", () => {
@@ -278,7 +279,8 @@ describe("computeSubtotalRows", () => {
       const survivors = model.groups.main.filter((r) => r.survivesHideTotals);
       expect(survivors.map((r) => r.label)).toEqual(["Freight"]);
       expect(keys(model)).toContain("total");
-      expect(model.showTotalInWords).toBe(false);
+      // The words line's own reason stays independent of hideTotals — see the partial.
+      expect(model.hideTotalInWords).toBe(false);
     });
 
     it("accepts hideTotals from the deprecated advanceOptions home", () => {
@@ -320,12 +322,12 @@ describe("computeSubtotalRows", () => {
       expect(row(model, "total")?.label).toBe("Total");
     });
 
-    it("suppresses the words line under hideTotalInWords", () => {
+    it("reports hideTotalInWords as its own reason to hide the words line", () => {
       const withWords = { customLabels: { totalInWordsValue: "One thousand" } };
-      expect(compute(withWords).showTotalInWords).toBe(true);
+      expect(compute(withWords).hideTotalInWords).toBe(false);
       expect(
-        compute({ ...withWords, hideTotalInWords: true }).showTotalInWords
-      ).toBe(false);
+        compute({ ...withWords, hideTotalInWords: true }).hideTotalInWords
+      ).toBe(true);
     });
 
     it("suppresses the words line when subUnitLength exceeds the currency's decimals", () => {
@@ -335,7 +337,7 @@ describe("computeSubtotalRows", () => {
         customLabels: { totalInWordsValue: "One thousand" },
       });
       expect(model.totalInWords).not.toBeNull();
-      expect(model.showTotalInWords).toBe(false);
+      expect(model.wordsFitCurrency).toBe(false);
     });
   });
 
@@ -417,9 +419,16 @@ describe("computeSubtotalRows", () => {
       expect(keys(model)).not.toContain("conversionRate");
     });
 
-    it("converts to zero when the rate is missing, matching the reference", () => {
+    it("renders no sub-line at all when there is no conversion rate", () => {
+      /*
+       * `conversionRates` is optional and un-defaulted, so an INR document owned by a USD
+       * business can easily arrive without one. Formatting `amount * 0` put `$0.00` under
+       * every row of the totals block. The reference can leave this ungated because its
+       * sub-line is wrapped in DefaultHidden and never actually visible; ours is visible.
+       */
       const model = compute({}, { businessCurrency: "USD" });
-      expect(row(model, "total")?.converted).toBe("$0");
+      expect(row(model, "total")?.converted).toBeNull();
+      model.groups.main.forEach((r) => expect(r.converted).toBeNull());
     });
 
     it("adds a conversion-rate row only when a rate exists", () => {
@@ -541,6 +550,13 @@ describe("computeSubtotalRows", () => {
   });
 
   describe("cess", () => {
+    /*
+     * There is no `cess.rate` — the subdocument is exactly
+     * `{ cessName, cessType, cessKey, cessAmountKey, isApplied, isNewCess }`
+     * (talos/src/invoices.js:553). The rate and the per-item amount live on the item, under
+     * `custom[cessKey]` and `custom[cessAmountKey]`, which is where `cessBreakupTotal`
+     * reads them (lydia/src/helpers/taxAggregateSummary.js).
+     */
     const cessInvoice = {
       cesses: [
         {
@@ -549,7 +565,13 @@ describe("computeSubtotalRows", () => {
           cessAmountKey: "compAmount",
           cessName: "Comp. Cess",
           isApplied: true,
-          rate: 12,
+        },
+      ],
+      items: [
+        {
+          _id: "i1",
+          total: 1000,
+          custom: { comp: 12, compAmount: 60 },
         },
       ],
       finalTotal: {
@@ -572,30 +594,42 @@ describe("computeSubtotalRows", () => {
       expect(keys(model)).not.toContain("cess:comp");
     });
 
-    it("adds the rate to the label under the summary view", () => {
+    it("breaks the cess down per distinct rate under the summary view", () => {
       const model = compute({
         ...cessInvoice,
+        items: [
+          { _id: "i1", total: 1000, custom: { comp: 12, compAmount: 60 } },
+          { _id: "i2", total: 500, custom: { comp: 12, compAmount: 30 } },
+          { _id: "i3", total: 400, custom: { comp: 5, compAmount: 20 } },
+        ],
         advanceOptions: { taxSummaryView: "BOTH" },
       });
-      expect(row(model, "cessRate:comp")?.label).toBe("Comp. Cess (12%)");
+      // Same-rate items sum into one row; a second rate gets its own, as on refrens.com.
+      expect(row(model, "cessRate:comp:12")?.label).toBe("Comp. Cess (12%)");
+      expect(row(model, "cessRate:comp:12")?.value).toBe("₹90");
+      expect(row(model, "cessRate:comp:5")?.label).toBe("Comp. Cess (5%)");
+      expect(row(model, "cessRate:comp:5")?.value).toBe("₹20");
     });
 
     it("omits a zero cess under the summary view", () => {
       const model = compute({
         ...cessInvoice,
+        items: [{ _id: "i1", total: 1000 }],
         finalTotal: { ...baseInvoice().finalTotal, cessTotal: {} },
         advanceOptions: { taxSummaryView: "BOTH" },
       });
-      expect(keys(model)).not.toContain("cessRate:comp");
+      expect(keys(model).some((k) => k.startsWith("cessRate:"))).toBe(false);
     });
 
-    it("omits the rate suffix when the cess has none", () => {
+    it("falls back to the combined figure when no item carries the cess", () => {
+      // A document whose cess sits only on the total still renders, without a rate suffix.
       const model = compute({
         ...cessInvoice,
-        cesses: [{ ...cessInvoice.cesses[0], rate: 0 }],
+        items: [{ _id: "i1", total: 1000 }],
         advanceOptions: { taxSummaryView: "BOTH" },
       });
       expect(row(model, "cessRate:comp")?.label).toBe("Comp. Cess");
+      expect(row(model, "cessRate:comp")?.value).toBe("₹60");
     });
   });
 
@@ -690,10 +724,13 @@ describe("computeSubtotalRows", () => {
       expect(taxed?.extra?.value).toBe("₹90");
     });
 
-    it("uses the Malaysian classification code when there is no HSN", () => {
+    it("prints the Malaysian Code for a Malaysian seller", () => {
       const model = compute({
-        // taxName drives the prefix, so a Malaysian document must not say "GST".
-        taxType: "MALAYSIA",
+        // The reference reads `billedBy.country === 'MY'` (balance.js:63), not whichever of
+        // the two fields the item happens to carry. taxName drives the prefix, so a
+        // Malaysian document must not say "GST".
+        billedBy: { country: "MY" },
+        taxType: "GLOBAL",
         taxName: "SST",
         items: [
           {
@@ -707,6 +744,24 @@ describe("computeSubtotalRows", () => {
         ],
       });
       expect(row(model, "taxedCharge:ac1")?.note).toBe("SST 6% Code 011");
+    });
+
+    it("prints HSN for a non-Malaysian seller even when a classification is present", () => {
+      const model = compute({
+        billedBy: { country: "IN" },
+        items: [
+          {
+            _id: "ac1",
+            name: "Install",
+            isAdditionalCharge: true,
+            rate: 500,
+            gstRate: 18,
+            hsn: "9987",
+            classification: "011",
+          },
+        ],
+      });
+      expect(row(model, "taxedCharge:ac1")?.note).toBe("GST 18% HSN 9987");
     });
 
     it("prints only the rate when the item carries neither code", () => {
@@ -900,27 +955,31 @@ describe("resolveTaxVisibility", () => {
     });
   });
 
-  it("picks IGST for an Indian document whose tax is not GST", () => {
-    // The complaint on REF-25603: a VAT invoice printed CGST and SGST rows. Only a GST
-    // sale splits, which is the `taxName !== 'GST'` term in refrens.com's
-    // getAggregateTaxTotals call.
-    ["VAT", "SST", "SALES_TAX"].forEach((taxName) => {
-      expect(resolveTaxVisibility({ ...doc, taxName })).toMatchObject({
-        showCgstSgst: false,
-        showIgst: true,
+  it("splits regardless of what the tax is named", () => {
+    // `taxName` is a free-form, PATCH-whitelisted string; the reference's row gate
+    // (balance.js:323) has no taxName term, so a business renaming its tax label must not
+    // lose the CGST/SGST split on a domestic Indian sale.
+    ["VAT", "SST", "GST (18%)", ""].forEach((taxName) => {
+      expect(resolveTaxVisibility({ ...doc, ...{ taxName } })).toMatchObject({
+        showCgstSgst: true,
+        showIgst: false,
       });
     });
   });
 
-  it("treats an absent taxName as GST", () => {
-    expect(resolveTaxVisibility({ ...doc, taxName: undefined })).toMatchObject({
-      showCgstSgst: true,
-      showIgst: false,
+  it("defaults an absent taxType to INDIA, as the reference destructure does", () => {
+    // balance.js:33 is `taxType = TAX_TYPE.INDIA`. A payload that lost the field used to
+    // print a single IGST row on a domestic GST invoice.
+    ["", undefined].forEach((taxType) => {
+      expect(resolveTaxVisibility({ ...doc, taxType })).toMatchObject({
+        showCgstSgst: true,
+        showIgst: false,
+      });
     });
   });
 
   it("picks IGST for every non-India tax type", () => {
-    ["GLOBAL", "MALAYSIA", "", undefined].forEach((taxType) => {
+    ["GLOBAL", "MALAYSIA"].forEach((taxType) => {
       expect(resolveTaxVisibility({ ...doc, taxType })).toMatchObject({
         showIgst: true,
         showCgstSgst: false,
@@ -991,13 +1050,13 @@ describe("resolveDocumentTaxVisibility", () => {
     );
   });
 
-  it("gives the summary tables one combined column for a non-GST document", () => {
+  it("gives the summary tables one combined column for a non-India document", () => {
     // What the tables used to get was the raw inter-state flag, false here, so an
-    // Indonesian PPN or Malaysian SST invoice drew CGST and SGST columns.
+    // Indonesian PPN or Malaysian SST invoice drew CGST and SGST columns. Both are
+    // `taxType: "GLOBAL"`, which is the term that decides it.
     [
       { taxType: "GLOBAL", taxName: "PPN" },
       { taxType: "GLOBAL", taxName: "SST" },
-      { taxType: "INDIA", taxName: "VAT" },
     ].forEach((over) => {
       const v = resolveDocumentTaxVisibility({ ...doc, ...over });
       expect(v.showIgst).toBe(true);
@@ -1065,17 +1124,17 @@ describe("normalizeInvoiceTemplateState tax visibility", () => {
     expect(state.mapped.visibility.showIgst).toBe(false);
   });
 
-  it("splits only for GST, and only on an India tax type", () => {
-    // A GLOBAL document whose taxName happens to be GST is still a single-row document,
-    // and an India document whose taxName is VAT is too — the item table must not draw
-    // CGST and SGST columns for it.
+  it("splits on the India tax type, not on what the tax is called", () => {
+    // A GLOBAL document whose taxName happens to be GST is still a single-row document.
     const global = build({ taxType: "GLOBAL", taxName: "GST" });
     expect(global.mapped.visibility.showIgst).toBe(true);
     expect(global.mapped.visibility.showCgstSgst).toBe(false);
 
+    // An India document keeps its split whatever the tax is named — the reference's row
+    // gate has no taxName term, and taxName is user-editable while taxType is not.
     const vat = build({ taxType: "INDIA", taxName: "VAT" });
-    expect(vat.mapped.visibility.showIgst).toBe(true);
-    expect(vat.mapped.visibility.showCgstSgst).toBe(false);
+    expect(vat.mapped.visibility.showCgstSgst).toBe(true);
+    expect(vat.mapped.visibility.showIgst).toBe(false);
 
     const gst = build({ taxType: "INDIA", taxName: "GST" });
     expect(gst.mapped.visibility.showCgstSgst).toBe(true);

@@ -71,3 +71,22 @@
 .ceres-subtotal-words-label {
   font-weight: 700;
 }
+
+/*
+ * Visibility, one class per reason.
+ *
+ * `hideTotals`, `hideTaxes` and `hideTotalInWords` cover overlapping sets of rows, and the
+ * host toggles each of them independently and live. Letting CSS resolve the combination is
+ * what stops turning one setting off from resurrecting what another is still hiding — see
+ * src/main/commonUtils.ts, which only ever adds and removes these classes.
+ *
+ * `display: none !important` because a template owns its own look and may well set a
+ * `display` of its own on these rows; a hidden row must stay hidden regardless.
+ */
+.ceres-subtotal-row.is-hidden-by-totals,
+.ceres-subtotal-row.is-hidden-by-taxes,
+.ceres-subtotal-words.is-hidden-by-totals,
+.ceres-subtotal-words.is-hidden-by-words-setting,
+.ceres-subtotal-words.is-hidden-by-precision {
+  display: none !important;
+}

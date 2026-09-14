@@ -72,7 +72,15 @@ export interface SubtotalModel {
   hasExtra: boolean;
   hasDue: boolean;
   totalInWords: { label: string; value: string } | null;
-  showTotalInWords: boolean;
+  /*
+   * The words line has three independent reasons to be hidden and the partial emits a class
+   * for each, because `hideTotals` and `hideTotalInWords` are live host toggles while the
+   * precision one is a property of the currency. Conflating them into a single flag meant
+   * turning either setting off un-hid the line the other still wanted hidden.
+   */
+  hideTotalInWords: boolean;
+  /* False when the document's sub-unit length exceeds what words can express. */
+  wordsFitCurrency: boolean;
 }
 
 export interface SubtotalOptions {
@@ -232,8 +240,15 @@ const resolveCurrencyContext = (
     asText(pickFirst(options.businessLocale, owner.locale)) || undefined;
   const rate = toAmount(asRecord(invoice.conversionRates)[businessCurrency]);
 
+  /*
+   * Gated on a non-zero rate, exactly as the Conversion Rate row below is. `conversionRates`
+   * is optional and un-defaulted (talos/src/helpers/documentCommonFields.js), so without
+   * this an INR document owned by a USD business and no rates on the payload printed
+   * `US$0.00` under every one of its ~15 rows. The reference can leave the gate off because
+   * its sub-line is wrapped in DefaultHidden and never visible; ours is.
+   */
   const dual =
-    businessCurrency && businessCurrency !== currency
+    businessCurrency && businessCurrency !== currency && rate
       ? { currency: businessCurrency, locale: businessLocale, rate }
       : null;
 
@@ -322,7 +337,8 @@ const emptyModel = (): SubtotalModel => ({
   hasExtra: false,
   hasDue: false,
   totalInWords: null,
-  showTotalInWords: false,
+  hideTotalInWords: false,
+  wordsFitCurrency: true,
 });
 
 /*
@@ -359,6 +375,8 @@ export const computeSubtotalRows = (
   const latePaymentFee = asRecord(invoice.latePaymentFee);
 
   const billType = asText(invoice.billType);
+  /* The reference's `isMalaysia`, which picks Code vs HSN on a taxed charge line. */
+  const isMalaysia = asText(asRecord(invoice.billedBy).country) === "MY";
   const isExpenditure = asFlag(invoice.isExpenditure);
   /* `utgst` is the document field (balance.js destructures `utgst: enableUtgst`). */
   const isUtgst = asFlag(pickFirst(invoice.utgst, invoice.isUtgst));
@@ -436,14 +454,19 @@ export const computeSubtotalRows = (
     const item = asRecord(entry);
     if (!asFlag(item.isAdditionalCharge)) return;
     /*
-     * Malaysia classifies with its own code rather than an HSN; the reference picks whichever
-     * the item carries and prints nothing when it carries neither.
+     * Malaysia classifies with its own code rather than an HSN, and the reference picks by
+     * the *seller's* country, not by which field happens to be filled:
+     * `isMalaysia = billedBy?.country === 'MY'`, then
+     * `({isMalaysia ? 'Code' : 'HSN'} {isMalaysia ? item.classification : item.hsn})`
+     * (balance.js:63,196-199). Preferring `classification` whenever it is present printed
+     * `Code <value>` on an Indian charge line that carried both fields.
      */
-    const classification = asText(item.classification);
-    const hsn = asText(item.hsn);
-    let codeLabel = "";
-    if (classification) codeLabel = `Code ${classification}`;
-    else if (hsn) codeLabel = `HSN ${hsn}`;
+    const codeValue = isMalaysia
+      ? asText(item.classification)
+      : asText(item.hsn);
+    const codeLabel = codeValue
+      ? `${isMalaysia ? "Code" : "HSN"} ${codeValue}`
+      : "";
     const rate = toAmount(item.gstRate);
     main.push(
       makeRow(
@@ -681,26 +704,68 @@ export const computeSubtotalRows = (
       }
     }
 
+    /*
+     * One row per distinct cess rate, which is what `cessBreakupTotal` does
+     * (lydia/src/helpers/taxAggregateSummary.js): the rate lives on the item as
+     * `item.custom[cess.cessKey]` and the amount as `item.custom[cess.cessAmountKey]`.
+     *
+     * There is no `cess.rate`. The `cesses` subdocument is exactly
+     * `{ cessName, cessType, cessKey, cessAmountKey, isApplied, isNewCess }`
+     * (talos/src/invoices.js:553), so reading one gave a permanently-0 rate, a bare label,
+     * and an aggregate row that was a duplicate of the flat row above it.
+     *
+     * When no item carries the cess — a document whose cess sits only on the total — the
+     * combined figure off `finalTotal.cessTotal` still renders, unlabelled by rate.
+     */
     const cessTotal = asRecord(finalTotal.cessTotal);
     cesses.forEach((entry) => {
       const cess = asRecord(entry);
       if (!asFlag(cess.isApplied)) return;
-      const amount = toAmount(cessTotal[asText(cess.cessAmountKey)]);
-      if (amount <= 0) return;
-      const rate = toAmount(cess.rate);
-      main.push(
-        makeRow(
-          {
-            key: `cessRate:${asText(cess.cessKey)}`,
-            label: rate
-              ? `${asText(pickFirst(cess.cessName, cess.name))} (${rate}%)`
-              : asText(pickFirst(cess.cessName, cess.name)),
-            amount,
-            isTaxRow: true,
-          },
-          ctx
-        )
-      );
+      const cessKey = asText(cess.cessKey);
+      const amountKey = asText(cess.cessAmountKey);
+      const cessName = asText(pickFirst(cess.cessName, cess.name));
+
+      const byRate = new Map<number, number>();
+      items.forEach((itemEntry) => {
+        const custom = asRecord(asRecord(itemEntry).custom);
+        const itemAmount = toAmount(custom[amountKey]);
+        if (!itemAmount) return;
+        const itemRate = toAmount(custom[cessKey]);
+        byRate.set(itemRate, (byRate.get(itemRate) ?? 0) + itemAmount);
+      });
+
+      if (byRate.size === 0) {
+        const amount = toAmount(cessTotal[amountKey]);
+        if (amount <= 0) return;
+        main.push(
+          makeRow(
+            {
+              key: `cessRate:${cessKey}`,
+              label: cessName,
+              amount,
+              isTaxRow: true,
+            },
+            ctx
+          )
+        );
+        return;
+      }
+
+      byRate.forEach((amount, itemRate) => {
+        main.push(
+          makeRow(
+            {
+              key: itemRate
+                ? `cessRate:${cessKey}:${itemRate}`
+                : `cessRate:${cessKey}`,
+              label: itemRate ? `${cessName} (${itemRate}%)` : cessName,
+              amount,
+              isTaxRow: true,
+            },
+            ctx
+          )
+        );
+      });
     });
   }
 
@@ -939,14 +1004,13 @@ export const computeSubtotalRows = (
 
   /*
    * Words cannot express more decimal places than the currency has, which is why the
-   * reference suppresses the line when the document's sub-unit length exceeds them.
+   * reference suppresses the line when the document's sub-unit length exceeds them. That is
+   * a fact about the currency, kept separate from the two host-toggled settings so each can
+   * be flipped without un-hiding what the others hide.
    */
   const wordsValue = asText(customLabels.totalInWordsValue);
-  const showTotalInWords =
-    !hidden &&
-    !hideTotalInWords &&
-    !!wordsValue &&
-    (!ctx.subUnitLength || ASSUMED_CURRENCY_DECIMALS >= ctx.subUnitLength);
+  const wordsFitCurrency =
+    !ctx.subUnitLength || ASSUMED_CURRENCY_DECIMALS >= ctx.subUnitLength;
 
   return {
     hidden,
@@ -957,7 +1021,8 @@ export const computeSubtotalRows = (
     totalInWords: wordsValue
       ? { label: label("totalInWords"), value: wordsValue }
       : null,
-    showTotalInWords,
+    hideTotalInWords,
+    wordsFitCurrency,
   };
 };
 

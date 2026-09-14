@@ -350,7 +350,6 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
     // `igst` is the document's inter-state boolean; `isIgst` never existed on a real
     // document and stays only as a fallback for a host on the older ceres contract.
     isInterState: pickFirstValue(invoice.igst, invoice.isIgst),
-    taxName: invoice.taxName,
   });
 
   return {

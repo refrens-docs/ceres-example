@@ -16,13 +16,22 @@
  * already see on 14 templates:
  *
  *   - Tax rows exist only on a tax document (`invoiceType === "INVOICE"`).
- *   - A CGST + SGST split happens only on a domestic Indian *GST* sale: the document is
- *     not inter-state, `taxType === "INDIA"`, and `taxName` is GST. Everything else —
- *     inter-state, a non-India tax type, or an Indian document whose tax is VAT/SST/
- *     anything but GST — shows the single combined row instead. That last term is what
- *     `getAggregateTaxTotals(items, key, igstTax || taxName !== 'GST')` encodes on
- *     refrens.com (lydia/src/helpers/taxAggregateSummary.js); without it a VAT invoice
- *     prints CGST and SGST rows, which is what QA reported on REF-25603.
+ *   - A CGST + SGST split happens only on a domestic Indian sale: the document is not
+ *     inter-state and `taxType === "INDIA"` (defaulted to INDIA when absent). Everything
+ *     else — inter-state, or any non-India tax type — shows the single combined row. That
+ *     is exactly the reference's row gate, `!igstTax && taxType === TAX_TYPE.INDIA`
+ *     (balance.js:323 for the flat rows, :448 for the aggregate rows).
+ *
+ *     Note what is NOT a term here: `taxName`. It appears on refrens.com only as the third
+ *     argument to `getAggregateTaxTotals` (`igstTax || taxName !== 'GST'`), where it picks
+ *     which bucket to read, not which rows render. Folding it into the split decision was
+ *     tempting — the QA document on REF-25603 was an Indonesian PPN invoice printing CGST
+ *     and SGST — but that document is `taxType: "GLOBAL"`, so the tax-type term alone
+ *     fixes it. And `taxName` is a free-form, PATCH-whitelisted string
+ *     (talos/src/invoices.js:478) while `taxType` is neither: gating structure on it means
+ *     an Indian business that renames its tax label silently loses the CGST/SGST split on
+ *     a real GST invoice. The word a row is *labelled* with is a separate decision, and it
+ *     lives in ./taxRowLabels.
  *   - `hideTaxes` suppresses the rows.
  *   - An export without payment of tax (`supplyType === "EXPWOP"`) suppresses a tax row
  *     whose figure is also zero. A non-zero figure still renders — this is the only place
@@ -54,7 +63,6 @@ export interface TaxVisibilityInput {
   taxType?: unknown;
   /* The document's inter-state flag — `invoice.igst`, with `invoice.isIgst` as fallback. */
   isInterState?: unknown;
-  taxName?: unknown;
   supplyType?: unknown;
   hideTaxes?: unknown;
   /* Amounts off `finalTotal`, used only by the export-without-payment suppression. */
@@ -86,12 +94,14 @@ export const resolveTaxVisibility = (
   options: TaxVisibilityOptions = {}
 ): TaxVisibility => {
   const isTaxDocument = asText(input.invoiceType) === "INVOICE";
-  /* Absent taxName means GST, matching balance.js's `taxName = 'GST'` default. */
-  const taxName = asText(input.taxName) || "GST";
-  const isSplitTaxSale =
-    !asFlag(input.isInterState) &&
-    asText(input.taxType) === "INDIA" &&
-    taxName === "GST";
+  /*
+   * `taxType` defaults to INDIA exactly as the reference destructure does
+   * (balance.js:33, `taxType = TAX_TYPE.INDIA`, and talos's own schema default). Requiring
+   * the literal meant a payload that lost the field — a host delta, a mapper that drops it —
+   * printed a single IGST row on a domestic GST invoice.
+   */
+  const taxType = asText(input.taxType) || "INDIA";
+  const isSplitTaxSale = !asFlag(input.isInterState) && taxType === "INDIA";
 
   if (!isTaxDocument) {
     return {
@@ -169,7 +179,6 @@ export const resolveDocumentTaxVisibility = (
       invoiceType: invoice.invoiceType,
       taxType: invoice.taxType,
       isInterState: invoice.igst === undefined ? invoice.isIgst : invoice.igst,
-      taxName: invoice.taxName,
       supplyType: invoice.supplyType,
       /*
        * `hideTaxes` is deliberately not passed. It is a display setting the host toggles
