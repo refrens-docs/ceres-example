@@ -229,11 +229,12 @@
   </div>
 
   <div data-ceres-tax-summary{{#unless (taxTableVisible advanceOptions.taxSummaryView)}} style="display:none"{{/unless}}>
-  {{> TaxSummaryTable (computeTaxSummary invoice.items isIgst=invoice.isIgst isUtgst=invoice.isUtgst) }}
+  {{!-- The document's own flags are `igst`/`utgst`; `isIgst`/`isUtgst` are the widget's own option names. --}}
+  {{> TaxSummaryTable (computeTaxSummary invoice.items isIgst=invoice.igst isUtgst=invoice.utgst) }}
   </div>
 
   <div data-ceres-hsn-summary{{#unless advanceOptions.showHSNSummaryInInvoice}} style="display:none"{{/unless}}>
-  {{> HsnSummaryTable (computeHsnSummary invoice.items isIgst=invoice.isIgst isUtgst=invoice.isUtgst) }}
+  {{> HsnSummaryTable (computeHsnSummary invoice.items isIgst=invoice.igst isUtgst=invoice.utgst) }}
   </div>
 
   <div data-ceres-payment-table{{#if (eq advanceOptions.showPaymentsTable false)}} style="display:none"{{/if}}>

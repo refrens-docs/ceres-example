@@ -131,12 +131,16 @@ export interface InvoiceData {
   balance?: InvoiceBalance;
   taxType?: string;
   taxName?: string;
-  isIgst?: boolean;
-  isUtgst?: boolean;
-  igst?: number;
+  // The interstate/union-territory flags. serana persists these as booleans
+  // (`igst: !!totalIgst`, getInvoiceDataFromEntry.js:283); older documents
+  // carry the tax amount under the same key, so both are accepted and every
+  // reader treats them as a flag. The amounts themselves live on `finalTotal`.
+  // `isIgst`/`isUtgst` are NOT document fields — they are local aliases inside
+  // lydia/serana — so nothing may be read from them.
+  igst?: boolean | number;
+  utgst?: boolean | number;
   cgst?: number;
   sgst?: number;
-  utgst?: number;
   irn?: IrnDetails;
   notes?: string;
   terms?: Array<{ label: string; terms: string[] }>;

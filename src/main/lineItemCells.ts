@@ -13,6 +13,17 @@ import type { FlattenedInvoicePayload } from "./invoicePayloadContract";
 // It is a second copy: when a unit is added or renamed in fence, update this file too, or a
 // business using the new unit prints nothing for it.
 import shippedUnitsData from "./defaultUnits.json";
+// A currency's own minor-unit length, used only when the document does not
+// carry a `subUnitLength` of its own — refrens.com resolves it the same way
+// (`defaultSubUnitLength ?? currencyData[currency]?.decimalDigits ?? 2`, lydia
+// lineItems.js and customColumns/invoiceValue.js). Without it JPY and KWD
+// print two decimals.
+// Verbatim `key -> decimalDigits` projection of
+// @refrens/fence/currencies/currency.json. ceres has no @refrens dependencies,
+// so it is vendored rather than imported. Regenerate with:
+//   jq 'with_entries(.value |= .decimalDigits)' \
+//     node_modules/@refrens/fence/currencies/currency.json
+import currencyDecimalsData from "./currencyDecimals.json";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -22,10 +33,12 @@ interface UnitDefinition {
 }
 
 const shippedUnits = shippedUnitsData as UnitDefinition[];
+const currencyDecimals = currencyDecimalsData as Record<string, number>;
 
 // The money columns the product ships, kept printing as money rather than
 // raw numbers: the hand-built table this replaces printed every one of them
-// through formatCurrency.
+// through formatCurrency. `rate` is money too but carries its own precision
+// rule, so it is formatted separately below.
 const MONEY_SYSTEM_COLUMN_KEYS = new Set([
   "amount",
   "sgst",
@@ -139,6 +152,21 @@ const asRecord = (value: unknown): UnknownRecord =>
 const asArray = (value: unknown): unknown[] =>
   Array.isArray(value) ? value : [];
 
+// Where a document's own presentation settings actually come from. The
+// wrapper that lydia hands its in-app templates (`businessLocale`,
+// `businessCurrency`, `ownerTimeZone`, `invoice.applyNumberFormatToDiscounts`)
+// does not exist in the iframe: it is pointed straight at serana
+// (`{apiDomain}/invoices/{id}?_at=…&populateBusiness=true`, lydia
+// components/utils/iframeUtils.js buildIframeSrc), which returns the raw
+// document with the whole owning business populated on `invoice.owner`. So
+// each of those is read from its wrapper name first — a template rendered
+// through the wrapped shape keeps working — and then from the business on the
+// document, which is the only one of the two the real iframe ever has.
+const getOwnerBusiness = (invoice: FlattenedInvoicePayload): UnknownRecord => {
+  const record = invoice as unknown as UnknownRecord;
+  return asRecord(record.ownerBusiness ?? record.business ?? record.owner);
+};
+
 // conversionRates never made it into ceres's own payload contract (it exists
 // only on the unrelated payment-table type), so it is read here by the name
 // refrens.com uses — invoice.conversionRates keyed by currency code, exactly
@@ -149,7 +177,12 @@ const getSecondCurrency = (
   invoice: FlattenedInvoicePayload
 ): { code: string; rate: number | null } => {
   const record = invoice as unknown as UnknownRecord;
-  const businessCurrency = toNonEmptyString(record.businessCurrency) ?? "";
+  // `business?.currency || owner?.currency` is how refrens.com picks it
+  // (lydia Invoice.js:243).
+  const businessCurrency =
+    toNonEmptyString(record.businessCurrency) ??
+    toNonEmptyString(getOwnerBusiness(invoice).currency) ??
+    "";
   const invoiceCurrency = toNonEmptyString(invoice.currency) ?? "";
 
   if (!businessCurrency || businessCurrency === invoiceCurrency) {
@@ -171,21 +204,43 @@ export const buildCellContext = (
   unitLabels: Map<string, string>
 ): CellContext => {
   const record = invoice as unknown as UnknownRecord;
+  const ownerBusiness = getOwnerBusiness(invoice);
+  const currency = toNonEmptyString(invoice.currency) ?? "INR";
 
   return {
-    locale: toNonEmptyString(record.businessLocale) ?? DEFAULT_LOCALE,
-    currency: toNonEmptyString(invoice.currency) ?? "INR",
+    // The document's own locale wins; the business's is the fallback —
+    // refrens.com's `locale = businessLocale` default in lydia's LineItems,
+    // where businessLocale is `business.locale` (Invoice.js:237).
+    locale:
+      toNonEmptyString(record.locale) ??
+      toNonEmptyString(record.businessLocale) ??
+      toNonEmptyString(ownerBusiness.locale) ??
+      DEFAULT_LOCALE,
+    currency,
+    // A document without its own minor-unit length takes the currency's:
+    // `defaultSubUnitLength ?? currencyData[currency]?.decimalDigits ?? 2`
+    // (lydia lineItems.js:105). Without this JPY and KWD print two decimals.
     subUnitLength:
       typeof invoice.subUnitLength === "number" &&
       Number.isFinite(invoice.subUnitLength)
         ? invoice.subUnitLength
-        : DEFAULT_SUB_UNIT_LENGTH,
+        : currencyDecimals[currency] ?? DEFAULT_SUB_UNIT_LENGTH,
     customCurrencySymbol:
       toNonEmptyString(invoice.customCurrencySymbol) ?? undefined,
     roundOffQuantity: Boolean(invoice.roundOffQuantity),
     roundOffRate: Boolean(invoice.roundOffRate),
-    applyNumberFormatToDiscounts: Boolean(invoice.applyNumberFormatToDiscounts),
-    ownerTimeZone: toNonEmptyString(record.ownerTimeZone) ?? undefined,
+    // A business-level experimental switch, not a document field — read off
+    // the owning business's configuration the way refrens.com does
+    // (`bizExperimental.applyNumberFormatToDiscounts`, lydia Invoice.js).
+    applyNumberFormatToDiscounts: Boolean(
+      invoice.applyNumberFormatToDiscounts ??
+        asRecord(asRecord(ownerBusiness.configuration).experimental)
+          .applyNumberFormatToDiscounts
+    ),
+    ownerTimeZone:
+      toNonEmptyString(record.ownerTimeZone) ??
+      toNonEmptyString(ownerBusiness.timeZone) ??
+      undefined,
     showUnitInQuantity: unitColumnMode === "MERGE_QUANTITY",
     unitLabels,
     secondCurrency: getSecondCurrency(invoice),
@@ -240,19 +295,57 @@ export const resolveUnitLabel = (
   }
 };
 
-const formatLocaleNumber = (value: unknown, context: CellContext): string => {
+// The quantity/summary-row number format: refrens.com prints the magnitude
+// (lydia's quantity getValue calls `Math.abs`) and lets the rounding setting
+// decide the fraction digits.
+const formatMagnitude = (
+  value: unknown,
+  context: CellContext,
+  rounded: boolean
+): string => {
   const numeric = toFiniteNumber(value);
   if (numeric === null) {
     return "";
   }
 
-  return Math.abs(numeric).toLocaleString(context.locale, {
+  return Math.abs(numeric).toLocaleString(
+    context.locale,
+    rounded
+      ? {
+          minimumFractionDigits: context.subUnitLength,
+          maximumFractionDigits: context.subUnitLength,
+        }
+      : { minimumFractionDigits: 0, maximumFractionDigits: 20 }
+  );
+};
+
+// A business column's own number format. Unlike the quantity this keeps the
+// sign — refrens.com's formateNumberByLocale (lydia helpers/invoice.js) does
+// not take the magnitude, so a negative custom value must stay negative — and
+// pins the fraction digits to the document's minor-unit length, which is what
+// getCustomValue passes as its `formateOptions`.
+const formatBusinessNumber = (value: unknown, context: CellContext): string => {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) {
+    return "";
+  }
+
+  return numeric.toLocaleString(context.locale, {
     minimumFractionDigits: context.subUnitLength,
     maximumFractionDigits: context.subUnitLength,
   });
 };
 
-const formatMoney = (value: unknown, context: CellContext): string => {
+// `subUnitLength` is `null` for the one caller that must NOT pin the
+// precision: a flat discount without the business's number-format switch,
+// where refrens.com passes `undefined` straight into formateCurrency and lets
+// the currency's own default decide (₹5,000 rather than ₹5,000.00). A default
+// parameter cannot express that — passing `undefined` would re-trigger it.
+const formatMoney = (
+  value: unknown,
+  context: CellContext,
+  subUnitLength: number | null = context.subUnitLength
+): string => {
   const numeric = toFiniteNumber(value);
   if (numeric === null) {
     return "";
@@ -262,18 +355,27 @@ const formatMoney = (value: unknown, context: CellContext): string => {
     numeric,
     context.currency,
     context.locale,
-    context.subUnitLength,
+    subUnitLength,
     context.customCurrencySymbol
   );
 };
 
-const formatShortDate = (value: unknown, context: CellContext): string => {
+// A business date column prints as "Sep 08, 2026" on every document, in the
+// owning business's own time zone. refrens.com formats it with moment —
+// `formateShortDateWithOffset(value, offset)` when the owner has a time zone,
+// plain `moment(value).format(SHORT_DATE_FORMAT)` otherwise — and
+// SHORT_DATE_FORMAT ('MMM DD, YYYY', @refrens/birds format-time) is
+// locale-independent. So the locale is pinned to en-US here rather than the
+// document's, which would reorder the parts ("08 Sep 2026" on en-IN); the IANA
+// zone on the business (`owner.timeZone`, e.g. "Asia/Kolkata") is what
+// refrens.com turns into that offset, and Intl takes it directly.
+const formatBusinessDate = (value: unknown, context: CellContext): string => {
   const date = toValidDate(value);
   if (!date) {
     return "";
   }
 
-  return new Intl.DateTimeFormat(context.locale, {
+  return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "2-digit",
     year: "numeric",
@@ -281,21 +383,27 @@ const formatShortDate = (value: unknown, context: CellContext): string => {
   }).format(date);
 };
 
-const formatQuantity = (item: UnknownRecord, context: CellContext): string => {
-  const numeric = toFiniteNumber(item.quantity);
-  if (numeric === null) {
+// A batch date is the one date refrens.com prints numerically — lydia's batch
+// getValue is `new Date(value).toLocaleDateString(locale)`, not the custom
+// column's moment format.
+const formatBatchDate = (value: unknown, context: CellContext): string => {
+  const date = toValidDate(value);
+  if (!date) {
     return "";
   }
 
-  const magnitude = Math.abs(numeric);
-  const options: Intl.NumberFormatOptions = context.roundOffQuantity
-    ? {
-        minimumFractionDigits: context.subUnitLength,
-        maximumFractionDigits: context.subUnitLength,
-      }
-    : { minimumFractionDigits: 0, maximumFractionDigits: 20 };
+  return date.toLocaleDateString(context.locale);
+};
 
-  const formatted = magnitude.toLocaleString(context.locale, options);
+const formatQuantity = (item: UnknownRecord, context: CellContext): string => {
+  const formatted = formatMagnitude(
+    item.quantity,
+    context,
+    context.roundOffQuantity
+  );
+  if (formatted.length === 0) {
+    return "";
+  }
 
   if (!context.showUnitInQuantity) {
     return formatted;
@@ -305,18 +413,28 @@ const formatQuantity = (item: UnknownRecord, context: CellContext): string => {
   return unitLabel ? `${formatted} (${unitLabel})` : formatted;
 };
 
+// The rate is a currency column (`dataType: 'currency'` in
+// @refrens/fence/invoices/lineItems.json), so it prints with the document's
+// symbol like every other money cell. Its precision is the odd one out:
+// refrens.com passes `roundOffRate ? subUnitLength : countDecimals(item.rate)`
+// (lydia customColumns/invoiceValue.js), so an unrounded rate keeps exactly
+// the decimals it was entered with instead of being padded to the minor unit.
+const countDecimals = (value: number): number => {
+  const text = String(Math.abs(value));
+  const separator = text.indexOf(".");
+  return separator === -1 ? 0 : text.length - separator - 1;
+};
+
 const formatRate = (item: UnknownRecord, context: CellContext): string => {
   const numeric = toFiniteNumber(item.rate);
   if (numeric === null) {
     return "";
   }
 
-  const precision = context.roundOffRate ? context.subUnitLength : undefined;
-  return Math.abs(numeric).toLocaleString(
-    context.locale,
-    precision === undefined
-      ? { minimumFractionDigits: 0, maximumFractionDigits: 20 }
-      : { minimumFractionDigits: precision, maximumFractionDigits: precision }
+  return formatMoney(
+    numeric,
+    context,
+    context.roundOffRate ? context.subUnitLength : countDecimals(numeric)
   );
 };
 
@@ -360,12 +478,20 @@ const formatDiscount = (item: UnknownRecord, context: CellContext): string => {
 
   // Only FIXED_AMOUNT is money; every other value — PERCENTAGE, missing, or
   // unrecognised — reads as a percentage, matching formateCommission's own
-  // default (lydia/src/lib/locale.js:45-56).
+  // default (lydia/src/lib/locale.js:45-56). formateCommission passes its
+  // `subUnitLength` straight through, so without the business's number-format
+  // switch a flat discount takes the currency's own default precision
+  // (₹5,000, not ₹5,000.00) and a percentage keeps the digits it was entered
+  // with.
   if (discountType === "FIXED_AMOUNT") {
-    return formatMoney(amount, context);
+    return formatMoney(
+      amount,
+      context,
+      context.applyNumberFormatToDiscounts ? context.subUnitLength : null
+    );
   }
 
-  return context.applyNumberFormatToDiscounts
+  return context.applyNumberFormatToDiscounts && context.subUnitLength
     ? `${amount.toFixed(context.subUnitLength)}%`
     : `${amount}%`;
 };
@@ -395,7 +521,7 @@ const formatBatchColumn = (
   }
 
   return column.dataType === "date"
-    ? formatShortDate(raw, context)
+    ? formatBatchDate(raw, context)
     : toStringValue(raw);
 };
 
@@ -416,28 +542,35 @@ const formatCessAmount = (
   context: CellContext
 ): string => formatMoney(asRecord(item.custom)[column.key], context);
 
+// A business-added column stores its value under the column's key inside
+// `item.custom`, never on the line itself — refrens.com's getCustomValue
+// (lydia helpers/invoice.js) reads `item.custom[key]` and nothing else, and
+// the cess columns above already read the same place. The dataType names are
+// the product's own (@refrens/fence/helpers/customDataTypes.json:
+// text | number | date | currency | formula); a formula column declares what
+// it returns in `fxReturnType`. A type with no formatter prints as stored,
+// the way getCustomValue returns the raw value when its formatterMap misses.
 const formatBusinessColumn = (
   column: InvoiceTemplateColumn,
   item: UnknownRecord,
   context: CellContext
 ): string => {
-  const raw = item[column.key];
+  const raw = asRecord(item.custom)[column.key];
   if (raw === null || raw === undefined || raw === "") {
     return "";
   }
 
   switch (column.dataType) {
     case "number":
-      return formatLocaleNumber(raw, context);
-    case "amount":
+      return formatBusinessNumber(raw, context);
+    case "currency":
       return formatMoney(raw, context);
     case "date":
-      return formatShortDate(raw, context);
-    case "calculated":
-      return column.fxReturnType === "amount" ||
-        column.fxReturnType === "currency"
+      return formatBusinessDate(raw, context);
+    case "formula":
+      return column.fxReturnType === "currency"
         ? formatMoney(raw, context)
-        : formatLocaleNumber(raw, context);
+        : formatBusinessNumber(raw, context);
     default:
       return toStringValue(raw);
   }
@@ -604,7 +737,8 @@ const sumAlwaysTotalColumn = (rows: UnknownRecord[], key: string): number =>
     return sum + (toFiniteNumber(row[key]) ?? 0);
   }, 0);
 
-// Sums a business column the business set up to be summarised. A value that
+// Sums a business column the business set up to be summarised, reading each
+// line's value out of `item.custom` where business columns live. A value that
 // is present but not a number on even one line disqualifies the whole column
 // (SC45) — dropping just that line's value would print a total that doesn't
 // match the column above it. A line that simply has no value for the column
@@ -615,7 +749,7 @@ const sumBusinessColumn = (
 ): number | null => {
   const presentValues = rows
     .filter((row) => !isAdditionalChargeRow(row))
-    .map((row) => row[key])
+    .map((row) => asRecord(row.custom)[key])
     .filter((raw) => raw !== null && raw !== undefined && raw !== "");
 
   if (presentValues.length === 0) {
@@ -655,9 +789,13 @@ const buildTotalsCells = (
       if (LABEL_COLUMN_KEYS.has(column.key)) {
         text = label;
       } else if (column.key === "quantity") {
-        text = formatLocaleNumber(
+        // The same format the printed quantity cells use, so the row under
+        // them does not tell a different story about the same document
+        // (refrens.com reuses its own quantity getValue here).
+        text = formatMagnitude(
           sumAlwaysTotalColumn(rows, column.key),
-          context
+          context,
+          context.roundOffQuantity
         );
       } else if (ALWAYS_TOTAL_KEYS.has(column.key)) {
         text = formatMoney(sumAlwaysTotalColumn(rows, column.key), context);
@@ -666,7 +804,11 @@ const buildTotalsCells = (
         text =
           total === null
             ? ""
-            : formatBusinessColumn(column, { [column.key]: total }, context);
+            : formatBusinessColumn(
+                column,
+                { custom: { [column.key]: total } },
+                context
+              );
       }
     } catch (_) {
       text = "";

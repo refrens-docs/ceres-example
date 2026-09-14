@@ -80,8 +80,8 @@
     "subUnitLength": 2,
     "taxType": "INDIA",
     "taxName": "GST",
-    "isIgst": false,
-    "isUtgst": false,
+    "igst": false,
+    "utgst": false,
     "customCurrencySymbol": "₹",
     "billedBy": {
       "name": "Saga Engineering Consultants",
@@ -200,8 +200,6 @@
     "discount": 5000,
     "cgst": 11250,
     "sgst": 11250,
-    "igst": 0,
-    "utgst": 0,
     "finalTotal": {
       "total": 147500,
       "amount": 125000,

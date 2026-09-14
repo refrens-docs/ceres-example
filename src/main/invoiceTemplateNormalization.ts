@@ -401,7 +401,14 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
   const invoiceType = toStringValue(invoice.invoiceType);
   const taxType = toStringValue(invoice.taxType);
   const isTaxInvoice = invoiceType === "INVOICE";
-  const igstTax = Boolean(invoice.isIgst);
+  // The interstate flag is persisted as `igst` — serana writes
+  // `igst: !!totalIgst` (helpers/getInvoiceDataFromEntry.js:283), lydia
+  // destructures plain `igst` off the invoice (Invoice.js:79) and passes it
+  // into the column predicates. `isIgst` is only ever a local alias inside
+  // lydia/serana (`const { igst: isIgst } = i`); nothing stores that key, so
+  // reading it left every interstate invoice printing CGST ₹0.00 + SGST ₹0.00
+  // with no IGST column.
+  const igstTax = Boolean(invoice.igst);
   const discountEnabled = Boolean(
     toNumberValue(
       pickFirstValue(finalTotal.discount, finalTotal.totalDiscount),
@@ -479,10 +486,19 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
   );
   const showUnitInName = unitColumnMode === "MERGE_NAME";
   const showUnitInQuantity = unitColumnMode === "MERGE_QUANTITY";
-  const businessUnits = asRecord(
-    asRecord(pickFirstValue(invoice.ownerBusiness, invoice.business))
-      .configuration
-  ).units;
+  // `ownerBusiness`/`business` are host-wrapper keys. The real iframe is
+  // pointed straight at serana with `populateBusiness=true`, which populates
+  // the whole owning business onto the document as `invoice.owner` (its
+  // configuration `$select` includes `units` and `experimental` —
+  // serana hooks/optimized-populate-document-owner-config.js) and sends no
+  // wrapper at all. Reading only the wrapper names left every unit
+  // unresolvable in production while the wrapped-shape tests stayed green.
+  const businessConfiguration = asRecord(
+    asRecord(
+      pickFirstValue(invoice.ownerBusiness, invoice.business, invoice.owner)
+    ).configuration
+  );
+  const businessUnits = businessConfiguration.units;
   // One lookup for the whole document — every later unit resolution, in the
   // cells and in the item cell, reads this rather than rebuilding the merge.
   const unitLabels = buildUnitLabelMap(businessUnits);
@@ -530,10 +546,6 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
   // lydia's line-items widget (`experimental.stretchInvoiceTable` &&
   // `pdfOptions.fullHeightTable`). Either one absent leaves the table
   // unchanged (SC50).
-  const businessConfiguration = asRecord(
-    asRecord(pickFirstValue(invoice.ownerBusiness, invoice.business))
-      .configuration
-  );
   const businessExperimental = asRecord(businessConfiguration.experimental);
   const tableStretchEnabled =
     Boolean(businessExperimental.stretchInvoiceTable) &&
@@ -771,7 +783,10 @@ const normalizeInvoiceColumns = (
     return {
       key,
       label:
-        key === "sgst" && Boolean(invoice.isUtgst)
+        // Same story as `igst`: the union-territory flag is persisted as
+        // `utgst`, which is what lydia's InvoiceTable relabels the SGST header
+        // on (`utgst` destructured off the invoice, lineItems.js:92).
+        key === "sgst" && Boolean(invoice.utgst)
           ? "UTGST"
           : toStringValue(column.label),
       // S13: the narrow-width view shows only the short set until the
@@ -1205,7 +1220,7 @@ export const normalizeInvoiceTemplateState = (
       getSummaryCessAmount(invoice.taxSummary, "taxList") > 0 ||
       getSummaryCessAmount(invoice.hsnSummary, "hsnList") > 0);
   const showIgst =
-    Boolean(invoice.isIgst) || toStringValue(invoice.taxName) !== "GST";
+    Boolean(invoice.igst) || toStringValue(invoice.taxName) !== "GST";
   const showCgstSgst = !showIgst && toStringValue(invoice.taxName) === "GST";
 
   return {
@@ -1241,7 +1256,7 @@ export const normalizeInvoiceTemplateState = (
         contactStrip: hasValue(contact.email) || hasValue(contact.phone),
         showIgst,
         showCgstSgst,
-        isUtgst: Boolean(invoice.isUtgst),
+        isUtgst: Boolean(invoice.utgst),
         showTaxTable,
         showHsnSummary,
         showSummaryCess,

@@ -68,10 +68,10 @@ describe("line items contract parity with ceres (SC54)", () => {
       },
       {
         cells: [
-          { key: "rate", text: "10,000" },
+          { key: "rate", text: "\u20b9\u00a010,000" },
           { key: "name", text: "Design Retainer" },
           { key: "quantity", text: "2" },
-          { key: "amount", text: "\u20b9 20,000.00" },
+          { key: "amount", text: "\u20b9\u00a020,000.00" },
           { key: "warranty", text: "12 months" },
         ],
         lineNumber: 1,
@@ -80,10 +80,10 @@ describe("line items contract parity with ceres (SC54)", () => {
       },
       {
         cells: [
-          { key: "rate", text: "5,000" },
+          { key: "rate", text: "\u20b9\u00a05,000" },
           { key: "name", text: "Onboarding Service" },
           { key: "quantity", text: "1" },
-          { key: "amount", text: "\u20b9 5,000.00" },
+          { key: "amount", text: "\u20b9\u00a05,000.00" },
           { key: "warranty", text: "6 months" },
         ],
         lineNumber: 2,
@@ -94,8 +94,8 @@ describe("line items contract parity with ceres (SC54)", () => {
         cells: [
           { key: "rate", text: "" },
           { key: "name", text: "Sub total" },
-          { key: "quantity", text: "3.00" },
-          { key: "amount", text: "\u20b9 25,000.00" },
+          { key: "quantity", text: "3" },
+          { key: "amount", text: "\u20b9\u00a025,000.00" },
           { key: "warranty", text: "" },
         ],
         lineNumber: null,
@@ -116,10 +116,10 @@ describe("line items contract parity with ceres (SC54)", () => {
       },
       {
         cells: [
-          { key: "rate", text: "3,000" },
+          { key: "rate", text: "\u20b9\u00a03,000" },
           { key: "name", text: "Support Plan" },
           { key: "quantity", text: "4" },
-          { key: "amount", text: "\u20b9 12,000.00" },
+          { key: "amount", text: "\u20b9\u00a012,000.00" },
           { key: "warranty", text: "" },
         ],
         lineNumber: 1,
@@ -131,7 +131,7 @@ describe("line items contract parity with ceres (SC54)", () => {
           { key: "rate", text: "" },
           { key: "name", text: "Packing Charges" },
           { key: "quantity", text: "" },
-          { key: "amount", text: "\u20b9 500.00" },
+          { key: "amount", text: "\u20b9\u00a0500.00" },
           { key: "warranty", text: "" },
         ],
         lineNumber: null,
@@ -142,8 +142,8 @@ describe("line items contract parity with ceres (SC54)", () => {
         cells: [
           { key: "rate", text: "" },
           { key: "name", text: "Sub total" },
-          { key: "quantity", text: "4.00" },
-          { key: "amount", text: "\u20b9 12,000.00" },
+          { key: "quantity", text: "4" },
+          { key: "amount", text: "\u20b9\u00a012,000.00" },
           { key: "warranty", text: "" },
         ],
         lineNumber: null,
