@@ -40,7 +40,7 @@
           <td class="item-extras-cell" colspan="{{cells.length}}">
             {{#if extras.hasDescription}}
               <div class="item-description{{#if extras.descriptionFullWidth}} item-description-full{{/if}}">
-                {{> MarkdownViewer extras.description}}
+                {{> MarkdownViewer (prepareMarkdownViewerData extras.description) }}
               </div>
             {{/if}}
             {{#if extras.imagesInline}}
