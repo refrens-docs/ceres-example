@@ -11,6 +11,7 @@ import {
   loadTemplateManifest,
   waitForImages,
 } from "./commonUtils";
+import { normalizeInvoicePayload } from "./invoicePayloadContract";
 
 const OUTPUT_ELEMENT_ID = "documentOutput";
 const LYDIA_MODE_PARAM = "isLydiaMode";
@@ -33,9 +34,14 @@ const getTopLevelKeys = (value: unknown): string[] => {
   return Object.keys(value as Record<string, unknown>).sort();
 };
 
-let shouldRender = true;
+/*
+ * The dev bridge takes over the page when the dev harness is driving it. Its return value
+ * was captured into a `shouldRender` flag that nothing ever read, so the flag is gone and
+ * the call keeps its side effect — behaviour is unchanged, and the whole-file lint that
+ * lint-staged runs now passes.
+ */
 if (isDevMode) {
-  shouldRender = !initDevBridge();
+  initDevBridge();
 }
 
 if (isDibellaMode && !isLydiaMode && typeof document !== "undefined") {
@@ -60,7 +66,7 @@ const renderDocument = async () => {
     const encodedApiUrl = getQueryParam("apiUrl");
     if (!encodedApiUrl) {
       throw new Error(
-        "Missing required parameter: ?apiUrl=<base64-encoded-url>",
+        "Missing required parameter: ?apiUrl=<base64-encoded-url>"
       );
     }
 
@@ -74,13 +80,13 @@ const renderDocument = async () => {
     const { assets } = templateManifest;
     if (!assets || !assets.js) {
       throw new Error(
-        "Template manifest does not contain required 'assets.js' field",
+        "Template manifest does not contain required 'assets.js' field"
       );
     }
 
     const manifestBaseUrl = templateManifestUrl.substring(
       0,
-      templateManifestUrl.lastIndexOf("/"),
+      templateManifestUrl.lastIndexOf("/")
     );
     const jsUrl = `${manifestBaseUrl}/${assets.js}`;
     const cssUrl = assets.css ? `${manifestBaseUrl}/${assets.css}` : null;
@@ -116,13 +122,24 @@ const renderDocument = async () => {
 
       if (typeof template !== "function") {
         throw new Error(
-          "Template bundle did not export window.CeresTemplate. The template bundle may have failed to load or initialize properly.",
+          "Template bundle did not export window.CeresTemplate. The template bundle may have failed to load or initialize properly."
         );
       }
 
       const mapper = (window as any).CeresTemplateDataMapper;
+      /*
+       * A template without a data mapper gets the flat payload, not the host's wrapper.
+       * The wrapper nests the whole document under `invoice`, so a template reading
+       * `items`, `advanceOptions` or `billedBy` off the root — which is what every
+       * mapper-less template does — resolved undefined: an empty item table, and no tax
+       * summary or HSN summary table at all. `normalizeInvoicePayload` is the contract's
+       * own flattener and is a no-op on a payload that is already flat; the mapper path
+       * calls it internally, so it stays untouched here.
+       */
       const mappedPayload =
-        typeof mapper === "function" ? mapper(payload) : payload;
+        typeof mapper === "function"
+          ? mapper(payload)
+          : normalizeInvoicePayload(payload);
 
       if (shouldDebugMapping) {
         console.debug("[CeresMapping]", {
