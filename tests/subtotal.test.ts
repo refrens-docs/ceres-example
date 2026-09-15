@@ -631,6 +631,27 @@ describe("computeSubtotalRows", () => {
       expect(row(model, "cessRate:comp")?.label).toBe("Comp. Cess");
       expect(row(model, "cessRate:comp")?.value).toBe("₹60");
     });
+
+    it("does not mark cess rows as tax rows, in either view", () => {
+      // Both cess blocks sit outside balance.js's `!hideTaxes` fragment, so `hideTaxes`
+      // must leave them alone while it hides CGST/SGST/IGST.
+      const flat = compute(cessInvoice);
+      expect(row(flat, "cess:comp")?.isTaxRow).toBe(false);
+      expect(row(flat, "cgst")?.isTaxRow).toBe(true);
+
+      const perRate = compute({
+        ...cessInvoice,
+        advanceOptions: { taxSummaryView: "BOTH" },
+      });
+      expect(row(perRate, "cessRate:comp:12")?.isTaxRow).toBe(false);
+
+      const combined = compute({
+        ...cessInvoice,
+        items: [{ _id: "i1", total: 1000 }],
+        advanceOptions: { taxSummaryView: "BOTH" },
+      });
+      expect(row(combined, "cessRate:comp")?.isTaxRow).toBe(false);
+    });
   });
 
   describe("additional charges", () => {

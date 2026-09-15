@@ -586,6 +586,14 @@ export const computeSubtotalRows = (
         )
       );
     }
+    /*
+     * Cess rows are not `isTaxRow`, so `hideTaxes` leaves them alone. In the reference both
+     * cess blocks sit *outside* the `!hideTaxes` fragment — the flat one at
+     * lydia/src/components/widgets/invoice/balance.js:419 against the fragment that closes
+     * at 415, the per-rate one at 651 against the fragment closing at 647. Only the CGST,
+     * SGST and IGST rows are inside it. `hideTotals` still hides them, matching balance.js:241,
+     * which drops everything but the additional-charges table.
+     */
     const cessTotal = asRecord(finalTotal.cessTotal);
     cesses.forEach((entry) => {
       const cess = asRecord(entry);
@@ -596,7 +604,7 @@ export const computeSubtotalRows = (
             key: `cess:${asText(cess.cessKey)}`,
             label: asText(pickFirst(cess.cessName, cess.name)),
             amount: toAmount(cessTotal[asText(cess.cessAmountKey)]),
-            isTaxRow: true,
+            isTaxRow: false,
           },
           ctx
         )
@@ -716,6 +724,9 @@ export const computeSubtotalRows = (
      *
      * When no item carries the cess — a document whose cess sits only on the total — the
      * combined figure off `finalTotal.cessTotal` still renders, unlabelled by rate.
+     *
+     * As in the flat block above, these rows are not `isTaxRow`: the reference's per-rate
+     * cess block (balance.js:651) sits outside the `!hideTaxes` fragment that closes at 647.
      */
     const cessTotal = asRecord(finalTotal.cessTotal);
     cesses.forEach((entry) => {
@@ -743,7 +754,7 @@ export const computeSubtotalRows = (
               key: `cessRate:${cessKey}`,
               label: cessName,
               amount,
-              isTaxRow: true,
+              isTaxRow: false,
             },
             ctx
           )
@@ -760,7 +771,7 @@ export const computeSubtotalRows = (
                 : `cessRate:${cessKey}`,
               label: itemRate ? `${cessName} (${itemRate}%)` : cessName,
               amount,
-              isTaxRow: true,
+              isTaxRow: false,
             },
             ctx
           )

@@ -401,8 +401,14 @@ const normalizeInvoiceColumns = (
 
       return {
         key,
+        // `utgst` is the document field (talos/src/invoices.js:1454); `isUtgst` is the
+        // deprecated ceres-only name no producer sends. Kept in step with
+        // `mapped.visibility.isUtgst` below and with the widget's own label resolver
+        // (src/widgets/shared/taxRowLabels.ts), so a template printing these headers cannot
+        // disagree with one printing the totals block.
         label:
-          key === "sgst" && Boolean(invoice.isUtgst)
+          key === "sgst" &&
+          Boolean(pickFirstValue(invoice.utgst, invoice.isUtgst))
             ? "UTGST"
             : toStringValue(column.label),
         className: getColumnClass(key),
