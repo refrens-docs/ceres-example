@@ -1,4 +1,5 @@
 import { normalizeInvoicePayload } from "./invoicePayloadContract";
+import { resolveTaxVisibility } from "../widgets/shared/taxVisibility";
 import type {
   FlattenedInvoicePayload,
   InvoicePayloadInput,
@@ -293,7 +294,6 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
   const invoiceType = toStringValue(invoice.invoiceType);
   const taxType = toStringValue(invoice.taxType);
   const isTaxInvoice = invoiceType === "INVOICE";
-  const igstTax = Boolean(invoice.igst);
   const discountEnabled = Boolean(
     toNumberValue(
       pickFirstValue(finalTotal.discount, finalTotal.totalDiscount),
@@ -341,15 +341,26 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
   const showUnitInName =
     toStringValue(advanceOptions.unitColumn, "MERGE_QUANTITY") === "MERGE_NAME";
 
+  // Structural only — no `hideTaxes` and no export suppression. The item-table columns are
+  // a property of the document's shape, so they must not move when a user toggles a
+  // display setting; the totals rows apply both suppressions on top of this.
+  const taxVisibility = resolveTaxVisibility({
+    invoiceType,
+    taxType,
+    // `igst` is the document's inter-state boolean; `isIgst` never existed on a real
+    // document and stays only as a fallback for a host on the older ceres contract.
+    isInterState: pickFirstValue(invoice.igst, invoice.isIgst),
+  });
+
   return {
     invoiceTemplate,
     pdfOptions,
     advanceOptions,
     isTaxInvoice,
-    igstTax,
     discountEnabled,
     taxType,
     showHsnColumn,
+    taxVisibility,
     showClassificationColumn,
     showInlineHsn,
     showInlineClassification,
@@ -381,22 +392,23 @@ const normalizeInvoiceColumns = (
       } else if (key === "discount") {
         visible = context.discountEnabled;
       } else if (key === "sgst" || key === "cgst") {
-        visible =
-          context.isTaxInvoice &&
-          !context.igstTax &&
-          context.taxType === "INDIA";
+        visible = context.taxVisibility.showCgstSgst;
       } else if (key === "igst") {
-        visible =
-          context.isTaxInvoice &&
-          (context.igstTax || context.taxType === "GLOBAL");
+        visible = context.taxVisibility.showIgst;
       } else if (key === "total") {
         visible = context.isTaxInvoice;
       }
 
       return {
         key,
+        // `utgst` is the document field (talos/src/invoices.js:1454); `isUtgst` is the
+        // deprecated ceres-only name no producer sends. Kept in step with
+        // `mapped.visibility.isUtgst` below and with the widget's own label resolver
+        // (src/widgets/shared/taxRowLabels.ts), so a template printing these headers cannot
+        // disagree with one printing the totals block.
         label:
-          key === "sgst" && Boolean(invoice.utgst)
+          key === "sgst" &&
+          Boolean(pickFirstValue(invoice.utgst, invoice.isUtgst))
             ? "UTGST"
             : toStringValue(column.label),
         className: getColumnClass(key),
@@ -457,7 +469,18 @@ export const normalizeInvoiceTemplateState = (
   const showTaxTable = ["TABLE", "BOTH"].includes(
     toStringValue(context.advanceOptions.taxSummaryView)
   );
+  // The business toggle gates the section; the data check only avoids rendering an
+  // empty table. The alias is checked first because it is what the Lydia live-update
+  // bridge emits, so when both keys are present it carries the newer user action —
+  // an explicit false from either key still hides the section.
+  const hsnSummaryEnabled = Boolean(
+    pickFirstValue(
+      context.advanceOptions.showHsnSummary,
+      context.advanceOptions.showHSNSummaryInInvoice
+    )
+  );
   const showHsnSummary =
+    hsnSummaryEnabled &&
     getNestedSummaryEntries(invoice.hsnSummary, "hsnList").length > 0;
   const showSummaryCess =
     asArray(invoice.cesses).some((entry) =>
@@ -466,9 +489,9 @@ export const normalizeInvoiceTemplateState = (
     (getInvoiceCessTotal(invoice) > 0 ||
       getSummaryCessAmount(invoice.taxSummary, "taxList") > 0 ||
       getSummaryCessAmount(invoice.hsnSummary, "hsnList") > 0);
-  const showIgst =
-    Boolean(invoice.igst) || toStringValue(invoice.taxName) !== "GST";
-  const showCgstSgst = !showIgst && toStringValue(invoice.taxName) === "GST";
+  // Same predicate the item-table columns use, so a template gating cells on
+  // mapped.visibility and headers on mapped.columns can never disagree.
+  const { showIgst, showCgstSgst } = context.taxVisibility;
 
   return {
     invoice,
@@ -502,7 +525,7 @@ export const normalizeInvoiceTemplateState = (
         contactStrip: hasValue(contact.email) || hasValue(contact.phone),
         showIgst,
         showCgstSgst,
-        isUtgst: Boolean(invoice.utgst),
+        isUtgst: Boolean(pickFirstValue(invoice.utgst, invoice.isUtgst)),
         showTaxTable,
         showHsnSummary,
         showSummaryCess,
