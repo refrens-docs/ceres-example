@@ -1,6 +1,6 @@
 import initDibellaBridge from "./dibellaBridge";
 import { initLydiaBridge } from "./lydiaBridge";
-import { initDevBridge } from "./ceresDevBridge";
+import initDevBridge from "./ceresDevBridge";
 import {
   applyPreviewStyles,
   decodeBase64,
@@ -178,6 +178,8 @@ const renderDocument = async () => {
   }
 };
 
+// The dev bridge returns true when it is redirecting (it rewrites the query
+// string and calls location.replace), so there is nothing worth rendering.
 if (shouldRender) {
   renderDocument();
 }
