@@ -1,6 +1,6 @@
 import initDibellaBridge from "./dibellaBridge";
 import { initLydiaBridge } from "./lydiaBridge";
-import { initDevBridge } from "./ceresDevBridge";
+import initDevBridge from "./ceresDevBridge";
 import {
   applyPreviewStyles,
   decodeBase64,
@@ -34,14 +34,9 @@ const getTopLevelKeys = (value: unknown): string[] => {
   return Object.keys(value as Record<string, unknown>).sort();
 };
 
-/*
- * The dev bridge takes over the page when the dev harness is driving it. Its return value
- * was captured into a `shouldRender` flag that nothing ever read, so the flag is gone and
- * the call keeps its side effect — behaviour is unchanged, and the whole-file lint that
- * lint-staged runs now passes.
- */
+let shouldRender = true;
 if (isDevMode) {
-  initDevBridge();
+  shouldRender = !initDevBridge();
 }
 
 if (isDibellaMode && !isLydiaMode && typeof document !== "undefined") {
@@ -195,6 +190,10 @@ const renderDocument = async () => {
   }
 };
 
-renderDocument();
+// The dev bridge returns true when it is redirecting (it rewrites the query
+// string and calls location.replace), so there is nothing worth rendering.
+if (shouldRender) {
+  renderDocument();
+}
 
 export {};

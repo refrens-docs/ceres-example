@@ -313,7 +313,6 @@ export interface LinkedInvoice {
   finalTotal?: InvoiceTotals;
   [key: string]: any;
 }
-
 export interface DocumentBatchSummaryEntry {
   inventory?: string;
   itemName?: string;
@@ -622,7 +621,6 @@ export type HostPayloadFields = Partial<
 export interface FlattenedInvoicePayload
   extends InvoiceData,
     HostPayloadFields {}
-
 export type InvoicePayloadInput =
   | CeresTemplatePayload
   | FlattenedInvoicePayload;
