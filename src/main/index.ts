@@ -113,7 +113,6 @@ const renderDocument = async () => {
       }
 
       const template = (window as any).CeresTemplate;
-      const mapper = (window as any).CeresTemplateDataMapper;
 
       if (typeof template !== "function") {
         throw new Error(
@@ -121,6 +120,7 @@ const renderDocument = async () => {
         );
       }
 
+      const mapper = (window as any).CeresTemplateDataMapper;
       const mappedPayload =
         typeof mapper === "function" ? mapper(payload) : payload;
 
@@ -132,10 +132,16 @@ const renderDocument = async () => {
         });
       }
 
+      // Store before rendering so formatCurrency helper can read currency/locale from it
+      (window as any).ceresInvoiceData = mappedPayload;
       const html = template(mappedPayload);
+
       if (outputDiv) {
         outputDiv.innerHTML = html;
         outputDiv.classList.remove("loading-message");
+        // DOM elements (data-ceres-field targets) now exist — safe to tell Lydia we're ready.
+        // Lydia will flush its queue (e.g. qrCode/irn updates) in response to ceres:ready.
+        lydiaBridge?.notifyReady();
       }
 
       const fontsReady =
@@ -176,4 +182,4 @@ if (shouldRender) {
   renderDocument();
 }
 
-export { };
+export {};
