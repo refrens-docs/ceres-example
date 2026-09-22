@@ -14,6 +14,7 @@ import "../../widgets/payment-table";
 import "../../widgets/currency-format";
 import "../../widgets/image";
 import "../../widgets/line-items";
+import "../../widgets/subtotal";
 import { normalizeInvoiceTemplateState } from "../../main/invoiceTemplateNormalization";
 
 // Template-level Handlebars utility helpers

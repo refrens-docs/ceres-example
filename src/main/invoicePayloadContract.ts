@@ -53,11 +53,30 @@ export interface InvoiceTemplateConfig {
 }
 
 export interface InvoiceAdvanceOptions {
+  // DEPRECATED here. On refrens.com these three sit at the invoice root, not under
+  // advanceOptions — `hideTaxes`/`hideTotals` are destructured straight off the invoice
+  // in lydia/src/components/widgets/invoice/balance.js, and `hideCurrencyCode` is not a
+  // document field at all (it is BusinessData.configuration.experimental.hideCurrencyCode,
+  // written by the "Hide Currency Code in Totals" business setting). Declared here only
+  // so a host still sending the old shape stays within the contract; readers must prefer
+  // the canonical homes. Remove once no host sends these.
   hideTaxes?: boolean;
   hideTotals?: boolean;
   hideCurrencyCode?: boolean;
   reverseCharge?: boolean;
-  taxSummaryView?: "DETAILED" | "SUMMARY" | string;
+  // Gates the informational reverse-charge tax row on an RCM document. Denormalised onto
+  // the document from the business "Enable RCM Summary View" setting.
+  rcmSummaryView?: boolean;
+  // "TABLE"/"BOTH" render the tax summary table; "BOTH"/"INVOICE_SUMMARY" switch the
+  // totals tax rows to a per-rate breakup. The named members are the values producers
+  // actually send; the string fallback stays because the list is host-driven.
+  taxSummaryView?:
+    | "TABLE"
+    | "BOTH"
+    | "INVOICE_SUMMARY"
+    | "DETAILED"
+    | "SUMMARY"
+    | string;
   showSkuInInvoice?: boolean;
   showThumbnailAsColumn?: boolean;
   hideGroupSubTotal?: boolean;
@@ -129,16 +148,33 @@ export interface InvoiceData {
   finalTotal: InvoiceTotals;
   totals?: InvoiceTotals;
   balance?: InvoiceBalance;
+  // Canonical homes for the totals hide settings — the invoice root, matching
+  // refrens.com. The advanceOptions copies above are the deprecated fallback.
+  hideTotals?: boolean;
+  hideTaxes?: boolean;
+  // Multiplier per target currency, used to render the converted amount beside each
+  // totals figure on a foreign-currency document: `amount * conversionRates[businessCurrency]`.
+  // Distinct from `totalConversions`, which carries already-converted totals and cannot
+  // produce a converted subtotal or tax row.
+  conversionRates?: Record<string, number>;
+  // "EXPWOP" = export without payment of tax. Suppresses a tax row whose figure is also
+  // zero, which is the only case where refrens.com drops a tax row on a tax document.
+  supplyType?: string;
   taxType?: string;
   taxName?: string;
-  // The interstate/union-territory flags. serana persists these as booleans
-  // (`igst: !!totalIgst`, getInvoiceDataFromEntry.js:283); older documents
-  // carry the tax amount under the same key, so both are accepted and every
-  // reader treats them as a flag. The amounts themselves live on `finalTotal`.
-  // `isIgst`/`isUtgst` are NOT document fields — they are local aliases inside
-  // lydia/serana — so nothing may be read from them.
+  // Inter-state sale and union-territory flags. These are the real document fields —
+  // lydia writes `igst: !!totalIgst` (src/helpers/getInvoiceDataFromEntry.js), serana
+  // projects `igst` (src/lib/app-invoice-response.js), and both balance.js and serana's
+  // report class rename them locally (`igst: igstTax`, `utgst: enableUtgst`). Read them
+  // as flags: older documents carry the tax amount under the same key, so the number is
+  // accepted too, but the figures that get rendered live on `finalTotal`.
   igst?: boolean | number;
   utgst?: boolean | number;
+  // DEPRECATED. No producer has ever sent these; they were ceres's own invention and
+  // reading them meant the inter-state flag was always undefined. Kept as a fallback for
+  // a host built against the older contract. Remove once none send them.
+  isIgst?: boolean;
+  isUtgst?: boolean;
   cgst?: number;
   sgst?: number;
   irn?: IrnDetails;
@@ -255,7 +291,15 @@ export interface InvoiceTotals {
   // `of: Boolean` while producers write numbers into it.
   cessTotal?: Record<string, any>;
   amountRoundOff?: MoneyValue;
+  // Both round-off buckets exist in the payload but no refrens.com template renders a
+  // round-off row — rounding is already folded into `total`. Kept declared, never rendered.
   totalRoundOff?: MoneyValue;
+  // Reverse-charge tax on an RCM document, shown as a separate informational row.
+  rcmTax?: MoneyValue;
+  // Early-pay discount already applied to this document, shown under the Sub Total.
+  earlyDiscount?: MoneyValue;
+  // Suffixed onto the Discount row label as "(N%)" when the discount was entered as a rate.
+  discountPercentage?: MoneyValue;
   [key: string]: any;
 }
 
@@ -266,6 +310,8 @@ export interface InvoiceBalance {
   settledAmount?: MoneyValue;
   tds?: MoneyValue;
   credit?: MoneyValue;
+  // Active refund principal on a credit note.
+  refund?: MoneyValue;
   [key: string]: any;
 }
 
@@ -293,11 +339,25 @@ export interface BusinessData {
   _id: string;
   name?: string;
   country?: string;
+  // The iframe fetches the document with `populateBusiness: true`, which drops the field
+  // projection and populates the whole business onto `owner`. These two are the only place
+  // a ceres template can read the business's own currency and locale: the host's
+  // `businessCurrency`/`businessLocale` live on CeresTemplatePayload and never reach the
+  // iframe, so the converted-amount row would otherwise never render.
+  currency?: string;
+  locale?: string;
   configuration?: {
     units?: any;
     einvoice?: any;
     eway?: any;
     indexedCustomFields?: any;
+    // Business-level experimental toggles. `hideCurrencyCode` is the canonical home of the
+    // "Hide Currency Code in Totals" setting — it drops the "(INR)" suffix from the Total
+    // row's label and is not a per-document field.
+    experimental?: {
+      hideCurrencyCode?: boolean;
+      [key: string]: unknown;
+    };
     [key: string]: any;
   };
   _systemMeta?: {

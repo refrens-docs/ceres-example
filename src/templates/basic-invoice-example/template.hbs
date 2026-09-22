@@ -158,83 +158,59 @@
 
   {{> LineItemsTable mapped}}
 
-  <div class="totals-full-width-section">
-    <div class="total-line">
-      <span class="label">{{invoice.customLabels.subTotal}}:</span>
-      <span class="value">{{formatCurrency invoice.totals.subTotal}}</span>
-    </div>
-    {{#if invoice.totals.discount}}
-    <div class="total-line">
-      <span class="label">Discount:</span>
-      <span class="value">- {{formatCurrency invoice.totals.discount}}</span>
-    </div>
-    {{/if}}
-    {{#if invoice.totals.igst}}
-    <div class="total-line">
-      <span class="label">IGST:</span>
-      <span class="value">{{formatCurrency invoice.totals.igst}}</span>
-    </div>
-    {{/if}}
-    {{#if invoice.totals.cgst}}
-    <div class="total-line">
-      <span class="label">CGST:</span>
-      <span class="value">{{formatCurrency invoice.totals.cgst}}</span>
-    </div>
-    {{/if}}
-    {{#if invoice.totals.sgst}}
-    <div class="total-line">
-      <span class="label">SGST:</span>
-      <span class="value">{{formatCurrency invoice.totals.sgst}}</span>
-    </div>
-    {{/if}}
-    {{#if invoice.totals.amountRoundOff}}
-    <div class="total-line">
-      <span class="label">Amount Round Off:</span>
-      <span class="value">{{formatCurrency invoice.totals.amountRoundOff}}</span>
-    </div>
-    {{/if}}
-    {{#if invoice.totals.totalRoundOff}}
-    <div class="total-line">
-      <span class="label">Total Round Off:</span>
-      <span class="value">{{formatCurrency invoice.totals.totalRoundOff}}</span>
-    </div>
-    {{/if}}
-    <div class="total-line grand">
-      <span class="label">{{invoice.customLabels.total}}:</span>
-      <span class="value">{{formatCurrency invoice.totals.total}}</span>
-    </div>
-    {{#if invoice.latePaymentFee}}
-    {{#if invoice.dueDate}}
-    {{#if invoice.latePaymentFee.showInInvoice}}
-    {{#if invoice.latePaymentFee.enabled}}
-    {{#unless invoice.latePaymentFee.isApplied}}
-    <div class="total-line late-fee">
-      <span class="label">Late Payment Fee:</span>
-      <span class="value">
-        {{#if invoice.latePaymentFee.finalAmount}}Additional {{invoice.latePaymentFee.finalAmount}} {{/if}}
-        {{#if invoice.latePaymentFee.when}}
-          after {{formatDateAddDays invoice.dueDate invoice.latePaymentFee.when invoice.ownerOffset}}
-        {{/if}}
-      </span>
-    </div>
-    {{/unless}}
-    {{/if}}
-    {{/if}}
-    {{/if}}
-    {{/if}}
-    <div class="total-in-words">
-      <span>{{invoice.customLabels.totalInWords}}:</span>
-      <span>{{invoice.customLabels.totalInWordsValue}}</span>
-    </div>
+  {{!--
+    Totals come from the shared widget. Do not hand-write rows here: it decides the row set
+    and order, resolves labels from the document's own column settings, formats every amount
+    through one currency helper, and emits the data-ceres-* hooks the host patches.
+
+    This template DOES set a data mapper (window.CeresTemplateDataMapper =
+    normalizeInvoiceTemplateState), so its root is
+    { invoice, advanceOptions, mapped, derived } and the flat payload the widget
+    expects is `invoice`, not `this`. normalizeInvoicePayload merges the host
+    wrapper fields onto it, so businessCurrency/businessLocale are reachable there
+    too. docs/learnings/ceres/template-root-context-depends-on-mapper.md
+  --}}
+  {{> Subtotal (computeSubtotalRows invoice
+                  columns=invoice.columns
+                  businessCurrency=invoice.businessCurrency
+                  businessLocale=invoice.businessLocale) }}
+
+  {{!--
+    Not a totals row: a forward-looking notice about a fee that has NOT been applied yet.
+    The widget renders the fee once it is applied, matching refrens.com, which has no
+    equivalent of this warning — so it stays template-owned.
+  --}}
+  {{#if invoice.latePaymentFee}}
+  {{#if invoice.dueDate}}
+  {{#if invoice.latePaymentFee.showInInvoice}}
+  {{#if invoice.latePaymentFee.enabled}}
+  {{#unless invoice.latePaymentFee.isApplied}}
+  <div class="late-fee-notice">
+    <span class="label">Late Payment Fee:</span>
+    <span class="value">
+      {{#if invoice.latePaymentFee.finalAmount}}Additional {{formatCurrency invoice.latePaymentFee.finalAmount}} {{/if}}
+      {{#if invoice.latePaymentFee.when}}
+        after {{formatDateAddDays invoice.dueDate invoice.latePaymentFee.when invoice.ownerOffset}}
+      {{/if}}
+    </span>
   </div>
+  {{/unless}}
+  {{/if}}
+  {{/if}}
+  {{/if}}
+  {{/if}}
 
   <div data-ceres-tax-summary{{#unless (taxTableVisible advanceOptions.taxSummaryView)}} style="display:none"{{/unless}}>
-  {{!-- The document's own flags are `igst`/`utgst`; `isIgst`/`isUtgst` are the widget's own option names. --}}
-  {{> TaxSummaryTable (computeTaxSummary invoice.items isIgst=invoice.igst isUtgst=invoice.utgst) }}
+  {{!-- This template installs a CeresTemplateDataMapper, so the root is
+        { invoice, advanceOptions, mapped, derived } and the flat payload the
+        tax-flag helpers expect is `invoice`. Passing `this` would hand them the
+        wrapper and silently resolve every flag to false.
+        docs/learnings/ceres/template-root-context-depends-on-mapper.md --}}
+  {{> TaxSummaryTable (computeTaxSummary invoice.items isIgst=(showIgst invoice) isUtgst=(showUtgst invoice)) }}
   </div>
 
   <div data-ceres-hsn-summary{{#unless advanceOptions.showHSNSummaryInInvoice}} style="display:none"{{/unless}}>
-  {{> HsnSummaryTable (computeHsnSummary invoice.items isIgst=invoice.igst isUtgst=invoice.utgst) }}
+  {{> HsnSummaryTable (computeHsnSummary invoice.items isIgst=(showIgst invoice) isUtgst=(showUtgst invoice)) }}
   </div>
 
   <div data-ceres-payment-table{{#if (eq advanceOptions.showPaymentsTable false)}} style="display:none"{{/if}}>
