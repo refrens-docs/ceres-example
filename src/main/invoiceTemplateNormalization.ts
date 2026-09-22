@@ -11,6 +11,7 @@ import {
   resolveUnitLabel,
   buildSummaryRow,
   buildGroupSubTotalRow,
+  getOwnerBusiness,
 } from "./lineItemCells";
 
 type UnknownRecord = Record<string, unknown>;
@@ -488,9 +489,7 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
   // wrapper at all. Reading only the wrapper names left every unit
   // unresolvable in production while the wrapped-shape tests stayed green.
   const businessConfiguration = asRecord(
-    asRecord(
-      pickFirstValue(invoice.ownerBusiness, invoice.business, invoice.owner)
-    ).configuration
+    getOwnerBusiness(invoice).configuration
   );
   const businessUnits = businessConfiguration.units;
   // One lookup for the whole document — every later unit resolution, in the

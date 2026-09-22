@@ -1,3 +1,4 @@
+import type { InvoicePayloadInput } from "../src/main/invoicePayloadContract";
 import fixture from "./fixtures/columns-basic.json";
 import { normalizeInvoiceTemplateState } from "../src/main/invoiceTemplateNormalization";
 
@@ -182,5 +183,49 @@ describe("line items contract parity with ceres (SC54)", () => {
         column.className.includes("col-short-set")
       )
     ).toBe(true);
+  });
+
+  it("a group heading carrying its own numbers is summed into the document total, the way refrens.com sums it", () => {
+    // Parity, not an oversight. lydia's endTotalsRow reduces over the whole
+    // item array and skips exactly one kind of line —
+    // `if (b.isAdditionalCharge) return a;`
+    // (lydia/src/helpers/getGroupedLineItems.js:99-101). A group heading is
+    // not excluded there, so it must not be excluded here either: a document
+    // whose heading rows carry stray amounts has to print the same total in
+    // the PDF as it does in the web app, right or wrong.
+    //
+    // The group SUB-total is a different array and is already heading-free —
+    // buildRows only collects non-heading lines into `groupItems` — so this
+    // asserts both halves at once.
+    const grouped = normalizeInvoiceTemplateState({
+      items: [
+        { _id: "g1", name: "Group 1", group: true, quantity: 5, amount: 999 },
+        { _id: "i1", name: "Item 1", quantity: 1, amount: 100 },
+        {
+          _id: "c1",
+          name: "Delivery",
+          isAdditionalCharge: true,
+          quantity: 3,
+          amount: 50,
+        },
+      ],
+      columns: [{ key: "name" }, { key: "quantity" }, { key: "amount" }],
+      showTotalsRow: true,
+      // FlattenedInvoicePayload declares dozens of required fields the
+      // normalizer never reads; a partial document is the whole point here.
+    } as unknown as InvoicePayloadInput);
+
+    const textAt = (rowClass: string, key: string) =>
+      grouped.mapped.rows
+        .find((row) => row.rowClass === rowClass)!
+        .cells.find((cell) => cell.key === key)!.text;
+
+    // 999 + 100, and the additional charge's 50 left out.
+    expect(textAt("row-summary", "amount")).toBe("₹1,099.00");
+    expect(textAt("row-summary", "quantity")).toBe("6");
+
+    // The sub-total saw only Item 1: no heading, no additional charge.
+    expect(textAt("row-group-subtotal", "amount")).toBe("₹100.00");
+    expect(textAt("row-group-subtotal", "quantity")).toBe("1");
   });
 });

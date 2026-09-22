@@ -430,10 +430,14 @@ export interface LineItem {
   rate: number;
   amount: number;
   subTotal?: number;
-  // A plain number is a legacy/simplified shape carrying no discount kind, so it
-  // renders as no discount at all (see lineItemCells.ts) rather than being
-  // guessed at; the real shape production sends is the object form, matching
-  // serana's item.discount.{discountType,amount} (PERCENTAGE | FIXED_AMOUNT).
+  // The shape production sends is the object form, matching serana's
+  // item.discount.{discountType,amount} (PERCENTAGE | FIXED_AMOUNT). A plain
+  // number is a legacy shorthand for "a percentage with no declared type" and
+  // is read that way (formatDiscount, lineItemCells.ts) — refrens.com would
+  // print "0%" for it instead, because lydia reads only `.amount` off the
+  // object and falls back to its own `n = 0` default (invoiceValue.js:352-358).
+  // Being lenient here costs nothing: the bare shape does not occur in
+  // production, and printing a real discount beats printing a wrong zero.
   discount?: number | { discountType?: string; amount?: number };
   hsn?: string;
   images?: string[];

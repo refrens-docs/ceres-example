@@ -147,10 +147,12 @@
   }
 
   /* A blank value (e.g. a totals row's un-totalled columns) collapses away
-   * rather than showing a label beside nothing. This never targets the
-   * row-number cell — that one carries no `data-label` at all, not an empty
-   * one — and a real column can't reach this selector with content still in
-   * it, since collapsing on an empty label would hide a real value.
+   * rather than showing a label beside nothing. This depends on
+   * LineItemsTable.hbs emitting the cell with whitespace-control tildes: a
+   * Handlebars block leaves a newline text node behind, and `:empty` requires
+   * zero child nodes, so without them this rule silently matches nothing. It
+   * also matches the row-number cell, which is harmless — that one is already
+   * `display: none` above.
    */
   .line-items-table td:empty {
     display: none;

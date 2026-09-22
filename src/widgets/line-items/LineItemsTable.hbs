@@ -10,11 +10,18 @@
     {{#each rows}}
       <tr class="{{rowClass}}"{{#if isFillerRow}} aria-hidden="true"{{/if}}>
         <td class="col-index">{{lineNumber}}</td>
+        {{!-- The `~` tildes below are load-bearing, not tidiness. Standalone-block
+              stripping does not remove the newline that ends the `<td>` line, so
+              without them a blank cell holds a whitespace text node and the
+              `td:empty` rule in styles.css can never match it. Keep every tilde,
+              and keep this comment outside the cell — a comment between `<td>` and
+              the first tilde re-introduces the newline it was there to remove.
+              docs/learnings/shared/handlebars-block-whitespace-defeats-css-empty.md --}}
         {{#each cells}}
           <td class="{{className}}" data-label="{{label}}">
-            {{#if ../isTotalsRow}}
-              {{text}}
-            {{else}}
+            {{~#if ../isTotalsRow~}}
+              {{~text~}}
+            {{~else~}}
               {{#if isItemCell}}
                 <span class="item-name">{{../item.name}}</span>
                 {{#if ../item.showSku}}<small class="item-sku">SKU: {{../item.sku}}</small>{{/if}}
@@ -27,10 +34,10 @@
                   {{> CeresImageGallery (prepareImageGallery ../item.thumbnailImages variant="thumbnail" alt=../item.name) }}
                 {{/if}}
               {{else}}
-                {{text}}
+                {{~text~}}
                 {{#if secondaryText}}<br><small class="second-currency-amount">{{secondaryText}}</small>{{/if}}
-              {{/if}}
-            {{/if}}
+              {{~/if~}}
+            {{~/if~}}
           </td>
         {{/each}}
       </tr>

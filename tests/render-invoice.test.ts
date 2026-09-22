@@ -141,4 +141,37 @@ describe("basic-invoice-example — line items table", () => {
     expect(html).not.toContain("Service Description");
     expect(html).not.toContain("VAT Rate");
   });
+
+  it("regression: a cell with no value renders with no child nodes at all, so styles.css's `td:empty` can match it", () => {
+    // The stacked narrow-width view collapses a valueless cell with
+    // `.line-items-table td:empty { display: none }`. `:empty` needs ZERO
+    // child nodes — a whitespace text node defeats it — and a Handlebars
+    // block leaves exactly that behind unless the cell body carries `~`
+    // whitespace-control tildes. That shipped broken once: every value
+    // assertion passed while the rule matched nothing and a blank summary
+    // cell showed its bold label beside nothing on a phone. Asserting on the
+    // text would not catch it, so this asserts on the node count.
+    const totalsFixture = {
+      ...fixture,
+      invoice: { ...fixture.invoice, showTotalsRow: true },
+    };
+
+    const container = document.createElement("div");
+    container.innerHTML = renderFixture(totalsFixture);
+
+    const summaryCells = [
+      ...container.querySelectorAll("tr.row-summary td[data-label]"),
+    ];
+    expect(summaryCells.length).toBeGreaterThan(0);
+
+    // The summary row totals quantity and the money columns and leaves the
+    // rest blank, so this fixture must produce at least one of each kind.
+    const blank = summaryCells.filter((cell) => cell.textContent === "");
+    const filled = summaryCells.filter((cell) => cell.textContent !== "");
+    expect(blank.length).toBeGreaterThan(0);
+    expect(filled.length).toBeGreaterThan(0);
+
+    blank.forEach((cell) => expect(cell.childNodes).toHaveLength(0));
+    filled.forEach((cell) => expect(cell.childNodes.length).toBeGreaterThan(0));
+  });
 });

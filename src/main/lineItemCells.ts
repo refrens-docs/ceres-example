@@ -162,7 +162,13 @@ const asArray = (value: unknown): unknown[] =>
 // each of those is read from its wrapper name first — a template rendered
 // through the wrapped shape keeps working — and then from the business on the
 // document, which is the only one of the two the real iframe ever has.
-const getOwnerBusiness = (invoice: FlattenedInvoicePayload): UnknownRecord => {
+//
+// Exported because normalization resolves the same business for the unit list
+// and the description-width switch. One chain, one place: two copies drifting
+// would silently read a different business for units than for currency.
+export const getOwnerBusiness = (
+  invoice: FlattenedInvoicePayload
+): UnknownRecord => {
   const record = invoice as unknown as UnknownRecord;
   return asRecord(record.ownerBusiness ?? record.business ?? record.owner);
 };
@@ -491,6 +497,12 @@ const formatDiscount = (item: UnknownRecord, context: CellContext): string => {
     );
   }
 
+  // The `&&` below is a falsy test on purpose, not a missing null-check. It
+  // reproduces formateCommission's own `subUnitLength ? n.toFixed(…) : n`
+  // exactly, so a zero-decimal currency (JPY resolves subUnitLength to 0 in
+  // both codebases) skips the padding here the same way it does on
+  // refrens.com. Turning it into `!= null` would print a different percentage
+  // from the same document in the web app.
   return context.applyNumberFormatToDiscounts && context.subUnitLength
     ? `${amount.toFixed(context.subUnitLength)}%`
     : `${amount}%`;
