@@ -674,6 +674,9 @@
           },
           "type": "array"
         },
+        "applyNumberFormatToDiscounts": {
+          "type": "boolean"
+        },
         "attachments": {
           "items": {
             "type": "string"
@@ -974,7 +977,10 @@
           ]
         },
         "igst": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "number"
+          ]
         },
         "invoiceAccepted": {
           "type": "string"
@@ -1026,6 +1032,9 @@
           "type": "string"
         },
         "isBusinessUser": {
+          "type": "boolean"
+        },
+        "isColumnsModified": {
           "type": "boolean"
         },
         "isDescriptionFullWidth": {
@@ -1346,7 +1355,10 @@
           "$ref": "#/definitions/UpiDetails"
         },
         "utgst": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "number"
+          ]
         },
         "vendorFields": {
           "type": "object"
@@ -1546,6 +1558,9 @@
             "$ref": "#/definitions/Payment"
           },
           "type": "array"
+        },
+        "applyNumberFormatToDiscounts": {
+          "type": "boolean"
         },
         "attachments": {
           "items": {
@@ -1796,7 +1811,10 @@
           ]
         },
         "igst": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "number"
+          ]
         },
         "invoiceAccepted": {
           "type": "string"
@@ -1829,6 +1847,9 @@
         },
         "irn": {
           "$ref": "#/definitions/IrnDetails"
+        },
+        "isColumnsModified": {
+          "type": "boolean"
         },
         "isExpenditure": {
           "type": "boolean"
@@ -2092,7 +2113,10 @@
           "$ref": "#/definitions/UpiDetails"
         },
         "utgst": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "number"
+          ]
         },
         "vendorFields": {
           "type": "object"
@@ -2374,7 +2398,22 @@
           "type": "string"
         },
         "discount": {
-          "type": "number"
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "properties": {
+                "amount": {
+                  "type": "number"
+                },
+                "discountType": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          ]
         },
         "group": {
           "type": "boolean"
