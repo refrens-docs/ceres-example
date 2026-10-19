@@ -148,6 +148,38 @@ export const formatContext = (invoice: UnknownRecord): FormatContext => ({
 });
 
 /*
+ * Refrens' own default the shared normalizer reads differently, applied before it: a document
+ * that never chose how units print (advanceOptions.unitColumn unset) shows them in their own
+ * Unit column, as refrens.com does (304 of the test-janvi documents); the normalizer would
+ * merge them into Quantity. Ported from the Ecommerce template.
+ */
+const UNIT_CHOICES = [
+  "unitColumn",
+  "unitDisplay",
+  "showUnit",
+  "showUnitInName",
+  "showUnitInQuantity",
+  "showUnitAsColumn",
+  "showUnitColumn",
+];
+
+export const withRefrensDefaults = <T>(payload: T): T => {
+  const root = asRecord(payload);
+  const wrapped = isRecord(root.invoice);
+  const invoice = wrapped ? asRecord(root.invoice) : root;
+  const options = asRecord(invoice.advanceOptions);
+  const chosen = UNIT_CHOICES.some(
+    (key) => options[key] !== undefined && options[key] !== null
+  );
+  if (chosen) return payload;
+  const fixed = {
+    ...invoice,
+    advanceOptions: { ...options, unitColumn: "SEPARATE_COLUMN" },
+  };
+  return (wrapped ? { ...root, invoice: fixed } : fixed) as T;
+};
+
+/*
  * The template's data mapper: the shared normalizer, then the document's decimal places made
  * explicit, so the shared widgets that format money from the document itself (totals, tax
  * summary, payment record) print every figure with the same decimals as the table — a whole
@@ -162,6 +194,173 @@ export const withMoneyDefaults = <T>(state: T): T => {
     invoice.subUnitLength = moneyDigits(invoice);
   }
   return state;
+};
+
+/* ------------------------------------------------------------------ language, script, direction */
+
+/*
+ * Lydia's "Change Script" setting: the document's language/script and "Enable right-to-left
+ * script". The page takes the language (lang), the direction (dir: the layout mirrors through
+ * logical CSS) and a Noto face for scripts Inter does not cover, set after the body font so
+ * Latin text keeps its own. The field names are read as the Sri Lankan template reads them
+ * (template object, then the document), with the common spellings of each.
+ */
+export interface DocumentScript {
+  direction: "rtl" | "ltr";
+  isRtl: boolean;
+  lang: string;
+  font: string;
+}
+
+// Language or script (name, ISO 639 code or ISO 15924 code) → [lang, Google font].
+const SCRIPT_FONTS: Record<string, [string, string]> = {
+  arabic: ["ar", "Noto Sans Arabic"],
+  arab: ["ar", "Noto Sans Arabic"],
+  ar: ["ar", "Noto Sans Arabic"],
+  urdu: ["ur", "Noto Sans Arabic"],
+  ur: ["ur", "Noto Sans Arabic"],
+  persian: ["fa", "Noto Sans Arabic"],
+  farsi: ["fa", "Noto Sans Arabic"],
+  fa: ["fa", "Noto Sans Arabic"],
+  hebrew: ["he", "Noto Sans Hebrew"],
+  hebr: ["he", "Noto Sans Hebrew"],
+  he: ["he", "Noto Sans Hebrew"],
+  hindi: ["hi", "Noto Sans Devanagari"],
+  hi: ["hi", "Noto Sans Devanagari"],
+  devanagari: ["hi", "Noto Sans Devanagari"],
+  deva: ["hi", "Noto Sans Devanagari"],
+  marathi: ["mr", "Noto Sans Devanagari"],
+  mr: ["mr", "Noto Sans Devanagari"],
+  nepali: ["ne", "Noto Sans Devanagari"],
+  ne: ["ne", "Noto Sans Devanagari"],
+  bengali: ["bn", "Noto Sans Bengali"],
+  bangla: ["bn", "Noto Sans Bengali"],
+  beng: ["bn", "Noto Sans Bengali"],
+  bn: ["bn", "Noto Sans Bengali"],
+  gujarati: ["gu", "Noto Sans Gujarati"],
+  gujr: ["gu", "Noto Sans Gujarati"],
+  gu: ["gu", "Noto Sans Gujarati"],
+  punjabi: ["pa", "Noto Sans Gurmukhi"],
+  gurmukhi: ["pa", "Noto Sans Gurmukhi"],
+  guru: ["pa", "Noto Sans Gurmukhi"],
+  pa: ["pa", "Noto Sans Gurmukhi"],
+  tamil: ["ta", "Noto Sans Tamil"],
+  taml: ["ta", "Noto Sans Tamil"],
+  ta: ["ta", "Noto Sans Tamil"],
+  telugu: ["te", "Noto Sans Telugu"],
+  telu: ["te", "Noto Sans Telugu"],
+  te: ["te", "Noto Sans Telugu"],
+  kannada: ["kn", "Noto Sans Kannada"],
+  knda: ["kn", "Noto Sans Kannada"],
+  kn: ["kn", "Noto Sans Kannada"],
+  malayalam: ["ml", "Noto Sans Malayalam"],
+  mlym: ["ml", "Noto Sans Malayalam"],
+  ml: ["ml", "Noto Sans Malayalam"],
+  odia: ["or", "Noto Sans Oriya"],
+  oriya: ["or", "Noto Sans Oriya"],
+  orya: ["or", "Noto Sans Oriya"],
+  or: ["or", "Noto Sans Oriya"],
+  sinhala: ["si", "Noto Sans Sinhala"],
+  sinh: ["si", "Noto Sans Sinhala"],
+  si: ["si", "Noto Sans Sinhala"],
+  thai: ["th", "Noto Sans Thai"],
+  th: ["th", "Noto Sans Thai"],
+  chinese: ["zh", "Noto Sans SC"],
+  hans: ["zh", "Noto Sans SC"],
+  zh: ["zh", "Noto Sans SC"],
+  japanese: ["ja", "Noto Sans JP"],
+  jpan: ["ja", "Noto Sans JP"],
+  ja: ["ja", "Noto Sans JP"],
+  korean: ["ko", "Noto Sans KR"],
+  kore: ["ko", "Noto Sans KR"],
+  ko: ["ko", "Noto Sans KR"],
+};
+
+/* A set flag: true / "true" / 1, false / "false" / 0; anything else is not set. */
+const flagSetting = (value: unknown): boolean | undefined => {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
+  const word = text(value).toLowerCase();
+  if (word === "true" || word === "1") return true;
+  if (word === "false" || word === "0") return false;
+  return undefined;
+};
+
+/* A setting given as text or as a picked option ({ value, label, code }). */
+const optionText = (value: unknown): string => {
+  const option = asRecord(value);
+  return Object.keys(option).length
+    ? firstText(option.value, option.code, option.label, option.name)
+    : text(value);
+};
+
+export const mapDocumentScript = (...sources: unknown[]): DocumentScript => {
+  // Later sources win: the template object, the document's template, the document.
+  const settings = Object.assign({}, ...sources.map(asRecord)) as UnknownRecord;
+  const rtlFlag = [
+    "enableRtl",
+    "enableRTL",
+    "isRtl",
+    "isRTL",
+    "rtl",
+    "rightToLeft",
+  ]
+    .map((key) => flagSetting(settings[key]))
+    .find((flag) => flag !== undefined);
+  const direction = text(
+    firstText(settings.direction, settings.textDirection, settings.dir)
+  ).toLowerCase();
+  const isRtl = rtlFlag ?? direction === "rtl";
+
+  const language = [
+    settings.languageScript,
+    settings.script,
+    settings.scriptLanguage,
+    settings.language,
+    settings.languageCode,
+  ]
+    .map(optionText)
+    .find(Boolean);
+  const key = (language || "").toLowerCase().split(/[-_\s(]/)[0];
+  const [lang, font] = SCRIPT_FONTS[key] || ["", ""];
+
+  return { direction: isRtl ? "rtl" : "ltr", isRtl, lang, font };
+};
+
+/*
+ * The data mapper's step: the script settings read before the shared normalizer drops the
+ * top-level template object, kept on the state for the view.
+ */
+export const withDocumentScript = <T>(
+  state: T,
+  payload: unknown
+): T & { documentScript?: DocumentScript } => {
+  const raw = asRecord(payload);
+  const rawInvoice = asRecord(raw.invoice);
+  const record = asRecord(state);
+  if (Object.keys(record).length) {
+    record.documentScript = mapDocumentScript(
+      raw.template,
+      rawInvoice.template,
+      asRecord(record.invoice).template
+    );
+  }
+  return state as T & { documentScript?: DocumentScript };
+};
+
+/* The script's Google font, loaded once (the body font stays first for Latin text). */
+export const loadScriptFont = (font: string): void => {
+  if (!font || typeof document === "undefined") return;
+  const id = `mm-script-font-${font.replace(/\s+/g, "-").toLowerCase()}`;
+  if (document.getElementById(id)) return;
+  const link = document.createElement("link");
+  link.id = id;
+  link.rel = "stylesheet";
+  link.href = `https://fonts.googleapis.com/css2?family=${font.replace(
+    / /g,
+    "+"
+  )}:wght@400;500;600;700&display=swap`;
+  document.head.appendChild(link);
 };
 
 export const formatQuantity = (value: unknown, ctx: FormatContext): string =>
@@ -307,13 +506,41 @@ export const mapSettings = (state: UnknownRecord) => {
 
 /* ------------------------------------------------------------------ parties */
 
-/* Parties carry an ISO country code ("IN"); print the country's name. */
+/* A GST state code ("24", "07-Delhi") as two digits. */
+const gstCode = (value: unknown): string => {
+  const match = text(value).match(/^0?(\d{1,2})(?:\D|$)/);
+  return match ? match[1].padStart(2, "0") : "";
+};
+
+/*
+ * Parties carry an ISO country code ("IN"); print the country's name, as Refrens names it
+ * ("United States of America (USA)", where the browser's list says "United States").
+ */
+const COUNTRY_NAMES: Record<string, string> = {
+  US: "United States of America (USA)",
+};
 const regionName = (code: string): string =>
   /^[A-Za-z]{2}$/.test(code)
-    ? (new Intl.DisplayNames(["en"], { type: "region", fallback: "code" }).of(
+    ? COUNTRY_NAMES[code.toUpperCase()] ||
+      (new Intl.DisplayNames(["en"], { type: "region", fallback: "code" }).of(
         code.toUpperCase()
       ) as string)
     : code;
+
+/*
+ * A party's state as Refrens prints it: the state of its GST state code when it has one
+ * ("24" → Gujarat, even with "Maharashtra" stored — 154 test-janvi documents), else the
+ * stored state. The shared normalizer's place-of-supply reading names the code.
+ */
+export const partyState = (party: UnknownRecord): string => {
+  const code = gstCode(party.gstState);
+  const named = code
+    ? normalizePlaceOfSupply({
+        placeOfSupply: code,
+      } as unknown as FlattenedInvoicePayload)
+    : "";
+  return named && named !== code ? named : text(party.state);
+};
 
 const ownerConfiguration = (invoice: UnknownRecord): UnknownRecord =>
   asRecord(asRecord(invoice.owner).configuration);
@@ -339,6 +566,82 @@ const fieldShown = (
 const fieldList = (value: unknown): unknown[] =>
   Array.isArray(value) ? value : Object.values(asRecord(value));
 
+/*
+ * A party's VAT / TRN / TIN / SST / Tax ID prints only where the document carries it, as on
+ * refrens.com (ported from the Ecommerce template's 465-document check): a switch that hides it
+ * anywhere (<key>ShowInInvoice, show<Key>…, the party's or the business's fieldVisibility)
+ * hides it; otherwise a party outside India prints its number and an Indian party does not.
+ */
+export const taxIdShown = (
+  invoice: UnknownRecord,
+  party: UnknownRecord,
+  aliases: string[]
+): boolean => {
+  const names = aliases.map((alias) => alias.toLowerCase());
+  const business = asRecord(
+    asRecord(ownerConfiguration(invoice).experimental).fieldVisibility
+  );
+  const fromMap = (map: UnknownRecord) =>
+    Object.keys(map)
+      .filter((key) => names.includes(key.toLowerCase()))
+      .map((key) => {
+        const value = map[key];
+        const record = asRecord(value);
+        return [
+          value,
+          record.showInDocument,
+          record.showInInvoice,
+          record.visible,
+        ]
+          .map(flagSetting)
+          .find((setting) => setting !== undefined);
+      });
+  const switches = [
+    ...aliases.flatMap((alias) => {
+      const cap = alias.charAt(0).toUpperCase() + alias.slice(1);
+      return [
+        party[`${alias}ShowInInvoice`],
+        party[`show${cap}InInvoice`],
+        party[`show${cap}`],
+      ].map(flagSetting);
+    }),
+    ...fromMap(asRecord(party.fieldVisibility)),
+    ...fromMap(business),
+  ].filter((setting): setting is boolean => setting !== undefined);
+  const hidden = aliases.some((alias) => {
+    const cap = alias.charAt(0).toUpperCase() + alias.slice(1);
+    return flagSetting(party[`hide${cap}`]) === true;
+  });
+  if (hidden || switches.includes(false)) return false;
+  if (switches.includes(true)) return true;
+  const country = text(party.country).toUpperCase();
+  return Boolean(country) && country !== "IN" && country !== "INDIA";
+};
+
+/*
+ * A custom field's value as Refrens prints it: a multi-select or checkbox list joined
+ * ("Option 2, Option 3"), a picked option by its label, yes / no as "Yes" / "No", the rest
+ * as text.
+ */
+export const customFieldText = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => {
+        const record = asRecord(entry);
+        return Object.keys(record).length
+          ? firstText(record.label, record.value)
+          : text(entry);
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  const option = asRecord(value);
+  return Object.keys(option).length
+    ? firstText(option.label, option.value)
+    : text(value);
+};
+
 const extraRows = (party: UnknownRecord): LabelValue[] => [
   ...fieldList(party.additionalIds)
     .map(asRecord)
@@ -354,7 +657,7 @@ const extraRows = (party: UnknownRecord): LabelValue[] => [
     .map((entry) => ({
       key: "customField",
       label: firstText(entry.label, entry.name),
-      value: text(entry.value),
+      value: customFieldText(entry.value),
       isDate: text(entry.dataType).toLowerCase() === "date",
     })),
   ...fieldList(party.customHeaders)
@@ -370,7 +673,8 @@ const extraRows = (party: UnknownRecord): LabelValue[] => [
 export const mapParty = (
   invoice: UnknownRecord,
   partyValue: unknown,
-  title: string
+  title: string,
+  billing = false
 ) => {
   const party = asRecord(partyValue);
   const name = text(party.name);
@@ -382,7 +686,7 @@ export const mapParty = (
   const regionLine = [
     cityLine,
     text(party.district) === text(party.city) ? "" : text(party.district),
-    text(party.state),
+    partyState(party),
     regionName(text(party.country)),
   ]
     .filter(Boolean)
@@ -396,28 +700,54 @@ export const mapParty = (
     .join(", ");
 
   const ids: LabelValue[] = [];
-  if (party.gstin && fieldShown(invoice, party, "gst")) {
+  // GSTIN and PAN are Indian numbers: refrens.com leaves them off a seller or buyer abroad,
+  // while a shipping address prints whatever it carries.
+  const country = text(party.country).toUpperCase();
+  const indian = !billing || ["", "IN", "INDIA"].includes(country);
+  if (indian && text(party.gstin) && fieldShown(invoice, party, "gst")) {
     ids.push({ key: "gstin", label: "GSTIN", value: text(party.gstin) });
   }
-  if (party.panNumber && fieldShown(invoice, party, "pan")) {
+  if (indian && text(party.panNumber) && fieldShown(invoice, party, "pan")) {
     ids.push({ key: "pan", label: "PAN", value: text(party.panNumber) });
   }
   const labels = asRecord(invoice.customLabels);
-  if (party.vatNumber) {
-    ids.push({
-      key: "vat",
-      label: firstText(party.vatLabel, "VAT Number"),
-      value: text(party.vatNumber),
-    });
-  }
-  // The other countries' tax numbers, labelled as sr-trading-2-0 labels them.
+  // The other geographies' tax numbers, labelled as sr-trading-2-0 labels them, only where
+  // the document carries them (taxIdShown).
   [
-    { key: "trnNumber", label: firstText(labels.trn, labels.trnNumber, "TRN") },
-    { key: "tinNumber", label: firstText(labels.tin, labels.tinNumber, "TIN") },
-    { key: "sstNumber", label: firstText(labels.sst, labels.sstNumber, "SST") },
-    { key: "taxId", label: firstText(labels.taxId, "Tax ID") },
-  ].forEach(({ key, label }) => {
-    if (text(party[key])) ids.push({ key, label, value: text(party[key]) });
+    {
+      key: "vatNumber",
+      aliases: ["vat", "vatNumber"],
+      label: firstText(
+        labels.vat,
+        labels.vatNumber,
+        party.vatLabel,
+        "VAT Number"
+      ),
+    },
+    {
+      key: "trnNumber",
+      aliases: ["trn", "trnNumber"],
+      label: firstText(labels.trn, labels.trnNumber, "TRN"),
+    },
+    {
+      key: "tinNumber",
+      aliases: ["tin", "tinNumber"],
+      label: firstText(labels.tin, labels.tinNumber, "TIN"),
+    },
+    {
+      key: "sstNumber",
+      aliases: ["sst", "sstNumber"],
+      label: firstText(labels.sst, labels.sstNumber, "SST"),
+    },
+    {
+      key: "taxId",
+      aliases: ["taxId"],
+      label: firstText(labels.taxId, "Tax ID"),
+    },
+  ].forEach(({ key, aliases, label }) => {
+    if (text(party[key]) && taxIdShown(invoice, party, aliases)) {
+      ids.push({ key, label, value: text(party[key]) });
+    }
   });
 
   /*
@@ -473,6 +803,7 @@ export const mapParty = (
     isNum,
     noWrap: isNum,
     isEmail: row.key === "email",
+    isPhone: row.key === "phone",
   });
   const pairs = <T>(rows: T[]): T[][] =>
     rows
@@ -945,11 +1276,6 @@ const complianceSettings = (invoice: UnknownRecord) => {
   };
 };
 
-const gstCode = (value: unknown): string => {
-  const match = text(value).match(/^0?(\d{1,2})(?:\D|$)/);
-  return match ? match[1].padStart(2, "0") : "";
-};
-
 /*
  * Indian place of supply prints as "State (code)". The name comes from the shared
  * normalizer; the code from the same raw value it read, so the two cannot disagree.
@@ -1052,6 +1378,13 @@ export const mapMeta = (state: UnknownRecord, transportRows: LabelValue[]) => {
       label: labelOr(labels, "purchaseOrderNumber", "PO No."),
       value: text(invoice.purchaseOrderNumber),
     },
+    // A credit or debit note's reason ("Product Return"), as refrens.com prints it. The linked
+    // document's number is not in the data (only its id), so it cannot print.
+    {
+      key: "documentReason",
+      label: labelOr(labels, "documentReason", "Reason"),
+      value: text(invoice.documentReason),
+    },
     ...asArray(invoice.customHeaders)
       .map(asRecord)
       .map((entry) => ({
@@ -1098,20 +1431,24 @@ export const mapSupply = (state: UnknownRecord) => {
   const place = supplySetting(state, "placeOfSupply");
   const rowShown =
     country.shown ?? (country.hidden === undefined ? true : !country.hidden);
+  const countryCode = normalizeCountryOfSupply(
+    invoice as unknown as FlattenedInvoicePayload
+  );
   const rows = [
     {
       key: "countryOfSupply",
       label: labelOr(labels, "countryOfSupply", "Country of Supply"),
-      value: regionName(
-        normalizeCountryOfSupply(invoice as unknown as FlattenedInvoicePayload)
-      ),
+      value: regionName(countryCode),
       isHidden: country.configured === false,
       attr: "",
     },
     {
       key: "placeOfSupply",
       label: labelOr(labels, "placeOfSupply", "Place of Supply"),
-      value: placeOfSupplyText(invoice),
+      // An Indian state: none on a supply abroad, as refrens.com prints it.
+      value: /^(in|india)?$/i.test(text(countryCode))
+        ? placeOfSupplyText(invoice)
+        : "",
       isHidden: !(
         place.configured ??
         place.shown ??
@@ -1156,8 +1493,58 @@ export const mapAdditionalInfo = (state: UnknownRecord, ctx: FormatContext) => {
     .filter((row) => row.label && row.value);
   const rows = [...footerRows, ...fieldRows];
   return rows.length
-    ? { title: heading(labels, "additionalInfo", "Additional Info"), rows }
+    ? {
+        title: heading(labels, "additionalInfo", "Additional Information"),
+        rows,
+      }
     : null;
+};
+
+// "SAVINGS" → "Savings", "CURRENT_ACCOUNT" → "Current Account"; mixed case stays as typed.
+const titleWord = (value: string): string =>
+  value === value.toUpperCase()
+    ? value
+        .toLowerCase()
+        .replace(
+          /(^|[\s_])([a-z])/g,
+          (_, gap, letter) =>
+            `${gap === "_" ? " " : gap}${letter.toUpperCase()}`
+        )
+    : value;
+
+/*
+ * A figure (a challan number, a vehicle number, an ID) keeps to one line only while its value
+ * looks like one: a single unbroken token, or a short value with digits in it ("MH 12 AB
+ * 1234"). A business can relabel such a field and fill it with text ("Final Destination: <an
+ * address>"), which then wraps like any text instead of running out of its box. Ported from
+ * the Ecommerce template.
+ */
+const NUMBER_LIKE_MAX = 24;
+
+export const staysWhole = (value: unknown): boolean => {
+  const shown = text(value);
+  if (!/\s/.test(shown)) return true;
+  return shown.length <= NUMBER_LIKE_MAX && /\d/.test(shown);
+};
+
+/*
+ * Refrens stores transport choices as codes ("RAIL", "OVERDIMENSIONALCARGO"); the document
+ * prints their names, as Refrens does. An unknown code reads in title case ("NEW_MODE" →
+ * "New Mode"); free text prints as typed. Ported from the Ecommerce template.
+ */
+const TRANSPORT_NAMES: Record<string, string> = {
+  ROAD: "Road",
+  RAIL: "Rail",
+  AIR: "Air",
+  SHIP: "Ship",
+  REGULAR: "Regular",
+  OVERDIMENSIONALCARGO: "Over Dimensional Cargo",
+};
+
+export const transportName = (value: unknown): string => {
+  const raw = text(value);
+  if (!/^[A-Z][A-Z0-9_]*$/.test(raw)) return raw;
+  return TRANSPORT_NAMES[raw] || titleWord(raw);
 };
 
 /*
@@ -1174,36 +1561,28 @@ export const mapTransport = (state: UnknownRecord) => {
   const irn = asRecord(invoice.irn);
   const { eway } = complianceSettings(invoice);
 
-  // The spec's E-Way Bill No., Vehicle No. and Transporter lead; any other transport detail
-  // the document carries follows in the same label / value form.
+  // The e-way bill leads (the spec's first row); the transport details follow in the order the
+  // form fills them and Refrens prints them, with its labels (as the Ecommerce template):
+  // Transport Mode, Transporter, Transporter ID, Distance, Challan Date, Challan Number, Vehicle
+  // Type, Vehicle Number, then any extra information. Transaction Type and Sub Supply Type
+  // belong to the e-way bill's filing and are not printed, as on Refrens.
   const rows: LabelValue[] = [
     ...(isOff(eway.billNumber)
       ? []
       : [
           {
             key: "ewayBillNumber",
-            label: labelOr(labels, "ewayBillNumber", "E-Way Bill No."),
+            label: labelOr(labels, "ewayBillNumber", "Eway Bill"),
             value: text(irn.EwbNo),
             isNum: true,
           },
         ]),
-    {
-      key: "vehicleNumber",
-      label: labelOr(labels, "vehicleNumber", "Vehicle No."),
-      value: text(transport.vehicleNumber),
-      isNum: true,
-    },
-    {
-      key: "transportName",
-      label: labelOr(labels, "transportName", "Transporter"),
-      value: firstText(transporter.name, transport.transporterName),
-    },
     ...(isOff(eway.billDate)
       ? []
       : [
           {
             key: "ewayBillDate",
-            label: labelOr(labels, "ewayBillDate", "E-Way Bill Date"),
+            label: labelOr(labels, "ewayBillDate", "Eway Date"),
             value: text(irn.EwbDt),
             isUtcDate: true,
           },
@@ -1213,7 +1592,7 @@ export const mapTransport = (state: UnknownRecord) => {
       : [
           {
             key: "ewayValidTill",
-            label: labelOr(labels, "validTillDate", "Valid Till"),
+            label: labelOr(labels, "validTillDate", "Eway Valid Till"),
             value: text(irn.EwbValidTill),
             isUtcDate: true,
           },
@@ -1229,26 +1608,18 @@ export const mapTransport = (state: UnknownRecord) => {
           },
         ]),
     {
-      key: "challanNumber",
-      label: labelOr(labels, "challanNumber", "Challan No."),
-      value: text(transport.challanNumber),
-      isNum: true,
-    },
-    {
-      key: "challanDate",
-      label: labelOr(labels, "challanDate", "Challan Date"),
-      value: text(transport.challanDate),
-      isDate: true,
-    },
-    {
-      key: "vehicleType",
-      label: labelOr(labels, "vehicleType", "Vehicle Type"),
-      value: text(transport.vehicleType),
-    },
-    {
       key: "transportMode",
       label: labelOr(labels, "transportMode", "Transport Mode"),
-      value: firstText(transport.transportMode, transport.transport),
+      value: transportName(
+        firstText(transport.transportMode, transport.transport)
+      ),
+    },
+    {
+      key: "transportName",
+      // "Transporter", as Refrens prints it: the business's transportName label ("Transport")
+      // is not the one Refrens uses for this line.
+      label: labelOr(labels, "transporter", "Transporter"),
+      value: firstText(transporter.name, transport.transporterName),
     },
     {
       key: "transporterId",
@@ -1258,19 +1629,32 @@ export const mapTransport = (state: UnknownRecord) => {
     },
     {
       key: "distance",
-      label: labelOr(labels, "distance", "Distance (km)"),
+      label: labelOr(labels, "distance", "Distance"),
       value: text(transport.distance),
       isNum: true,
     },
     {
-      key: "transactionType",
-      label: labelOr(labels, "transactionType", "Transaction Type"),
-      value: text(transport.transactionType),
+      key: "challanDate",
+      label: labelOr(labels, "challanDate", "Challan Date"),
+      value: text(transport.challanDate),
+      isDate: true,
     },
     {
-      key: "subSupplyType",
-      label: labelOr(labels, "subSupplyType", "Sub Supply Type"),
-      value: firstText(transport.subSupplyType, transport.subSupplyDesc),
+      key: "challanNumber",
+      label: labelOr(labels, "challanNumber", "Challan Number"),
+      value: text(transport.challanNumber),
+      isNum: true,
+    },
+    {
+      key: "vehicleType",
+      label: labelOr(labels, "vehicleType", "Vehicle Type"),
+      value: transportName(transport.vehicleType),
+    },
+    {
+      key: "vehicleNumber",
+      label: labelOr(labels, "vehicleNumber", "Vehicle Number"),
+      value: text(transport.vehicleNumber),
+      isNum: true,
     },
     {
       key: "transportExtraInfo",
@@ -1281,7 +1665,9 @@ export const mapTransport = (state: UnknownRecord) => {
     .filter((row) => row.label && row.value)
     .map((row) => ({
       ...row,
-      isNum: Boolean(row.isNum || row.isDate || row.isUtcDate),
+      isNum:
+        Boolean(row.isDate || row.isUtcDate) ||
+        (Boolean(row.isNum) && staysWhole(row.value)),
     }));
 
   // Any transport value, or an e-way bill alone, shows the box.
@@ -1290,14 +1676,56 @@ export const mapTransport = (state: UnknownRecord) => {
     : null;
 };
 
+/* Each document type's key in the business's per-type QR switch (showQrCode.<type>). */
+const QR_DOCUMENT_KEYS: Record<string, string> = {
+  INVOICE: "invoice",
+  QUOTATION: "quotation",
+  PROFORMA: "proforma",
+  PROFORMAINV: "proforma",
+  PROFORMAINVOICE: "proforma",
+  PURCHASE: "expenditure",
+  EXPENDITURE: "expenditure",
+  PURCHASEORDER: "purchaseOrder",
+  SALESORDER: "salesOrder",
+  DELIVERYCHALLAN: "deliveryChallan",
+  CREDITNOTE: "creditNote",
+  DEBITNOTE: "debitNote",
+};
+
 export const mapCompliance = (state: UnknownRecord) => {
   const invoice = asRecord(state.invoice);
   const labels = asRecord(invoice.customLabels);
   const irn = asRecord(invoice.irn);
   const { einvoice } = complianceSettings(invoice);
-  const isCancelled = asRecord(asRecord(state.mapped).irn).isCancelled === true;
-  const irnQr = firstText(invoice.qrCode, irn.qrCode);
-  const documentQr = text(invoice.documentQr);
+  const isCancelled =
+    asRecord(asRecord(state.mapped).irn).isCancelled === true ||
+    text(invoice.einvoiceGeneratedStatus).toUpperCase() === "CANCELLED";
+  const configuration = ownerConfiguration(invoice);
+  // The e-invoice QR: an image the host posts (qrCode), else the IRN's own QR text as the API
+  // sends it — the signed QR when the business prints that (showSignedIrnQr), else the QR
+  // payload — drawn here.
+  const irnQr = qrImage(
+    firstText(
+      invoice.qrCode,
+      irn.qrCode,
+      configuration.showSignedIrnQr === true
+        ? firstText(irn.SignedQRCode, irn.qr)
+        : firstText(irn.qr, irn.SignedQRCode)
+    )
+  );
+  // The document QR shows unless the business switched QR codes off, in general
+  // (enableQrCode) or for this kind of document (showQrCode.<type>).
+  const qrKey =
+    QR_DOCUMENT_KEYS[text(invoice.billType).toUpperCase()] ||
+    text(invoice.billType).toLowerCase();
+  const documentQr =
+    isOff(configuration.enableQrCode) ||
+    isOff(asRecord(configuration.showQrCode)[qrKey])
+      ? ""
+      : text(invoice.documentQr);
+  // One QR, as refrens.com prints it (user decision): the e-invoice QR while the IRN is
+  // active, in the e-invoice box; otherwise (no IRN, or cancelled) the document QR.
+  const einvoiceActive = irnQr !== "" && !isCancelled;
 
   const rows: LabelValue[] = [
     {
@@ -1324,10 +1752,13 @@ export const mapCompliance = (state: UnknownRecord) => {
       isDate: true,
     },
   ].filter((row) => row.value);
+  const showIrn = !isOff(einvoice.irnNumber);
+  // The document QR always prints in the header, the e-invoice QR in its own box (user
+  // request).
 
   return {
-    showIrn: !isOff(einvoice.irnNumber),
-    irnLabel: labelOr(labels, "irn", "IRN"),
+    showIrn,
+    irnLabel: labelOr(labels, "irn", "IRN No."),
     irn: text(irn.Irn),
     rows,
     // Two to a line (Ack No. | Ack Date), like the party fields.
@@ -1335,11 +1766,11 @@ export const mapCompliance = (state: UnknownRecord) => {
       .filter((_, index) => index % 2 === 0)
       .map((_, index) => rows.slice(index * 2, index * 2 + 2)),
     qr: {
-      irn: isCancelled ? "" : irnQr,
+      irn: einvoiceActive ? irnQr : "",
       zatca: text(invoice.zatcaQrCode),
       lhdn: text(invoice.lhdnQrCode),
       // documentQr arrives as text (a JSON summary of the document): draw it.
-      document: qrImage(documentQr),
+      document: einvoiceActive ? "" : qrImage(documentQr),
     },
   };
 };
@@ -1528,8 +1959,7 @@ const cellValue = (
   visibility: UnknownRecord,
   item: UnknownRecord,
   column: ItemColumn,
-  ctx: FormatContext,
-  mergeUnit: boolean
+  ctx: FormatContext
 ): string => {
   const value = columnNumber(item, column);
   switch (column.kind) {
@@ -1538,19 +1968,17 @@ const cellValue = (
       if (column.key === "unit") return unitText(invoice, item);
       return text(value);
     case "qty": {
-      // "10 PCS": the account's choice, or the table's last-but-one width fallback.
-      const unit =
-        visibility.showUnitInQuantity || mergeUnit
-          ? unitText(invoice, item)
-          : "";
+      // "10 PCS": the account's own choice (MERGE_QUANTITY).
+      const unit = visibility.showUnitInQuantity ? unitText(invoice, item) : "";
       const quantity = formatQuantity(value, ctx);
       return quantity && unit ? `${quantity} ${unit}` : quantity;
     }
     case "percent":
       return formatPercent(value, ctx);
     case "discount":
+      // A percentage discount left empty reads "0%", as refrens.com prints it.
       return discountParts(item).isPercent
-        ? formatPercent(value, ctx)
+        ? formatPercent(hasValue(value) ? value : 0, ctx)
         : formatMoney(value, ctx);
     case "money":
       return formatMoney(value, ctx);
@@ -1561,6 +1989,10 @@ const cellValue = (
   }
 };
 
+// refrens.com prints the MSIC column on challans, quotations, orders and notes, never on
+// invoices, proformas or sales orders (ported from the Ecommerce template's check).
+const MSIC_OFF_TYPES = ["INVOICE", "PROFORMAINV", "SALESORDER"];
+
 const resolveColumns = (state: UnknownRecord, items: UnknownRecord[]) => {
   const invoice = asRecord(state.invoice);
   const visibility = asRecord(asRecord(state.mapped).visibility);
@@ -1568,9 +2000,18 @@ const resolveColumns = (state: UnknownRecord, items: UnknownRecord[]) => {
   const advanceOptions = asRecord(state.advanceOptions);
   // Normalization drops semanticType / isCessColumn; read them off the account's column.
   const raw = asArray(invoice.columns).map(asRecord);
+  // MSIC is a column like any other on refrens.com, which the shared normalizer always drops:
+  // it prints unless the business hid it, on the document types that carry it.
+  const msicShown =
+    !MSIC_OFF_TYPES.includes(text(invoice.billType).toUpperCase()) &&
+    raw.some((entry) => entry.key === "msic" && entry.isHidden !== true);
   const columns = asArray(asRecord(state.mapped).columns)
     .map(asRecord)
-    .filter((column) => column.isHidden !== true && text(column.key))
+    .filter(
+      (column) =>
+        text(column.key) &&
+        (column.isHidden !== true || (column.key === "msic" && msicShown))
+    )
     .map((column) =>
       makeColumn({
         ...raw.find((entry) => entry.key === column.key),
@@ -1595,14 +2036,26 @@ const resolveColumns = (state: UnknownRecord, items: UnknownRecord[]) => {
   const quantityIndex = columns.findIndex(
     (column) => column.key === "quantity"
   );
-  if (visibility.showUnitAsColumn && !has("unit") && quantityIndex >= 0) {
+  // No item with a unit: no Unit column (as refrens.com).
+  const anyUnit = items.some((item) => unitText(invoice, item));
+  // The business's own Unit column switched off: no units at all, as refrens.com prints it.
+  const unitOff = raw.some(
+    (entry) => entry.key === "unit" && entry.isHidden === true
+  );
+  if (
+    visibility.showUnitAsColumn &&
+    !unitOff &&
+    anyUnit &&
+    !has("unit") &&
+    quantityIndex >= 0
+  ) {
     columns.splice(
       quantityIndex + 1,
       0,
       makeColumn({ key: "unit", label: labelOr(labels, "unit", "Unit") })
     );
   }
-  return columns;
+  return anyUnit ? columns : columns.filter((column) => column.key !== "unit");
 };
 
 /*
@@ -1742,8 +2195,6 @@ const longestWordWidth = (value: string): number =>
 interface WidthInput {
   column: ItemColumn;
   values: string[];
-  /* Qty's values as they print once Unit merges into it ("10 PCS"). */
-  mergedValues?: string[];
 }
 
 /* The narrowest one-line width a column's content needs, at a given figure scale. */
@@ -1764,13 +2215,10 @@ const contentWidth = (
 export interface TableLayout {
   /* Final width per column key, in px. */
   widths: Record<string, number>;
-  mergeUnit: boolean;
   smallNumbers: boolean;
   /* Description's width at the design width, and the minimum it is held to. */
   descriptionWidth: number;
   descriptionMin: number;
-  /* Every column but Description, shrunk to content at full size: what print has to fit. */
-  printFixedWidth: number;
 }
 
 export const planTableLayout = (inputs: WidthInput[]): TableLayout => {
@@ -1779,20 +2227,14 @@ export const planTableLayout = (inputs: WidthInput[]): TableLayout => {
     (COLUMN_SPEC[column.key] || { width: CUSTOM_COLUMN_WIDTH }).width;
   const minDescription = DESIGN_TABLE_WIDTH * MIN_DESCRIPTION_SHARE;
 
-  const attempt = (shrink: boolean, mergeUnit: boolean, scale: number) => {
+  const attempt = (shrink: boolean, scale: number) => {
     const widths: Record<string, number> = {};
-    fixed
-      .filter(({ column }) => !(mergeUnit && column.key === "unit"))
-      .forEach((input) => {
-        const values =
-          mergeUnit && input.mergedValues ? input.mergedValues : input.values;
-        const needed = Math.ceil(
-          contentWidth({ column: input.column, values }, scale)
-        );
-        widths[input.column.key] = shrink
-          ? needed
-          : Math.max(startOf(input.column), needed);
-      });
+    fixed.forEach((input) => {
+      const needed = Math.ceil(contentWidth(input, scale));
+      widths[input.column.key] = shrink
+        ? needed
+        : Math.max(startOf(input.column), needed);
+    });
     // The last column also carries the row's end padding.
     const keys = Object.keys(widths);
     if (keys.length) widths[keys[keys.length - 1]] += ROW_END_PADDING;
@@ -1800,15 +2242,16 @@ export const planTableLayout = (inputs: WidthInput[]): TableLayout => {
       (total, width) => total + width,
       SERIAL_WIDTH
     );
-    return { widths, others, mergeUnit, smallNumbers: scale < 1 };
+    return { widths, others, smallNumbers: scale < 1 };
   };
 
-  const hasUnit = fixed.some(({ column }) => column.key === "unit");
+  // Unit stays a column of its own, as refrens.com prints it (252 test-janvi documents): the
+  // planner shrinks columns and figures but never folds Unit into Quantity. Only the
+  // account's own "unit in quantity" setting does that.
   const steps = [
-    attempt(false, false, 1),
-    attempt(true, false, 1), // shrink to content; headers already wrap after "/"
-    ...(hasUnit ? [attempt(true, true, 1)] : []),
-    attempt(true, hasUnit, 0.9),
+    attempt(false, 1),
+    attempt(true, 1), // shrink to content; headers already wrap after "/"
+    attempt(true, 0.9),
   ];
   const chosen =
     steps.find((step) => DESIGN_TABLE_WIDTH - step.others >= minDescription) ||
@@ -1816,7 +2259,6 @@ export const planTableLayout = (inputs: WidthInput[]): TableLayout => {
 
   return {
     widths: chosen.widths,
-    mergeUnit: chosen.mergeUnit,
     smallNumbers: chosen.smallNumbers,
     descriptionWidth: DESIGN_TABLE_WIDTH - chosen.others,
     // Content width that holds the Description cell at ≥ 22% of the table even when the
@@ -1827,7 +2269,6 @@ export const planTableLayout = (inputs: WidthInput[]): TableLayout => {
       ) +
       2 -
       CELL_PADDING,
-    printFixedWidth: attempt(true, chosen.mergeUnit, 1).others,
   };
 };
 
@@ -1866,27 +2307,21 @@ export const mapItemTable = (state: UnknownRecord, ctx: FormatContext) => {
       ? formatMoney(sum, ctx)
       : formatQuantity(sum, ctx);
   };
-  const valuesOf = (column: ItemColumn, mergeUnit: boolean) => [
+  const valuesOf = (column: ItemColumn) => [
     ...realItems.map((item) =>
-      cellValue(invoice, visibility, item, column, ctx, mergeUnit)
+      cellValue(invoice, visibility, item, column, ctx)
     ),
     footerValue(column),
   ];
 
-  const unitMergeable = allColumns.some((column) => column.key === "quantity");
-  const layout = planTableLayout(
-    allColumns.map((column) => ({
-      column,
-      values: valuesOf(column, false),
-      // Qty as it would print once Unit merges into it (the third fallback).
-      ...(column.key === "quantity" && unitMergeable
-        ? { mergedValues: valuesOf(column, true) }
-        : {}),
-    }))
-  );
-  const { mergeUnit } = layout;
+  // Unit folds into Qty ("10 PCS") only by the account's own setting (MERGE_QUANTITY), never
+  // to save width (as refrens.com); then the account's Unit column steps aside.
+  const mergeUnit = Boolean(visibility.showUnitInQuantity);
   const columns = allColumns.filter(
     (column) => !(mergeUnit && column.key === "unit")
+  );
+  const layout = planTableLayout(
+    columns.map((column) => ({ column, values: valuesOf(column) }))
   );
   const colspan = columns.length + 1;
 
@@ -1966,7 +2401,7 @@ export const mapItemTable = (state: UnknownRecord, ctx: FormatContext) => {
           const value =
             isGroupTotal && !["money", "qty"].includes(column.kind)
               ? ""
-              : cellValue(invoice, visibility, item, column, ctx, mergeUnit);
+              : cellValue(invoice, visibility, item, column, ctx);
           // A one-word value in a text column (a date, a code) stays on one line too.
           const isWord = column.kind === "text" && /^\S+$/.test(value);
           return {
@@ -2008,7 +2443,6 @@ export const mapItemTable = (state: UnknownRecord, ctx: FormatContext) => {
     mergeUnit,
     smallNumbers: layout.smallNumbers,
     descriptionMin: layout.descriptionMin,
-    printFixedWidth: layout.printFixedWidth,
     footer: {
       show: Boolean(visibility.showTotalsRow) && realItems.length > 0,
       // No customLabels key exists for the in-table summary row (see architect-template).
@@ -2017,6 +2451,115 @@ export const mapItemTable = (state: UnknownRecord, ctx: FormatContext) => {
       cells: footerCells,
     },
   };
+};
+
+/*
+ * An amount in words in the document's own currency, as refrens.com writes it on a
+ * foreign-currency document ("FOUR DOLLARS AND FIFTY FOUR CENTS ONLY"): international
+ * numbering (thousand, million, billion) and the currency's main and fractional units. The
+ * shared converter knows rupees only; rupees keep it (lakh, crore). Ported from the Ecommerce
+ * template.
+ */
+const CURRENCY_WORDS: Record<string, [string, string]> = {
+  USD: ["dollars", "cents"],
+  HKD: ["dollars", "cents"],
+  SGD: ["dollars", "cents"],
+  AUD: ["dollars", "cents"],
+  CAD: ["dollars", "cents"],
+  NZD: ["dollars", "cents"],
+  EUR: ["euros", "cents"],
+  GBP: ["pounds", "pence"],
+  AED: ["dirhams", "fils"],
+  SAR: ["riyals", "halalas"],
+  QAR: ["riyals", "dirhams"],
+  OMR: ["rials", "baisa"],
+  KWD: ["dinars", "fils"],
+  BHD: ["dinars", "fils"],
+  MYR: ["ringgit", "sen"],
+  IDR: ["rupiah", "sen"],
+  LKR: ["rupees", "cents"],
+  NPR: ["rupees", "paisa"],
+  PKR: ["rupees", "paisa"],
+  BDT: ["taka", "poisha"],
+  JPY: ["yen", ""],
+  CNY: ["yuan", "fen"],
+  ZAR: ["rand", "cents"],
+  CHF: ["francs", "centimes"],
+};
+const ONES = [
+  "",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+  "thirteen",
+  "fourteen",
+  "fifteen",
+  "sixteen",
+  "seventeen",
+  "eighteen",
+  "nineteen",
+];
+const TENS = [
+  "",
+  "",
+  "twenty",
+  "thirty",
+  "forty",
+  "fifty",
+  "sixty",
+  "seventy",
+  "eighty",
+  "ninety",
+];
+const underThousand = (n: number): string =>
+  [
+    n >= 100 ? `${ONES[Math.floor(n / 100)]} hundred` : "",
+    n % 100 < 20
+      ? ONES[n % 100]
+      : `${TENS[Math.floor((n % 100) / 10)]}${
+          n % 10 ? ` ${ONES[n % 10]}` : ""
+        }`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+const internationalWords = (whole: number): string => {
+  if (whole === 0) return "zero";
+  const scales = ["", "thousand", "million", "billion", "trillion"];
+  const parts: string[] = [];
+  let rest = whole;
+  for (let i = 0; rest > 0 && i < scales.length; i += 1) {
+    const chunk = rest % 1000;
+    if (chunk)
+      parts.unshift(
+        `${underThousand(chunk)}${scales[i] ? ` ${scales[i]}` : ""}`
+      );
+    rest = Math.floor(rest / 1000);
+  }
+  return parts.join(" ");
+};
+
+export const amountInCurrencyWords = (
+  amount: unknown,
+  currency: unknown
+): string => {
+  const code = text(currency).toUpperCase() || "INR";
+  const value = Math.abs(toAmount(amount));
+  if (code === "INR" || !CURRENCY_WORDS[code]) return amountInWords(value);
+  const [main, minor] = CURRENCY_WORDS[code];
+  const whole = Math.floor(value + 1e-9);
+  const fraction = minor ? Math.round((value - whole) * 100) : 0;
+  return `${internationalWords(whole)} ${main}${
+    fraction ? ` and ${internationalWords(fraction)} ${minor}` : ""
+  } only`.toUpperCase();
 };
 
 /* ------------------------------------------------------------------ summaries */
@@ -2034,7 +2577,13 @@ export const mapHsnSummary = (state: UnknownRecord, ctx: FormatContext) => {
   );
   const showIgst = Boolean(visibility.showIgst);
   const isUtgst = Boolean(visibility.isUtgst);
-  const hasCess = rows.some((row) => toAmount(row.cessAmount));
+  // Refrens stores each figure as <tax>Amount and <tax>Rate (igstAmount, igstRate…); the
+  // short keys are read too.
+  const amountOf = (row: UnknownRecord, key: string) =>
+    toAmount(pickFirst(row[`${key}Amount`], row[key]));
+  const cessOf = (row: UnknownRecord) =>
+    toAmount(pickFirst(row.totalCessAmount, row.cessAmount));
+  const hasCess = rows.some((row) => cessOf(row));
   const taxSources = {
     customLabels: labels,
     columns: asRecord(state.mapped).columns,
@@ -2044,15 +2593,20 @@ export const mapHsnSummary = (state: UnknownRecord, ctx: FormatContext) => {
   const accountColumns = asArray(asRecord(state.mapped).columns).map(asRecord);
   const columnLabel = (key: string) =>
     text(asRecord(accountColumns.find((column) => column.key === key)).label);
+  const rate = (value: unknown) =>
+    hasValue(value) ? formatPercent(value, ctx) : "";
 
+  // Total is the row's tax, as refrens.com prints it (HSN | Taxable Value | tax | Total).
   const sums = { taxable: 0, igst: 0, cgst: 0, sgst: 0, cess: 0, total: 0 };
   const body = rows.map((row) => {
     const taxable = toAmount(row.taxableValue);
-    const igst = toAmount(row.igst);
-    const cgst = toAmount(row.cgst);
-    const sgst = toAmount(row.sgst) + toAmount(row.utgst);
-    const cess = toAmount(row.cessAmount);
-    const total = taxable + (showIgst ? igst : cgst + sgst) + cess;
+    const igst = amountOf(row, "igst");
+    const cgst = amountOf(row, "cgst");
+    const sgst = amountOf(row, "sgst") + amountOf(row, "utgst");
+    const cess = cessOf(row);
+    const total = hasValue(row.taxAmount)
+      ? toAmount(row.taxAmount)
+      : (showIgst ? igst : cgst + sgst) + cess;
     sums.taxable += taxable;
     sums.igst += igst;
     sums.cgst += cgst;
@@ -2062,9 +2616,13 @@ export const mapHsnSummary = (state: UnknownRecord, ctx: FormatContext) => {
     return {
       hsn: text(row.hsn),
       taxable: formatMoney(taxable, ctx),
+      igstRate: rate(row.igstRate),
       igst: formatMoney(igst, ctx),
+      cgstRate: rate(row.cgstRate),
       cgst: formatMoney(cgst, ctx),
+      sgstRate: rate(pickFirst(row.sgstRate, row.utgstRate)),
       sgst: formatMoney(sgst, ctx),
+      cessRate: rate(pickFirst(row.cessRate, row.totalCess)),
       cess: formatMoney(cess, ctx),
       total: formatMoney(total, ctx),
     };
@@ -2083,19 +2641,18 @@ export const mapHsnSummary = (state: UnknownRecord, ctx: FormatContext) => {
     isHidden: !enabled,
     showIgst,
     hasCess,
+    // refrens.com's headings: "HSN" (whatever the item column is called) and "Taxable
+    // Value" (a business's own label wins), each tax over its Rate and Amount.
     labels: {
-      hsn: firstText(columnLabel("hsn"), labels.hsnSac, labels.hsn, "HSN/SAC"),
-      // The item table's taxable column names the same figure, so the two read alike.
-      taxable: firstText(
-        labels.taxableValue,
-        columnLabel("amount"),
-        "Taxable Value"
-      ),
+      hsn: "HSN",
+      taxable: labelOr(labels, "taxableValue", "Taxable Value"),
       // Same words as the item table's tax headers; the totals' "(Rs.)" labels stay there.
       igst: firstText(columnLabel("igst"), resolveTaxLabel("igst", taxSources)),
       cgst: firstText(columnLabel("cgst"), resolveTaxLabel("cgst", taxSources)),
       sgst: firstText(columnLabel("sgst"), resolveTaxLabel("sgst", taxSources)),
       cess: labelOr(labels, "cess", "Cess"),
+      rate: "Rate",
+      amount: "Amount",
       total: labelOr(labels, "hsnTotal", "Total"),
     },
     rows: body,
@@ -2107,19 +2664,20 @@ export const mapHsnSummary = (state: UnknownRecord, ctx: FormatContext) => {
       cess: formatMoney(sums.cess, ctx),
       total: formatMoney(sums.total, ctx),
     },
-    // The tax in the summary, in words, under its Total row — as the shared HSN widget prints it.
+    // The tax in words, under the Total row, in the document's currency ("EIGHTEEN RIYALS
+    // ONLY"), as refrens.com writes it.
     words: {
       label: labelOr(labels, "totalTaxInWords", "Total Tax In Words"),
-      value: amountInWords(
-        (showIgst ? sums.igst : sums.cgst + sums.sgst) + sums.cess
-      ),
+      value: amountInCurrencyWords(sums.total, ctx.currency),
     },
-    // HSN, Taxable, the tax columns (IGST, or CGST + SGST), Cess when present, Total.
-    columnCount: 3 + (showIgst ? 1 : 2) + (hasCess ? 1 : 0),
+    // HSN, Taxable, each tax's Rate and Amount (IGST, or CGST + SGST; Cess when present), Total.
+    columnCount: 3 + (showIgst ? 2 : 4) + (hasCess ? 2 : 0),
   };
 };
 
 /* ------------------------------------------------------------------ payment */
+
+const UPI_NOTE_MIN_TOTAL = 100;
 
 export const mapBank = (state: UnknownRecord) => {
   const invoice = asRecord(state.invoice);
@@ -2130,72 +2688,91 @@ export const mapBank = (state: UnknownRecord) => {
     ...asRecord(bank.customLabels),
   };
   const upiQr = text(asRecord(asRecord(state.mapped).qr).upi);
+  // A delivery challan asks for no payment: refrens.com prints no bank details or UPI on it
+  // (none of the 51 test-janvi challans), even with the account-transfer option on.
+  const payable = text(invoice.billType).toUpperCase() !== "DELIVERYCHALLAN";
 
-  const rows: LabelValue[] = visibility.showBankAccount
-    ? [
-        {
-          key: "accountHolderName",
-          label: labelOr(labels, "accountHolderName", "Account Name"),
-          value: firstText(bank.name, bank.accountHolderName),
-        },
-        {
-          key: "bankName",
-          label: labelOr(labels, "bankName", "Bank Name"),
-          value: firstText(bank.bank, bank.bankName),
-        },
-        {
-          key: "accountNumber",
-          label: firstText(
-            labels.accountNumber,
-            labels.accountNo,
-            "Account No."
-          ),
-          value: firstText(bank.accountNo, bank.accountNumber),
-        },
-        {
-          key: "ifsc",
-          label: firstText(labels.ifsc, labels.ifscCode, "IFSC"),
-          value: firstText(bank.ifsc, bank.ifscCode),
-        },
-        {
-          key: "iban",
-          label: labelOr(labels, "iban", "IBAN"),
-          value: text(bank.iban),
-        },
-        {
-          key: "swift",
-          label: firstText(labels.swiftCode, labels.swift, "SWIFT Code"),
-          value: firstText(bank.swift, bank.swiftCode),
-        },
-        {
-          key: "sortCode",
-          label: labelOr(labels, "sortCode", "Sort Code"),
-          value: text(bank.sortCode),
-        },
-        {
-          key: "accountType",
-          label: labelOr(labels, "accountType", "Account Type"),
-          value: text(bank.accountType),
-        },
-        {
-          key: "branch",
-          label: labelOr(labels, "branch", "Branch"),
-          value: text(bank.branch),
-        },
-        ...asArray(bank.customFields)
-          .map(asRecord)
-          .filter((field) => !isOff(asRecord(field.params).showInInvoice))
-          .map((field) => ({
-            key: "customField",
-            label: firstText(field.label, field.name),
-            value: text(field.value),
-          })),
-      ].filter((row) => row.label && row.value)
-    : [];
+  // In the order of Refrens' bank account form (as the Ecommerce template): Account Name,
+  // Account Number, IFSC (with IBAN / SWIFT / Sort Code beside it), Account Type, Bank, then
+  // the rest, with refrens.com's labels.
+  const rows: LabelValue[] =
+    payable && visibility.showBankAccount
+      ? [
+          {
+            key: "accountHolderName",
+            label: labelOr(labels, "accountHolderName", "Account Name"),
+            value: firstText(bank.name, bank.accountHolderName),
+          },
+          {
+            key: "accountNumber",
+            label: firstText(
+              labels.accountNumber,
+              labels.accountNo,
+              "Account Number"
+            ),
+            value: firstText(bank.accountNo, bank.accountNumber),
+          },
+          {
+            key: "ifsc",
+            label: firstText(labels.ifsc, labels.ifscCode, "IFSC"),
+            value: firstText(bank.ifsc, bank.ifscCode),
+          },
+          {
+            key: "iban",
+            label: labelOr(labels, "iban", "IBAN"),
+            value: text(bank.iban),
+          },
+          {
+            key: "swift",
+            label: firstText(labels.swiftCode, labels.swift, "SWIFT Code"),
+            value: firstText(bank.swift, bank.swiftCode),
+          },
+          {
+            key: "sortCode",
+            label: labelOr(labels, "sortCode", "Sort Code"),
+            value: text(bank.sortCode),
+          },
+          {
+            key: "accountType",
+            label: labelOr(labels, "accountType", "Account Type"),
+            // "SAVINGS" reads "Savings", as refrens.com prints the account type — and only for
+            // a bank in India (every Indian bank printed it; none of the banks abroad did).
+            value: /^(in|india)?$/i.test(text(bank.country))
+              ? titleWord(text(bank.accountType))
+              : "",
+          },
+          {
+            key: "bankName",
+            label: labelOr(labels, "bankName", "Bank"),
+            value: firstText(bank.bank, bank.bankName),
+          },
+          {
+            key: "branch",
+            label: labelOr(labels, "branch", "Branch"),
+            value: text(bank.branch),
+          },
+          ...asArray(bank.customFields)
+            .map(asRecord)
+            .filter((field) => !isOff(asRecord(field.params).showInInvoice))
+            .map((field) => ({
+              key: "customField",
+              label: firstText(field.label, field.name),
+              value: customFieldText(field.value),
+            })),
+        ].filter((row) => row.label && row.value)
+      : [];
 
-  const upiId = visibility.showUpi
-    ? text(asRecord(asRecord(state.mapped).upi).id)
-    : "";
+  const upiId =
+    payable && visibility.showUpi
+      ? text(asRecord(asRecord(state.mapped).upi).id)
+      : "";
+  // refrens.com prints the UPI limit note only on a document still to be paid, of ₹100 or
+  // more (all 153 test-janvi documents with UPI: none paid or under ₹100 printed it).
+  const total = Number(asRecord(invoice.finalTotal).total);
+  const noteShown =
+    text(invoice.status).toUpperCase() !== "PAID" &&
+    Number.isFinite(total) &&
+    total >= UPI_NOTE_MIN_TOTAL;
   const NUMERIC_BANK_ROWS = [
     "accountNumber",
     "ifsc",
@@ -2221,14 +2798,17 @@ export const mapBank = (state: UnknownRecord) => {
       ? {
           label: labelOr(labels, "upi", "UPI"),
           id: upiId,
-          scanLabel: labelOr(labels, "scanToPay", "Scan to Pay"),
+          // refrens.com's words over the UPI QR.
+          scanLabel: labelOr(labels, "scanToPay", "Scan to pay via UPI"),
           // A pre-resolved QR image as given; otherwise the platform's UPI intent, drawn here.
           qr: isImageSource(upiQr) ? upiQr : qrImage(upiIntent(invoice, upiId)),
-          note: labelOr(
-            labels,
-            "upiLimitNote",
-            "Maximum of 1 lakh can be transferred via UPI in a single day"
-          ),
+          note: noteShown
+            ? labelOr(
+                labels,
+                "upiLimitNote",
+                "Maximum of 1 lakh can be transferred via UPI in a single day"
+              )
+            : "",
         }
       : null,
   };
@@ -2240,10 +2820,13 @@ export const mapWords = (state: UnknownRecord) => {
   const visibility = asRecord(asRecord(state.mapped).visibility);
   if (!visibility.showTotals || invoice.hideTotalInWords === true) return null;
 
+  // The words the document stores (as refrens.com prints them); nothing stored, the total
+  // spelled in the document's currency, or none for a currency without known words.
   const stored = text(labels.totalInWordsValue);
+  const currency = text(invoice.currency).toUpperCase() || "INR";
   const computed =
-    text(invoice.currency).toUpperCase() === "INR"
-      ? amountInWords(toAmount(asRecord(invoice.finalTotal).total))
+    currency === "INR" || CURRENCY_WORDS[currency]
+      ? amountInCurrencyWords(asRecord(invoice.finalTotal).total, currency)
       : "";
   // The amount reads in capitals, like the tax summaries' words (user request); the label
   // is editable and keeps its own case.
@@ -2298,12 +2881,38 @@ export const mapTotals = (state: UnknownRecord) => {
           ),
         }
       : row;
+  /*
+   * "Show Applied Exchange Rate" (advanceOptions.showExchangeRateOnPdf): on a document in
+   * another currency than the business's, the business-currency figure under each amount and
+   * the Conversion Rate row print only with it on, as refrens.com does (none of the 29
+   * foreign-currency test-janvi documents, all with it off, printed either).
+   */
+  const options = asRecord(invoice.advanceOptions);
+  const exchange = [
+    options.showExchangeRateOnPdf,
+    options.showAppliedExchangeRate,
+    options.showExchangeRate,
+  ].some((value) => flagSetting(value) === true);
+  const withExchange = <T extends SubtotalRow>(row: T): T =>
+    exchange
+      ? row
+      : {
+          ...row,
+          converted: null,
+          extra: row.extra ? { ...row.extra, converted: null } : row.extra,
+        };
+  const keepRow = (row: SubtotalRow) =>
+    exchange || row.key !== "conversionRate";
   return {
     hidden: model.hidden,
     hideTaxes: model.hideTaxes,
-    main: model.groups.main.map(unitRate).map(plainRow),
-    extra: model.groups.extra.map(plainRow),
-    due: model.groups.due.map(plainRow),
+    main: model.groups.main
+      .filter(keepRow)
+      .map(unitRate)
+      .map(withExchange)
+      .map(plainRow),
+    extra: model.groups.extra.map(withExchange).map(plainRow),
+    due: model.groups.due.map(withExchange).map(plainRow),
   };
 };
 
@@ -2358,6 +2967,61 @@ export const mapNotes = (state: UnknownRecord) => {
   return { terms, notes: notesBlock, attachments: attachmentsBlock };
 };
 
+/*
+ * The document's status tag as refrens.com shows it (user decision), ported from the Ecommerce
+ * template's check against the same test-janvi documents: Draft, Canceled ("Cancelled" on a
+ * quotation), Paid / Part Paid on an invoice, proforma or debit note (nothing while unpaid),
+ * Created / Sent / Seen on a quotation, delivery challan or purchase order, and a credit
+ * note's Issued / Partially Utilised / Redeemed. Sales orders carry none.
+ */
+const SENT_TYPE_NAMES: Record<string, string> = {
+  DELIVERYCHALLAN: "Delivery Challan",
+  PURCHASEORDER: "Purchase Order",
+  QUOTATION: "Quotation",
+};
+
+export const statusTag = (
+  invoice: UnknownRecord
+): { text: string; color: string } | null => {
+  const type = text(invoice.billType).toUpperCase();
+  const status = text(invoice.status).toUpperCase();
+  if (status === "DRAFT") return { text: "Draft", color: "devider" };
+  if (status === "CANCELED" || status === "CANCELLED") {
+    return {
+      text: type === "QUOTATION" ? "Cancelled" : "Canceled",
+      color: "danger",
+    };
+  }
+  if (["INVOICE", "PROFORMAINV", "DEBITNOTE"].includes(type)) {
+    if (status === "PAID") return { text: "Paid", color: "success" };
+    if (status === "PARTIAL" || status === "PARTIALLY_PAID") {
+      return { text: "Part Paid", color: "info" };
+    }
+    return null;
+  }
+  if (SENT_TYPE_NAMES[type]) {
+    const emails = asArray(asRecord(invoice.reminders).views).map(asRecord);
+    if (emails.some((email) => Number(email.open) > 0)) {
+      return { text: `${SENT_TYPE_NAMES[type]} Seen`, color: "success" };
+    }
+    if (emails.length) {
+      return { text: `${SENT_TYPE_NAMES[type]} Sent`, color: "info" };
+    }
+    return { text: "Created", color: "info" };
+  }
+  if (type === "CREDITNOTE") {
+    const credit = text(invoice.creditNoteStatus).toUpperCase();
+    if (credit === "PARTIAL") {
+      return { text: "Partially Utilised", color: "info" };
+    }
+    if (credit === "REDEEMED") return { text: "Redeemed", color: "success" };
+    if (credit === "ISSUED" && flagSetting(invoice.isOverdue) !== true) {
+      return { text: "Issued", color: "info" };
+    }
+  }
+  return null;
+};
+
 export const mapSignature = (state: UnknownRecord) => {
   const invoice = asRecord(state.invoice);
   const labels = asRecord(invoice.customLabels);
@@ -2368,7 +3032,7 @@ export const mapSignature = (state: UnknownRecord) => {
 
   const image = isDigital ? "" : text(invoice.signature);
   return {
-    // The design closes "For …" and the signatory line up; space opens only for a mark.
+    // The block shows only with a mark: a signature image or a digital signature.
     hasMark: image !== "" || isDigital,
     forLabel: [
       labelOr(labels, "for", "For"),
@@ -2411,26 +3075,10 @@ export const mapFooter = (state: UnknownRecord) => {
 
 /*
  * Print and PDF print at true size (design-to-template §4a): no page-fit zoom, so 13 px text
- * prints at 13 px. The page is the paper width less the browser's default 1 cm margins
- * (A4: 718 px; the document has no padding of its own); it depends only on the format, never on the
- * window, because the PDF service renders in a window narrower than its page.
- *
- * zoomSize is the print size picked in Lydia (0.8 smaller … 1.2 larger). The renderer zooms
- * <html> by it (except at 0.8), which narrows the page in CSS px. textScale scales text only.
- *
- * compactTable: when the items table's other columns, shrunk to content, would leave
- * Description less than its 22% share of that page, the table prints at the small step
- * with tight padding (styles.css, .is-print-compact), as Solvin's compact print table does.
+ * prints at 13 px. zoomSize is the print size picked in Lydia (0.8 smaller … 1.2 larger),
+ * applied by the renderer; textScale scales text only. A table wider than its page is fitted
+ * when the print layout applies (fitPrintTable), measured rather than estimated.
  */
-const PRINT_MARGINS_PX = (2 * 96) / 2.54;
-const PAPER_WIDTH_MM: Record<string, number> = {
-  a3: 297,
-  a4: 210,
-  a5: 148,
-  letter: 215.9,
-  legal: 215.9,
-};
-
 const positiveNumber = (value: unknown): number | undefined => {
   const parsed = hasValue(value) ? Number(text(value)) : NaN;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
@@ -2439,23 +3087,71 @@ const positiveNumber = (value: unknown): number | undefined => {
 const compactDecimal = (value: number): string =>
   String(Number(value.toFixed(4)));
 
-export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
+/*
+ * The printable width in the document's own pixels, which caps the page in print
+ * (styles.css): Refrens' PDF service lays the page out in a window wider than the paper
+ * before it prints, and a table fitted there was clipped on the page (user report). Side
+ * margins are xMargins centimetres (1 when unset); Chrome scales them with the print zoom
+ * like the rest of the page (zoomSize, 0.8 is the renderer's unzoomed default); 4 px kept
+ * back for rounding. Ported from the Ecommerce template.
+ */
+const PAPER_MM: Record<string, [number, number]> = {
+  a3: [297, 420],
+  a4: [210, 297],
+  a5: [148, 210],
+  letter: [215.9, 279.4],
+  legal: [215.9, 355.6],
+};
+
+export const printWidth = (pdfOptions: UnknownRecord): number => {
+  const [width, height] =
+    PAPER_MM[text(pdfOptions.format).toLowerCase()] ?? PAPER_MM.a4;
+  const paperMm = flagSetting(pdfOptions.landscape) === true ? height : width;
+  const zoom = positiveNumber(pdfOptions.zoomSize) ?? 1;
+  const rendererZoom = zoom === 0.8 ? 1 : zoom;
+  const sideMarginCm = positiveNumber(pdfOptions.xMargins) ?? 1;
+  return Math.floor(
+    ((paperMm / 25.4) * 96) / rendererZoom - (2 * sideMarginCm * 96) / 2.54 - 4
+  );
+};
+
+/*
+ * The paper's height in CSS pixels (the long side when portrait), before the print zoom: a
+ * document taller than this prints on more than one page, so the stretch leaves it alone in
+ * Refrens' PDF service too (stretchItemsTable), where the page cannot be measured.
+ */
+export const paperHeight = (pdfOptions: UnknownRecord): number => {
+  const [width, height] =
+    PAPER_MM[text(pdfOptions.format).toLowerCase()] ?? PAPER_MM.a4;
+  const paperMm = flagSetting(pdfOptions.landscape) === true ? width : height;
+  return Math.floor((paperMm / 25.4) * 96);
+};
+
+export const mapPrint = (state: UnknownRecord) => {
   const pdfOptions = asRecord(state.pdfOptions);
-  const paperMm =
-    PAPER_WIDTH_MM[text(pdfOptions.format).toLowerCase()] ?? PAPER_WIDTH_MM.a4;
-  const pageZoom = positiveNumber(pdfOptions.zoomSize) ?? 1;
-  const rendererZoom = pageZoom === 0.8 ? 1 : pageZoom;
-  const pageWidth = ((paperMm / 25.4) * 96 - PRINT_MARGINS_PX) / rendererZoom;
+  const invoice = asRecord(state.invoice);
   const rawScale =
     positiveNumber(pdfOptions.textScale) ?? positiveNumber(pdfOptions.scale);
   // A percentage (110) or a ratio (1.1); kept readable either way.
   const ratio =
     rawScale !== undefined && rawScale > 2 ? rawScale / 100 : rawScale;
   const textScale = Math.min(2, Math.max(0.3, ratio ?? 1));
+  /*
+   * "Stretch invoice & quotation tables to fill the page": the business's setting (Settings >
+   * Experimental, stretchInvoiceTable) allows it, the document's own toggle
+   * (pdfOptions.fullHeightTable) asks for it, as on refrens.com; every document type (user
+   * decision), one-page documents only (stretchItemsTable).
+   */
+  const stretchAllowed =
+    asRecord(ownerConfiguration(invoice).experimental).stretchInvoiceTable ===
+    true;
   return {
     textScale: compactDecimal(textScale),
-    compactTable:
-      tableFixedWidth * textScale > pageWidth * (1 - MIN_DESCRIPTION_SHARE),
+    printWidth: printWidth(pdfOptions),
+    paperHeight: paperHeight(pdfOptions),
+    stretchAllowed,
+    stretchTable:
+      stretchAllowed && flagSetting(pdfOptions.fullHeightTable) === true,
   };
 };
 
@@ -2466,7 +3162,7 @@ export const buildModernManufacturingView = (root: unknown) => {
   const visibility = asRecord(mapped.visibility);
   const labels = asRecord(invoice.customLabels);
   const ctx = formatContext(invoice);
-  const seller = mapParty(invoice, invoice.billedBy, "");
+  const seller = mapParty(invoice, invoice.billedBy, "", true);
   const logo = firstText(invoice.logo, asRecord(invoice.billedBy).logo);
 
   const settings = mapSettings(state);
@@ -2494,7 +3190,8 @@ export const buildModernManufacturingView = (root: unknown) => {
     mapParty(
       invoice,
       invoice.billedTo,
-      heading(labels, "billedTo", "Billed To")
+      heading(labels, "billedTo", "Billed To"),
+      true
     ),
     visibility.shippedTo
       ? mapParty(
@@ -2506,6 +3203,21 @@ export const buildModernManufacturingView = (root: unknown) => {
   ]
     .filter(Boolean)
     .map((party, index) => ({ ...party, isBillTo: index === 0 }));
+  // Place / Country of Supply print under Shipped To only (user decision): a document without
+  // a shipping address shows neither. Place first, then Country, as refrens.com lists them.
+  const supply = mapSupply(state);
+  const supplyLines = [
+    ...supply.rows.filter((row) => row.key === "placeOfSupply"),
+    ...supply.rows.filter((row) => row.key === "countryOfSupply"),
+  ];
+  const partyBoxes = parties.map((party) => ({
+    ...party,
+    supply:
+      !party.isBillTo && supplyLines.length
+        ? { hidden: supply.hidden, rows: supplyLines }
+        : null,
+  }));
+  const status = statusTag(invoice);
   const hsn = mapHsnSummary(state, ctx);
   const payments = asArray(invoice.allPayments);
 
@@ -2516,17 +3228,28 @@ export const buildModernManufacturingView = (root: unknown) => {
       name: seller ? seller.name : "",
       logo,
       seller,
+      // The document's own word for its seller (customLabels.billedBy: Billed By, Quotation
+      // From, Issued By, Delivered By, Sales Order From, Order To…).
+      title: seller ? heading(labels, "billedBy", "Billed By") : "",
     },
     title: firstText(invoice.invoiceTitle),
     subtitle: firstText(invoice.invoiceSubTitle),
     copy: firstText(invoice.copy),
     theme: settings.theme,
     meta,
+    // A currency with known words other than the rupee: the tax summary's words follow it
+    // (respellTaxWords).
+    foreignCurrency: CURRENCY_WORDS[text(invoice.currency).toUpperCase()]
+      ? text(invoice.currency).toUpperCase()
+      : "",
     // Up to five values sit in one row (fewer share the full width); more wrap four a row.
     detailColumns: Math.max(1, visibleMeta > 5 ? 4 : visibleMeta),
     compliance: mapCompliance(state),
-    supply: mapSupply(state),
-    parties,
+    // The status tag on the title bar; on paper only when the document asks for it.
+    status: status
+      ? { ...status, inPrint: Boolean(visibility.showStatusTagInPrint) }
+      : null,
+    parties: partyBoxes,
     shippedFrom,
     transport,
     hasDispatch: shippedFrom !== null || transport !== null,
@@ -2552,19 +3275,28 @@ export const buildModernManufacturingView = (root: unknown) => {
     hsn,
     showHsn: hsn.hasRows && !hsn.isHidden,
     showTaxSummary: Boolean(visibility.showTaxTable),
+    // Printed only when the document turns "Show Payments Table" on, as refrens.com does (all
+    // 54 test-janvi documents with payments), under its "Payments" title.
     payments: {
       show:
         payments.length > 0 &&
-        asRecord(state.advanceOptions).showPaymentsTable !== false &&
-        invoice.showPaymentsTable !== false,
-      heading: labelOr(labels, "paymentRecord", "Payment Record"),
+        (asRecord(state.advanceOptions).showPaymentsTable === true ||
+          invoice.showPaymentsTable === true),
+      heading: labelOr(labels, "payments", "Payments"),
     },
     signature: mapSignature(state),
     footer: mapFooter(state),
     // The letterhead footer repeats at the foot of every printed page unless the document
     // asks for it on the last page only (pdfOptions.footerOnLastPage).
     footerEveryPage: !visibility.footerOnLastPage,
-    print: mapPrint(state, table.printFixedWidth),
+    // The letterhead repeats at the head of every printed page unless the document asks for
+    // it on the first page only (pdfOptions.letterHeadOnFirstPage), as Sri Lankan / Vaishnavi.
+    letterheadEveryPage: !visibility.letterHeadOnFirstPage,
+    print: mapPrint(state),
+    // Mapped in the data mapper (withDocumentScript); read again for a state built without it.
+    script:
+      (state.documentScript as DocumentScript | undefined) ||
+      mapDocumentScript(invoice.template, invoice),
   };
 };
 
@@ -2617,6 +3349,8 @@ export interface FooterPlacement {
 
 // 2 px to spare, so rounding never pushes the footer onto a page of its own.
 const PAGE_EDGE_SLACK = 2;
+// Below this, the page "height" between two forced breaks means the layout is not paginated.
+const MIN_PAGE_HEIGHT = 200;
 
 /* The space to add above the footer so it ends on the page's bottom edge. */
 export const footerEdgeGap = ({
@@ -2675,6 +3409,9 @@ export const placeFootersOnPageEdge = (root: ParentNode = document): void => {
     const [pageEnd, nextPageEnd] = breaks.map(pageTop);
     breaks.forEach((marker) => marker.remove());
     const pageHeight = nextPageEnd - pageEnd;
+    // Laid out for print but not split into pages yet (Refrens' PDF service switches the media
+    // first): forced breaks collapse, and a placement there would land wrong. Leave it.
+    if (pageHeight < MIN_PAGE_HEIGHT) return;
 
     let box = footer.getBoundingClientRect();
     const fits =
@@ -2706,11 +3443,281 @@ export const placeFootersOnPageEdge = (root: ParentNode = document): void => {
   });
 };
 
+/* ------------------------------------------------------------------ print: fit a wide table */
+
+/*
+ * A table wider than its page once laid out for print (many columns, long figures) takes the
+ * tight print padding (is-print-fit), then its text shrinks just enough to fit (--mm-print-fit),
+ * never under the 10 px floor (CSS). Measured rather than estimated, so every paper, margin and
+ * print size fits; ported from the Ecommerce template. Back on screen it reads as before.
+ */
+const MIN_PRINT_FIT = 0.6;
+// Sub-pixel rounding is not an overflow.
+const PRINT_SLACK = 0.5;
+
+export const fitPrintTable = (root: ParentNode = document): void => {
+  const printing =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("print").matches;
+  root.querySelectorAll<HTMLElement>(".mm-items").forEach((table) => {
+    table.classList.remove("is-print-fit");
+    table.style.removeProperty("--mm-print-fit");
+    const box = table.parentElement;
+    if (!printing || !box) return;
+    const overflow = () =>
+      table.getBoundingClientRect().width - box.getBoundingClientRect().width;
+    if (overflow() <= PRINT_SLACK) return;
+    table.classList.add("is-print-fit");
+    let fit = 1;
+    // By the measured ratio, and at least a step each time, so the last pixel or two of
+    // overflow (floors, padding and rules do not scale exactly) still goes.
+    for (let step = 0; step < 20 && overflow() > PRINT_SLACK; step += 1) {
+      const ratio =
+        box.getBoundingClientRect().width / table.getBoundingClientRect().width;
+      fit = Math.max(
+        MIN_PRINT_FIT,
+        Math.min(fit - 0.01, Math.floor(fit * ratio * 100) / 100)
+      );
+      table.style.setProperty("--mm-print-fit", String(fit));
+      if (fit === MIN_PRINT_FIT) break;
+    }
+  });
+};
+
+/* ------------------------------------------------------------------ print: stretch the items table */
+
+/*
+ * pdfOptions.fullHeightTable (Refrens' "Stretch invoice & quotation tables to fill the page",
+ * a per-document toggle): on a one-page printout the items table takes the page's spare
+ * height, so the totals, notes and footer below it end at the page's foot (user request).
+ * The spare height goes to the last item row, whose cells and column rules run down to the
+ * table's Total row. Print and PDF only: the preview is one continuous sheet. A document
+ * longer than a page prints as it is. The page carries the toggle as data-mm-stretch-table,
+ * set from the document and switched by Lydia's live template updates.
+ */
+const STRETCH_ATTR = "data-mm-stretch-table";
+const STRETCH_ROW = ".mm-items > tbody > tr:last-child";
+
+/*
+ * Stretch on, a document longer than a page (user, 2026-10-19): where a whole item moves to the
+ * next page, the space it leaves keeps the table's look. Chrome runs the items wrapper on to
+ * the page's foot, so the wrapper draws the column rules there and a rule under each page's
+ * piece of the table (styles.css); the table's row groups are opaque in print, so the rules
+ * show only below the page's last row. Positions are read off the row with the most cells, as
+ * fractions of the wrapper's width (the print zoom scales both alike); the rules' width comes
+ * from styles.css (a 0.5 px border reads back as 1 px), their colour from the cells' borders.
+ */
+const columnRules = (
+  wrap: HTMLElement,
+  table: HTMLTableElement
+): { layers: string; color: string } | undefined => {
+  const row = Array.from(table.tBodies)
+    .flatMap((body) => Array.from(body.rows))
+    .reduce<HTMLTableRowElement | undefined>(
+      (best, candidate) =>
+        !best || candidate.cells.length > best.cells.length ? candidate : best,
+      undefined
+    );
+  const box = wrap.getBoundingClientRect();
+  if (!row || row.cells.length === 0 || box.width <= 0) return undefined;
+  const style = getComputedStyle(row.cells[0]);
+  const color = parseFloat(style.borderInlineEndWidth)
+    ? style.borderInlineEndColor
+    : style.borderInlineStartColor;
+  const width =
+    parseFloat(
+      getComputedStyle(wrap).getPropertyValue("--mm-column-rule-width")
+    ) || 1;
+  const scale = box.width / (wrap.offsetWidth || box.width);
+  const room = box.width - width * scale;
+  const cells = Array.from(row.cells).map((cell) =>
+    cell.getBoundingClientRect()
+  );
+  const edges = [
+    ...cells.map((cell) => cell.left - box.left),
+    cells[cells.length - 1].right - box.left,
+  ];
+  const layers = edges
+    .map(
+      (x) =>
+        `linear-gradient(${color}, ${color}) ${compactDecimal(
+          Math.min(100, Math.max(0, (x / room) * 100))
+        )}% 0 / var(--mm-column-rule-width) 100% no-repeat`
+    )
+    .join(", ");
+  return { layers, color };
+};
+
+export const resetItemsTableStretch = (root: ParentNode = document): void => {
+  root
+    .querySelectorAll<HTMLElement>(`.mm-doc ${STRETCH_ROW}[data-mm-stretched]`)
+    .forEach((row) => {
+      row.style.removeProperty("height");
+      row.removeAttribute("data-mm-stretched");
+    });
+  root
+    .querySelectorAll<HTMLElement>(".mm-doc .mm-items-scroll")
+    .forEach((wrap) => {
+      wrap.style.removeProperty("--mm-column-rules");
+      wrap.style.removeProperty("--mm-column-rule-color");
+    });
+};
+
+export const stretchItemsTable = (root: ParentNode = document): void => {
+  resetItemsTableStretch(root);
+  root
+    .querySelectorAll<HTMLElement>(`.mm-doc[${STRETCH_ATTR}]`)
+    .forEach((doc) => {
+      const row = doc.querySelector<HTMLElement>(STRETCH_ROW);
+      if (!row || !row.getClientRects().length) return;
+      const wrap = doc.querySelector<HTMLElement>(".mm-items-scroll");
+      const table = doc.querySelector<HTMLTableElement>(".mm-items");
+      const rules = wrap && table ? columnRules(wrap, table) : undefined;
+      if (wrap && rules) {
+        wrap.style.setProperty("--mm-column-rules", rules.layers);
+        wrap.style.setProperty("--mm-column-rule-color", rules.color);
+      }
+
+      const docEnd = doc.getBoundingClientRect().bottom + window.scrollY;
+      // Forced breaks after the document: where its last page ends, and a page's height.
+      const breaks = [0, 1].map(() => {
+        const marker = document.createElement("div");
+        marker.style.cssText = "break-before: page; height: 0; margin: 0;";
+        doc.appendChild(marker);
+        return marker;
+      });
+      const [pageEnd, nextPageEnd] = breaks.map(pageTop);
+      breaks.forEach((marker) => marker.remove());
+      const pageHeight = nextPageEnd - pageEnd;
+
+      const scale = layoutScale(doc, doc.firstElementChild as Element);
+      const { height } = row.getBoundingClientRect();
+      if (pageHeight < MIN_PAGE_HEIGHT) {
+        /*
+         * Laid out for print but not paginated: Refrens' PDF service, which lays the page out
+         * in a window shorter than the paper and only then prints, so the window's height is
+         * not the page's (the table never stretched in the PDF, user report). The page's
+         * height is left to CSS, 100vh being the page area when the PDF is made: the row
+         * takes what the rest of the document leaves of it, never less than its own height
+         * (a document longer than a page prints as it is). Under the print zoom Chrome
+         * scales the margins as well, hence 100vh / zoom; 16 px kept back, more above a zoom
+         * of 1. As the Ecommerce template does.
+         */
+        const zoom =
+          parseFloat(getComputedStyle(document.documentElement).zoom || "1") ||
+          1;
+        const docHeight = doc.getBoundingClientRect().height / scale;
+        // Taller than the paper: more than a page, printed as it is (a stretched row there
+        // added a page of its own).
+        const paper = Number(doc.dataset.mmPaperHeight) || Infinity;
+        if (docHeight > paper / zoom) return;
+        const rowHeight = height / scale;
+        const slack = 16 + (zoom > 1 ? 160 * (1 - 1 / zoom) : 0);
+        row.style.height = `max(${Math.ceil(
+          rowHeight
+        )}px, calc(100vh / ${compactDecimal(zoom)} - ${Math.ceil(
+          docHeight - rowHeight + slack
+        )}px))`;
+        row.setAttribute("data-mm-stretched", "");
+        return;
+      }
+      // Paginated (the browser's print): one page only; a longer document prints as it is.
+      if (pageEnd > pageHeight + PAGE_EDGE_SLACK) return;
+      const limit = pageEnd;
+      const spare = limit - docEnd - PAGE_EDGE_SLACK;
+      if (spare <= 0) return;
+
+      row.style.height = `${(height + spare) / scale}px`;
+      row.setAttribute("data-mm-stretched", "");
+      // Should the page still overflow, the table prints as it was.
+      if (doc.getBoundingClientRect().bottom + window.scrollY > limit) {
+        resetItemsTableStretch(doc);
+      }
+    });
+};
+
+/*
+ * Lydia's live template update ("lydia:template-update"): the renderer applies the colours
+ * and fonts as root variables; the template follows two settings of its own here — the
+ * theme colour's accent and tint (the page carries the render-time ones inline) and the
+ * stretched-table toggle.
+ */
+export const applyTemplateUpdate = (data: unknown): void => {
+  const message = asRecord(data);
+  if (message.type !== "lydia:template-update") return;
+  const template = asRecord(message.template);
+  const docs = Array.from(document.querySelectorAll<HTMLElement>(".mm-doc"));
+
+  const color = hexColor(
+    firstText(
+      asRecord(template.templateColor).primaryColor,
+      template.primaryColor
+    )
+  );
+  if (color) {
+    docs.forEach((doc) => {
+      if (color === DEFAULT_THEME) {
+        doc.style.removeProperty("--mm-theme");
+        doc.style.removeProperty("--mm-theme-tint");
+      } else {
+        doc.style.setProperty("--mm-theme", color);
+        doc.style.setProperty("--mm-theme-tint", themeTint(color));
+      }
+    });
+  }
+
+  const pdfOptions = asRecord(template.pdfOptions);
+  if ("fullHeightTable" in pdfOptions) {
+    const on = flagSetting(pdfOptions.fullHeightTable) === true;
+    // Only where the business allows the stretch (data-mm-stretch-allowed).
+    docs.forEach((doc) =>
+      doc.toggleAttribute(
+        STRETCH_ATTR,
+        on && doc.hasAttribute("data-mm-stretch-allowed")
+      )
+    );
+  }
+};
+
+/*
+ * The shared tax summary spells its "Total Tax In Words" in rupees, its words helper fixed at
+ * build time; on a document in another currency (data-mm-currency) the line is rewritten
+ * after the render from its table's Total row (the last cell, the total tax), in that
+ * currency, as refrens.com writes it ("EIGHTEEN RIYALS ONLY"). Ported from the Ecommerce
+ * template. The HSN summary spells its own (mapHsnSummary).
+ */
+export const respellTaxWords = (root: ParentNode = document): void => {
+  root
+    .querySelectorAll<HTMLElement>(".mm-doc[data-mm-currency]")
+    .forEach((doc) => {
+      const currency = text(doc.dataset.mmCurrency);
+      doc
+        .querySelectorAll<HTMLElement>(
+          "[data-ceres-tax-summary] .ceres-table-words"
+        )
+        .forEach((cell) => {
+          const total = Array.from(
+            cell.closest("table")?.querySelectorAll("tr") ?? []
+          ).find(
+            (row) => row.firstElementChild?.textContent?.trim() === "Total"
+          );
+          const last = total?.lastElementChild?.textContent ?? "";
+          const amount = Number(last.replace(/[^0-9.-]/g, ""));
+          if (!/\d/.test(last) || !Number.isFinite(amount)) return;
+          const label = String(cell.textContent).split(":")[0];
+          const words = `${label}: ${amountInCurrencyWords(amount, currency)}`;
+          if (cell.textContent !== words) cell.textContent = words;
+        });
+    });
+};
+
 /*
  * Placed when the print layout applies (the print media query turning on: Chrome lays the
- * pages out first, so the measurement is the printed one) and cleared when it ends. Lydia's
- * Pageless PDF (isLydiaMode) has one page as tall as the content, so the footer already ends
- * on its edge.
+ * pages out first, so the measurement is the printed one) and cleared when it ends: first
+ * the items table takes the spare height (when stretched), then the last-page footer is set
+ * on the page's edge. It runs inside Lydia too (isLydiaMode is the embedded preview, not a
+ * page format). A Pageless PDF has one page as tall as the content, so there is no spare
+ * height and the footer already ends on its edge; the PDF service draws its own footer.
  */
 export const registerModernManufacturingPrint = (): void => {
   const state = window as typeof window & { mmPrintRegistered?: boolean };
@@ -2718,11 +3725,31 @@ export const registerModernManufacturingPrint = (): void => {
     return;
   }
   state.mmPrintRegistered = true;
-  if (new URLSearchParams(window.location.search).has("isLydiaMode")) return;
 
+  const reset = () => {
+    resetItemsTableStretch();
+    resetFootersOnPageEdge();
+    fitPrintTable();
+  };
+  // The table first (its width sets its height), then the stretch, then the footer.
   window.matchMedia("print").addEventListener("change", (event) => {
-    if (event.matches) placeFootersOnPageEdge();
-    else resetFootersOnPageEdge();
+    if (!event.matches) {
+      reset();
+      return;
+    }
+    fitPrintTable();
+    stretchItemsTable();
+    placeFootersOnPageEdge();
   });
-  window.addEventListener("afterprint", () => resetFootersOnPageEdge());
+  window.addEventListener("afterprint", reset);
+  window.addEventListener("message", (event) =>
+    applyTemplateUpdate(event.data)
+  );
+  // Each render into the page: the tax summary's words in the document's currency.
+  const output = document.getElementById("documentOutput");
+  if (output && typeof MutationObserver === "function") {
+    new MutationObserver(() => respellTaxWords(output)).observe(output, {
+      childList: true,
+    });
+  }
 };

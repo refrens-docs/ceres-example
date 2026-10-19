@@ -13,14 +13,16 @@
   data-role / data-col are the spec's test hooks (section 11).
 --}}
 {{#with (mmView @root) as |view|}}
-<div class="mm-doc" data-testid="invoice-root" style="--mm-text-scale: {{view.print.textScale}};{{#if view.theme}} --mm-theme: {{view.theme.accent}}; --mm-theme-tint: {{view.theme.tint}};{{/if}}">
-  <div class="no-dibella invoice-letterhead mm-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}">
-    {{#if @root.invoice.letterHead}}
-      <img src="{{@root.invoice.letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
-    {{else}}
-      <img alt="Letterhead" data-ceres-height="letterhead" />
-    {{/if}}
-  </div>
+<div class="mm-doc" data-testid="invoice-root"{{#if view.foreignCurrency}} data-mm-currency="{{view.foreignCurrency}}"{{/if}}{{#if view.print.stretchAllowed}} data-mm-stretch-allowed{{/if}}{{#if view.print.stretchTable}} data-mm-stretch-table{{/if}} data-mm-paper-height="{{view.print.paperHeight}}" dir="{{view.script.direction}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}} style="--mm-text-scale: {{view.print.textScale}}; --mm-print-width: {{view.print.printWidth}}px;{{#if view.script.font}} --mm-script-font: '{{view.script.font}}';{{/if}}{{#if view.theme}} --mm-theme: {{view.theme.accent}}; --mm-theme-tint: {{view.theme.tint}};{{/if}}">
+  {{#unless view.letterheadEveryPage}}
+    <div class="no-dibella invoice-letterhead mm-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}">
+      {{#if @root.invoice.letterHead}}
+        <img src="{{@root.invoice.letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
+      {{else}}
+        <img alt="Letterhead" data-ceres-height="letterhead" />
+      {{/if}}
+    </div>
+  {{/unless}}
 
   {{!--
     Print frame: on screen the table is transparent (display: contents). In print, when the
@@ -29,6 +31,23 @@
     content never runs under it.
   --}}
   <table class="mm-page-frame" role="presentation">
+    {{!-- Letterhead on every printed page (letterHeadOnFirstPage off): the frame's repeating
+         <thead>. On screen it is the page's first block, as the single letterhead is. --}}
+    {{#if view.letterheadEveryPage}}
+      <thead class="mm-page-frame-header">
+        <tr>
+          <td>
+            <div class="no-dibella invoice-letterhead mm-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}">
+              {{#if @root.invoice.letterHead}}
+                <img src="{{@root.invoice.letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
+              {{else}}
+                <img alt="Letterhead" data-ceres-height="letterhead" />
+              {{/if}}
+            </div>
+          </td>
+        </tr>
+      </thead>
+    {{/if}}
     {{#if view.footerEveryPage}}
       <tfoot class="mm-page-frame-footer">
         <tr>
@@ -56,6 +75,7 @@
             <div class="mm-header-end">
               {{#if view.brand.seller}}
                 <div class="mm-seller">
+                  {{!-- No heading over the seller block on any document type (user, 2026-10-19: "Quotation From" not required). --}}
                   {{#if view.brand.seller.address}}
                     <div class="mm-seller-address">
                       {{#if view.brand.seller.street}}<p class="mm-seller-street">{{view.brand.seller.street}}</p>{{/if}}
@@ -65,7 +85,7 @@
                   {{#if view.brand.seller.hasIdLines}}
                     <div class="mm-id-grid">
                       {{#each view.brand.seller.lines}}
-                        <p class="mm-id-line">{{#each this}}<span class="mm-id">{{label}}: <span{{#if noWrap}} class="mm-num"{{else if isEmail}} class="mm-email"{{/if}}{{#if isNum}} data-testid="num"{{/if}}>{{#if isDate}}{{mmDate value @root.invoice.ownerOffset}}{{else}}{{value}}{{/if}}</span></span>{{/each}}</p>
+                        <p class="mm-id-line">{{#each this}}<span class="mm-id">{{label}}: <span{{#if noWrap}} class="mm-num"{{else if isEmail}} class="mm-email"{{/if}}{{#if isNum}} data-testid="num"{{/if}}>{{#if isDate}}{{mmDate value @root.invoice.ownerOffset}}{{else if isPhone}}{{formatPhoneNumber value}}{{else}}{{value}}{{/if}}</span></span>{{/each}}</p>
                       {{/each}}
                     </div>
                   {{/if}}
@@ -80,6 +100,8 @@
           {{#if view.title}}
             <div class="mm-banner" data-testid="section" data-section="banner">
               <h2 class="mm-banner-title" data-role="title">{{view.title}}</h2>
+              {{!-- The status tag (Paid, Created…) right after the title (user request); on paper only when the document asks. --}}
+              {{#if view.status}}<span class="mm-status{{#unless view.status.inPrint}} no-print{{/unless}}"><span class="invoice-tag {{view.status.color}}">{{view.status.text}}</span></span>{{/if}}
               {{!-- The copy tag, then the subtitle last, at the banner's right end. --}}
               {{#if view.copy}}<span class="mm-copy" data-role="tag">{{view.copy}}</span>{{/if}}
               {{#if view.subtitle}}<span class="mm-subtitle">{{view.subtitle}}</span>{{/if}}
@@ -107,7 +129,15 @@
                   {{#if hasIdLines}}
                     <div class="mm-id-grid">
                       {{#each lines}}
-                        <p class="mm-id-line">{{#each this}}<span class="mm-id">{{label}}: <span{{#if noWrap}} class="mm-num"{{else if isEmail}} class="mm-email"{{/if}}{{#if isNum}} data-testid="num"{{/if}}>{{#if isDate}}{{mmDate value @root.invoice.ownerOffset}}{{else}}{{value}}{{/if}}</span></span>{{/each}}</p>
+                        <p class="mm-id-line">{{#each this}}<span class="mm-id">{{label}}: <span{{#if noWrap}} class="mm-num"{{else if isEmail}} class="mm-email"{{/if}}{{#if isNum}} data-testid="num"{{/if}}>{{#if isDate}}{{mmDate value @root.invoice.ownerOffset}}{{else if isPhone}}{{formatPhoneNumber value}}{{else}}{{value}}{{/if}}</span></span>{{/each}}</p>
+                      {{/each}}
+                    </div>
+                  {{/if}}
+                  {{#if supply}}
+                    {{!-- Place / Country of Supply, under Shipped To only (user decision); the host's live toggles still reach them. --}}
+                    <div class="mm-party-supply" data-ceres-country-of-supply{{#if supply.hidden}} style="display:none"{{/if}}>
+                      {{#each supply.rows}}
+                        <p class="mm-id-line"{{#if attr}} {{attr}}{{/if}}{{#if isHidden}} style="display:none"{{/if}}><span class="mm-id">{{label}}: <span>{{value}}</span></span></p>
                       {{/each}}
                     </div>
                   {{/if}}
@@ -126,7 +156,7 @@
                   {{#if view.shippedFrom.hasIdLines}}
                     <div class="mm-id-grid">
                       {{#each view.shippedFrom.lines}}
-                        <p class="mm-id-line">{{#each this}}<span class="mm-id">{{label}}: <span{{#if noWrap}} class="mm-num"{{else if isEmail}} class="mm-email"{{/if}}{{#if isNum}} data-testid="num"{{/if}}>{{#if isDate}}{{mmDate value @root.invoice.ownerOffset}}{{else}}{{value}}{{/if}}</span></span>{{/each}}</p>
+                        <p class="mm-id-line">{{#each this}}<span class="mm-id">{{label}}: <span{{#if noWrap}} class="mm-num"{{else if isEmail}} class="mm-email"{{/if}}{{#if isNum}} data-testid="num"{{/if}}>{{#if isDate}}{{mmDate value @root.invoice.ownerOffset}}{{else if isPhone}}{{formatPhoneNumber value}}{{else}}{{value}}{{/if}}</span></span>{{/each}}</p>
                       {{/each}}
                     </div>
                   {{/if}}
@@ -174,18 +204,11 @@
             </div>
           </div>
 
-          {{#if view.supply.show}}
-            {{!-- Country of Supply | Place of Supply, a row of their own above the items (as Refrens). --}}
-            <div class="mm-supply-row" data-ceres-country-of-supply{{#if view.supply.hidden}} style="display:none"{{/if}}>
-              {{#each view.supply.rows}}
-                <p class="mm-supply-cell"{{#if attr}} {{attr}}{{/if}}{{#if isHidden}} style="display:none"{{/if}}><span class="mm-supply-label">{{label}}:</span> <span class="mm-supply-value">{{value}}</span></p>
-              {{/each}}
-            </div>
-          {{/if}}
+
 
           <section class="mm-items-section" data-testid="section" data-section="items">
             <div class="mm-items-scroll" data-testid="items-scroll">
-              <table class="mm-items{{#if view.print.compactTable}} is-print-compact{{/if}}{{#if view.table.showThumbnail}} has-thumbnails{{/if}}{{#if view.table.smallNumbers}} has-small-numbers{{/if}}" data-testid="items-table">
+              <table class="mm-items{{#if view.table.showThumbnail}} has-thumbnails{{/if}}{{#if view.table.smallNumbers}} has-small-numbers{{/if}}" data-testid="items-table">
                 <thead>
                   <tr data-testid="items-header">
                     <th class="mm-col-serial is-fixed" data-col="sr" style="width: {{view.table.serialWidth}}px">{{view.table.serialLabel}}</th>
@@ -303,17 +326,17 @@
                 The shared Subtotal widget's rows (view.totals = computeSubtotalRows, figures printed
                 without the currency symbol, plus Round Off). The markup keeps the widget partial's
                 classes and data-ceres-* hooks exactly, so the host's live hideTotals / hideTaxes
-                toggles and the widget's visibility CSS still work.
+                toggles and the widget's visibility CSS still work. Hiding the totals hides every
+                row, additional charges included (user request; the shared widget keeps charges).
               --}}
               <div class="ceres-subtotal" data-ceres-subtotal>
                 <table class="ceres-subtotal-table">
                   <tbody>
                     {{#each view.totals.main}}
                       <tr
-                        class="ceres-subtotal-row ceres-subtotal-row-{{emphasis}}{{#if view.totals.hidden}}{{#unless survivesHideTotals}} is-hidden-by-totals{{/unless}}{{/if}}{{#if isTaxRow}}{{#if view.totals.hideTaxes}} is-hidden-by-taxes{{/if}}{{/if}}"
+                        class="ceres-subtotal-row ceres-subtotal-row-{{emphasis}}{{#if view.totals.hidden}} is-hidden-by-totals{{/if}}{{#if isTaxRow}}{{#if view.totals.hideTaxes}} is-hidden-by-taxes{{/if}}{{/if}}"
                         data-ceres-subtotal-row="{{key}}"
                         {{#if isTaxRow}}data-ceres-subtotal-taxes{{/if}}
-                        {{#if survivesHideTotals}}data-ceres-subtotal-keep{{/if}}
                       >
                         <th class="ceres-subtotal-label">
                           {{label}}
@@ -439,16 +462,25 @@
               <table class="mm-hsn-table">
                 <thead>
                   <tr>
-                    <th class="is-text">{{view.hsn.labels.hsn}}</th>
-                    <th class="is-num">{{view.hsn.labels.taxable}}</th>
+                    <th class="is-text" rowspan="2">{{view.hsn.labels.hsn}}</th>
+                    <th class="is-num" rowspan="2">{{view.hsn.labels.taxable}}</th>
                     {{#if view.hsn.showIgst}}
-                      <th class="is-num">{{view.hsn.labels.igst}}</th>
+                      <th class="is-num" colspan="2">{{view.hsn.labels.igst}}</th>
                     {{else}}
-                      <th class="is-num">{{view.hsn.labels.cgst}}</th>
-                      <th class="is-num">{{view.hsn.labels.sgst}}</th>
+                      <th class="is-num" colspan="2">{{view.hsn.labels.cgst}}</th>
+                      <th class="is-num" colspan="2">{{view.hsn.labels.sgst}}</th>
                     {{/if}}
-                    {{#if view.hsn.hasCess}}<th class="is-num">{{view.hsn.labels.cess}}</th>{{/if}}
-                    <th class="is-num">{{view.hsn.labels.total}}</th>
+                    {{#if view.hsn.hasCess}}<th class="is-num" colspan="2">{{view.hsn.labels.cess}}</th>{{/if}}
+                    <th class="is-num" rowspan="2">{{view.hsn.labels.total}}</th>
+                  </tr>
+                  <tr>
+                    {{#if view.hsn.showIgst}}
+                      <th class="is-num">{{view.hsn.labels.rate}}</th><th class="is-num">{{view.hsn.labels.amount}}</th>
+                    {{else}}
+                      <th class="is-num">{{view.hsn.labels.rate}}</th><th class="is-num">{{view.hsn.labels.amount}}</th>
+                      <th class="is-num">{{view.hsn.labels.rate}}</th><th class="is-num">{{view.hsn.labels.amount}}</th>
+                    {{/if}}
+                    {{#if view.hsn.hasCess}}<th class="is-num">{{view.hsn.labels.rate}}</th><th class="is-num">{{view.hsn.labels.amount}}</th>{{/if}}
                   </tr>
                 </thead>
                 <tbody>
@@ -457,12 +489,18 @@
                       <td class="is-text" data-label="{{view.hsn.labels.hsn}}"><span class="mm-num" data-testid="num">{{hsn}}</span></td>
                       <td class="is-num" data-label="{{view.hsn.labels.taxable}}"><span class="mm-num" data-testid="num">{{taxable}}</span></td>
                       {{#if view.hsn.showIgst}}
+                        <td class="is-num" data-label="{{view.hsn.labels.igst}} {{view.hsn.labels.rate}}"><span class="mm-num" data-testid="num">{{igstRate}}</span></td>
                         <td class="is-num" data-label="{{view.hsn.labels.igst}}"><span class="mm-num" data-testid="num">{{igst}}</span></td>
                       {{else}}
+                        <td class="is-num" data-label="{{view.hsn.labels.cgst}} {{view.hsn.labels.rate}}"><span class="mm-num" data-testid="num">{{cgstRate}}</span></td>
                         <td class="is-num" data-label="{{view.hsn.labels.cgst}}"><span class="mm-num" data-testid="num">{{cgst}}</span></td>
+                        <td class="is-num" data-label="{{view.hsn.labels.sgst}} {{view.hsn.labels.rate}}"><span class="mm-num" data-testid="num">{{sgstRate}}</span></td>
                         <td class="is-num" data-label="{{view.hsn.labels.sgst}}"><span class="mm-num" data-testid="num">{{sgst}}</span></td>
                       {{/if}}
-                      {{#if view.hsn.hasCess}}<td class="is-num" data-label="{{view.hsn.labels.cess}}"><span class="mm-num" data-testid="num">{{cess}}</span></td>{{/if}}
+                      {{#if view.hsn.hasCess}}
+                        <td class="is-num" data-label="{{view.hsn.labels.cess}} {{view.hsn.labels.rate}}"><span class="mm-num" data-testid="num">{{cessRate}}</span></td>
+                        <td class="is-num" data-label="{{view.hsn.labels.cess}}"><span class="mm-num" data-testid="num">{{cess}}</span></td>
+                      {{/if}}
                       <td class="is-num" data-label="{{view.hsn.labels.total}}"><span class="mm-num" data-testid="num">{{total}}</span></td>
                     </tr>
                   {{/each}}
@@ -472,12 +510,18 @@
                     <td class="is-text">{{view.table.footer.label}}</td>
                     <td class="is-num" data-label="{{view.hsn.labels.taxable}}"><span class="mm-num" data-testid="num">{{view.hsn.totals.taxable}}</span></td>
                     {{#if view.hsn.showIgst}}
+                      <td class="mm-hsn-rate"></td>
                       <td class="is-num" data-label="{{view.hsn.labels.igst}}"><span class="mm-num" data-testid="num">{{view.hsn.totals.igst}}</span></td>
                     {{else}}
+                      <td class="mm-hsn-rate"></td>
                       <td class="is-num" data-label="{{view.hsn.labels.cgst}}"><span class="mm-num" data-testid="num">{{view.hsn.totals.cgst}}</span></td>
+                      <td class="mm-hsn-rate"></td>
                       <td class="is-num" data-label="{{view.hsn.labels.sgst}}"><span class="mm-num" data-testid="num">{{view.hsn.totals.sgst}}</span></td>
                     {{/if}}
-                    {{#if view.hsn.hasCess}}<td class="is-num" data-label="{{view.hsn.labels.cess}}"><span class="mm-num" data-testid="num">{{view.hsn.totals.cess}}</span></td>{{/if}}
+                    {{#if view.hsn.hasCess}}
+                      <td class="mm-hsn-rate"></td>
+                      <td class="is-num" data-label="{{view.hsn.labels.cess}}"><span class="mm-num" data-testid="num">{{view.hsn.totals.cess}}</span></td>
+                    {{/if}}
                     <td class="is-num" data-label="{{view.hsn.labels.total}}"><span class="mm-num" data-testid="num">{{view.hsn.totals.total}}</span></td>
                   </tr>
                   <tr class="mm-hsn-words">
@@ -504,9 +548,11 @@
             </div>
           {{/if}}
 
-          <section class="mm-signature-section" data-testid="section" data-section="signature">
-            <div class="mm-signature" data-testid="signature">
-              {{#if view.signature.hasMark}}
+          {{!-- The signatory block shows only once a signature is added: an image, or a digital
+               signature (awaiting or signed) — user request. --}}
+          {{#if view.signature.hasMark}}
+            <section class="mm-signature-section" data-testid="section" data-section="signature">
+              <div class="mm-signature" data-testid="signature">
                 <div class="mm-signature-mark">
                   {{#if view.signature.image}}
                     {{> CeresImage src=view.signature.image alt=view.signature.label class="mm-signature-image"}}
@@ -520,17 +566,17 @@
                     </p>
                   {{/if}}
                 </div>
-              {{/if}}
-              <div class="mm-signature-line"></div>
-              {{#if view.signature.forLabel}}<p class="mm-signature-for">{{view.signature.forLabel}}</p>{{/if}}
-              {{#if view.signature.label}}<p class="mm-signature-label">{{view.signature.label}}</p>{{/if}}
-            </div>
-          </section>
+                <div class="mm-signature-line"></div>
+                {{#if view.signature.forLabel}}<p class="mm-signature-for">{{view.signature.forLabel}}</p>{{/if}}
+                {{#if view.signature.label}}<p class="mm-signature-label">{{view.signature.label}}</p>{{/if}}
+              </div>
+            </section>
+          {{/if}}
 
           {{#if view.footer.contact}}
             <p class="mm-contact">
               {{view.footer.contact.lead}}
-              {{#if view.footer.contact.email}}{{view.footer.contact.emailLabel}} <strong>{{view.footer.contact.email}}</strong>{{/if}}{{#if view.footer.contact.phone}}{{#if view.footer.contact.email}}, {{/if}}{{view.footer.contact.phoneLabel}} <strong>{{view.footer.contact.phone}}</strong>{{/if}}
+              {{#if view.footer.contact.email}}{{view.footer.contact.emailLabel}} <strong>{{view.footer.contact.email}}</strong>{{/if}}{{#if view.footer.contact.phone}}{{#if view.footer.contact.email}}, {{/if}}{{view.footer.contact.phoneLabel}} <strong>{{formatPhoneNumber view.footer.contact.phone}}</strong>{{/if}}
             </p>
           {{/if}}
 

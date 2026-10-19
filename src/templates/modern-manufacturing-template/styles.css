@@ -16,11 +16,17 @@
  * document's text scale (--mm-text-scale).
  */
 
+/*
+ * Lydia's "Change Color & Font" (applied by the renderer as root variables, live too):
+ * primary colour → the accent (bars, headings, table header); secondary colour → the text;
+ * primary background → the page; secondary background → the boxes and sections — the same
+ * reading as the Solvin and SR Trading 2.0 templates. Unset, the design's own colours stay.
+ */
 .mm-doc {
   --mm-accent: var(--mm-theme, var(--primary-color, #013d7f));
   --mm-accent-200: var(--mm-theme-tint, #bddcff);
-  --mm-ink: #1a2130;
-  --mm-strong: #282828;
+  --mm-ink: var(--secondary-color, #1a2130);
+  --mm-strong: var(--secondary-color, #282828);
   --mm-muted: #666670;
   --mm-line: #d1d6e0;
   --mm-table-outline: #dcdcdc;
@@ -30,7 +36,9 @@
   --mm-signature-ink: #1e293b;
   --mm-signature-muted: #64748b;
   --mm-on-accent: #fff;
-  --mm-font: var(--subtitle-font, "Inter", sans-serif);
+
+  /* The script's face (Lydia's "Change Script") follows the body font, for the glyphs it lacks. */
+  --mm-font: var(--subtitle-font, "Inter", sans-serif), var(--mm-script-font, sans-serif);
 
   /*
    * Type scale (design-to-template §4a): six steps, 13 px base pinned on screen and in print,
@@ -42,7 +50,7 @@
   --mm-font-size-m: 14px;
   --mm-font-size-lg: 18px;
   --mm-font-size-xl: 20px;
-  --mm-title-font: var(--title-font, var(--mm-font));
+  --mm-title-font: var(--title-font, var(--mm-font)), var(--mm-script-font, sans-serif);
 
   display: flex;
   flex-direction: column;
@@ -61,7 +69,7 @@
   max-width: 100%;
   margin: 0 auto;
   padding: 0 var(--mm-gutter);
-  background: #fff;
+  background: var(--primary-background, #fff);
   color: var(--mm-ink);
   font-family: var(--mm-font);
   font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
@@ -88,9 +96,12 @@
  * The print frame (see template.hbs) is transparent on screen: its sections lay out as the
  * document's own flex items, and the footer spacer is not drawn.
  */
+
+/* :where() keeps these as weak as the print rules that turn the frame back into a table. */
 .mm-page-frame,
-.mm-page-frame > tbody,
-.mm-page-frame > tbody > tr,
+.mm-page-frame > :where(thead, tbody),
+.mm-page-frame > :where(thead, tbody) > tr,
+.mm-page-frame-header > :where(tr) > td,
 .mm-page-frame-cell,
 .mm-page-body {
   display: contents;
@@ -143,7 +154,7 @@
   margin-left: calc(-1 * var(--mm-gutter));
 }
 
-.mm-doc:has(> .mm-letterhead.is-empty) {
+.mm-doc:has(.mm-letterhead.is-empty) {
   padding-top: var(--mm-gutter);
 }
 
@@ -156,6 +167,7 @@
 .mm-box {
   border: 1px solid var(--mm-line);
   border-radius: 6px;
+  background: var(--secondary-background, transparent);
   overflow: hidden;
 }
 
@@ -192,40 +204,47 @@
 
 /* ------------------------------------------------------------ 1. header */
 
+/* Brand | seller details, 20 px apart (Figma header auto layout). */
 .mm-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
+  gap: 20px;
 }
 
 /*
- * Logo and company name side by side; when the name cannot keep a readable width beside the
- * logo (a wide logo, long seller details), it moves below the logo instead of breaking up.
+ * Logo and company name stay side by side (user request): the name takes the width left
+ * before the seller details and wraps between words there, beside the logo. When even its
+ * longest word no longer fits beside the logo, the name moves under it instead of breaking
+ * letter by letter (user, 2026-10-19). The name follows the text scale, so the switch does too.
  */
 .mm-brand {
   display: flex;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 14px;
+  gap: 14px;
   min-width: 0;
 }
 
+/* The logo shrinks only when the brand is narrower than the logo itself. */
 .mm-logo {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 /* The business logo: up to 120 px tall (user request), up to 240 px wide for a wide mark. */
 .mm-logo .mm-logo-image {
   display: block;
-  max-width: 240px;
+  max-width: min(240px, 100%);
   max-height: 120px;
   object-fit: contain;
 }
 
 .mm-brand-name {
-  flex: 1 1 160px;
-  min-width: min(160px, 100%);
+  flex: 1 0 min-content;
+  min-width: 0;
+  max-width: 100%;
   color: var(--mm-strong);
   font-family: var(--mm-title-font);
   font-size: calc(var(--mm-font-size-lg) * var(--mm-text-scale, 1));
@@ -256,7 +275,7 @@
   width: max-content;
   min-width: 342px;
   max-width: 100%;
-  text-align: right;
+  text-align: end;
 }
 
 /* The seller's full address, one grey paragraph (street, city, state, country). */
@@ -301,7 +320,7 @@
  */
 .mm-seller .mm-id-grid {
   justify-content: end;
-  text-align: right;
+  text-align: end;
 }
 
 /*
@@ -325,10 +344,30 @@
   color: var(--mm-on-accent);
 }
 
+/* The status tag on the title bar: the shared invoice-status widget's chip, at the s step,
+   right after the title; the free space then follows the tag instead of the title. */
+.mm-status {
+  flex: none;
+}
+
+.mm-banner .mm-banner-title:has(+ .mm-status) {
+  margin-inline-end: 0;
+}
+
+.mm-banner-title + .mm-status {
+  margin-inline-end: auto;
+}
+
+.mm-status .invoice-tag {
+  margin: 0;
+  font-size: calc(var(--mm-font-size-s) * var(--mm-text-scale, 1));
+  line-height: 1.4545;
+}
+
 /* .mm-banner .mm-banner-title outranks the h2 margin reset: the title takes the free space. */
 .mm-banner .mm-banner-title {
   min-width: 0;
-  margin-right: auto;
+  margin-inline-end: auto;
   font-family: var(--mm-title-font);
   font-size: calc(var(--mm-font-size-m) * var(--mm-text-scale, 1));
   line-height: 1.4286;
@@ -341,7 +380,7 @@
   line-height: 1.5385;
   font-weight: 400;
   overflow-wrap: break-word;
-  text-align: right;
+  text-align: end;
 }
 
 .mm-copy {
@@ -392,9 +431,11 @@
 /* ------------------------------------------------------------ compliance (IRN / QR) */
 
 /* Shown only once there is an IRN or a QR to show — including one posted in live. */
+
+/* The IRN details start at the box's top, beside the QR (user request). */
 .mm-compliance {
   display: none;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   padding: 12px;
@@ -453,6 +494,7 @@
   align-items: stretch;
   border: 1px solid var(--mm-line);
   border-radius: 6px;
+  background: var(--secondary-background, transparent);
   overflow: hidden;
 }
 
@@ -464,7 +506,7 @@
 }
 
 .mm-pair-box + .mm-pair-box {
-  border-left: 1px solid var(--mm-line);
+  border-inline-start: 1px solid var(--mm-line);
 }
 
 .mm-pair-box:only-child {
@@ -556,30 +598,17 @@
   gap: 8px;
 }
 
-/* ------------------------------------------------------------ supply row */
+/* ------------------------------------------------------------ supply */
 
-/*
- * Country of Supply | Place of Supply above the items table: each centred in its half. A row
- * whose cells are all hidden (also when the host's live toggle hides them) takes no space.
- */
-.mm-supply-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  text-align: center;
+/* Place / Country of Supply under Shipped To, read like its other fields; all hidden, no gap. */
+.mm-party-supply {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.mm-supply-row:not(:has(> .mm-supply-cell:not([style*="none"]))) {
+.mm-party-supply:not(:has(> .mm-id-line:not([style*="none"]))) {
   display: none;
-}
-
-.mm-supply-label {
-  color: var(--mm-muted);
-}
-
-.mm-supply-value {
-  color: var(--mm-ink);
-  font-weight: 600;
 }
 
 /* ------------------------------------------------------------ 6. items table */
@@ -633,7 +662,7 @@
   background: var(--mm-accent);
   color: var(--mm-on-accent);
   font-weight: 700;
-  border-right: 1px solid var(--mm-accent-200);
+  border-inline-end: 1px solid var(--mm-accent-200);
 
   /* Headers wrap between words and after "/" only — never mid-word. */
   overflow-wrap: normal;
@@ -641,31 +670,31 @@
 }
 
 .mm-items thead th:first-child {
-  border-top-left-radius: 5px;
+  border-start-start-radius: 5px;
 }
 
 .mm-items thead th:last-child {
-  border-right: 0;
-  border-top-right-radius: 5px;
+  border-inline-end: 0;
+  border-start-end-radius: 5px;
 }
 
 .mm-items tbody td,
 .mm-items tfoot td {
   border-top: 1px solid var(--mm-line);
-  border-right: 1px solid var(--mm-cell-line);
+  border-inline-end: 1px solid var(--mm-cell-line);
 }
 
 .mm-items tbody td:last-child,
 .mm-items tfoot td:last-child {
-  border-right: 0;
+  border-inline-end: 0;
 }
 
 .mm-items > :last-child > tr:last-child > td:first-child {
-  border-bottom-left-radius: 5px;
+  border-end-start-radius: 5px;
 }
 
 .mm-items > :last-child > tr:last-child > td:last-child {
-  border-bottom-right-radius: 5px;
+  border-end-end-radius: 5px;
 }
 
 .mm-items tr.is-stripe td {
@@ -674,7 +703,7 @@
 
 /* The full-width description row reads as one band: no divider after its empty Sr cell. */
 .mm-items .mm-detail-row > td.mm-col-serial {
-  border-right: 0;
+  border-inline-end: 0;
 }
 
 /* A row with a note or images reads from the top. */
@@ -685,7 +714,7 @@
 
 .mm-items th[data-col="desc"],
 .mm-items td[data-col="desc"] {
-  text-align: left;
+  text-align: start;
 }
 
 /* Holds Description at its minimum share of the table, even when the table scrolls. */
@@ -717,7 +746,7 @@
 .mm-items .mm-group-row td {
   background: var(--mm-title-bar);
   font-weight: 700;
-  text-align: left;
+  text-align: start;
 }
 
 .mm-item-name {
@@ -746,7 +775,7 @@
  */
 .mm-item-detail {
   display: block;
-  text-align: left;
+  text-align: start;
 }
 
 /* 12 px between the name and codes and the item's description. */
@@ -767,7 +796,7 @@
 
 /* 64 px thumbnail beside the name; the name and note wrap to its left. */
 .mm-item-thumbnail {
-  float: right;
+  float: inline-end;
   margin: 0 0 4px 4px;
 }
 
@@ -828,6 +857,7 @@
 .mm-summary-row:has(> .mm-bank) {
   border: 1px solid var(--mm-line);
   border-radius: 6px;
+  background: var(--secondary-background, transparent);
   overflow: hidden;
 }
 
@@ -837,7 +867,7 @@
   gap: 8px;
   min-width: 0;
   padding: 12px;
-  border-right: 1px solid var(--mm-line);
+  border-inline-end: 1px solid var(--mm-line);
 }
 
 .mm-totals {
@@ -849,6 +879,7 @@
 .mm-summary-spacer + .mm-totals {
   border: 1px solid var(--mm-line);
   border-radius: 6px;
+  background: var(--secondary-background, transparent);
   overflow: hidden;
 }
 
@@ -859,10 +890,11 @@
   gap: 12px;
 }
 
-/* "Scan to Pay" sits centred over the 120 px QR. */
+/* "Scan to pay via UPI" over the 120 px QR, centred, on one line (user request). */
 .mm-scan-title {
   flex: none;
-  width: 120px;
+  min-width: 120px;
+  white-space: nowrap;
   text-align: center;
 }
 
@@ -1029,6 +1061,7 @@
   overflow-x: auto;
   border: 1px solid var(--mm-line);
   border-radius: 6px;
+  background: var(--secondary-background, transparent);
 }
 
 .mm-widget-box:not(:has(.ceres-table)) {
@@ -1124,7 +1157,7 @@
 
 .mm-widget-table .ceres-table th + th,
 .mm-widget-table .ceres-table td + td {
-  border-left: 1px solid var(--mm-line);
+  border-inline-start: 1px solid var(--mm-line);
 }
 
 .mm-widget-table .ceres-table thead th {
@@ -1157,8 +1190,14 @@
 .mm-widget-table .ceres-table th:first-child,
 .mm-widget-table .ceres-table td:first-child,
 .mm-widget-table .ceres-table-words {
-  text-align: left;
+  text-align: start;
   white-space: normal;
+}
+
+/* The tax summary's Total column reads from the right, heading included (user request). */
+[data-ceres-tax-summary] .ceres-table thead tr:first-child > :last-child,
+[data-ceres-tax-summary] .ceres-table :is(tbody, tfoot) tr > :last-child:not([colspan]) {
+  text-align: end;
 }
 
 .mm-widget-table .ceres-table .ceres-table-words {
@@ -1324,7 +1363,7 @@
 /* Its headings and cells read from the left (user request), not centred. */
 .mm-doc .mm-item-desc .toastui-editor-contents :is(th, td),
 .mm-doc .mm-note-body .toastui-editor-contents :is(th, td) {
-  text-align: left;
+  text-align: start;
 }
 
 /* Bullets and list numbers in the text's own colour (user request), not the viewer's grey. */
@@ -1340,7 +1379,7 @@
 
 .mm-doc .mm-item-desc .toastui-editor-contents :is(ul, ol),
 .mm-doc .mm-note-body .toastui-editor-contents :is(ul, ol) {
-  padding-left: 16px;
+  padding-inline-start: 16px;
 }
 
 /* ------------------------------------------------------------ 13. HSN summary */
@@ -1366,7 +1405,13 @@
 
 .mm-hsn-table th + th,
 .mm-hsn-table td + td {
-  border-left: 1px solid var(--mm-line);
+  border-inline-start: 1px solid var(--mm-line);
+}
+
+/* Each tax's Rate | Amount under its name (refrens.com): the second header row's first cell
+   starts after the two-row HSN and Taxable Value headings, so it draws its own rule. */
+.mm-hsn-table thead tr + tr th {
+  border-inline-start: 1px solid var(--mm-line);
 }
 
 .mm-hsn-table thead th {
@@ -1376,7 +1421,13 @@
 }
 
 .mm-hsn-table .is-text {
-  text-align: left;
+  text-align: start;
+}
+
+/* The Total column reads from the right, heading included (user request). */
+.mm-hsn-table thead tr:first-child > :last-child,
+.mm-hsn-table :is(tbody, tfoot) tr > :last-child:not([colspan]) {
+  text-align: end;
 }
 
 .mm-hsn-table tbody tr:nth-child(even) td {
@@ -1392,7 +1443,12 @@
   border-bottom: 0;
   color: var(--mm-muted);
   font-weight: 400;
-  text-align: left;
+  text-align: start;
+}
+
+/* Every row hidden (hide totals): no empty totals box either. */
+.mm-totals:not(:has(.ceres-subtotal-row:not(.is-hidden-by-totals, .is-hidden-by-taxes), .mm-words)) {
+  display: none;
 }
 
 /* ------------------------------------------------------------ 14. signature */
@@ -1416,7 +1472,7 @@
   width: max-content;
   min-width: min(240px, 100%);
   max-width: 100%;
-  text-align: right;
+  text-align: end;
 }
 
 .mm-signature-mark {
@@ -1470,6 +1526,32 @@
   text-align: center;
 }
 
+/* ------------------------------------------------------------ right to left */
+
+/*
+ * Lydia's "Change Script" with right-to-left on (dir="rtl" on the page): the layout mirrors
+ * through the logical properties above. Figures, dates, codes, emails and phone numbers keep
+ * their left-to-right order ("15-Sep-2026", not "Sep-2026-15"). Field labels take the
+ * direction of their own text, so an English label keeps its full stop at its end ("Invoice
+ * No.") and an Arabic one reads right to left; both sit on the right, the start of the line.
+ */
+.mm-doc[dir="rtl"] :is(.mm-num, .mm-email) {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.mm-doc[dir="rtl"] :is(.mm-detail > .mm-value, .mm-detail > .mm-label, .mm-kv-label, .mm-kv-value, .mm-info-label, .mm-info-value) {
+  text-align: right;
+}
+
+/*
+ * "PAN: AAVFV1234H" reads as one line in the direction of its own label, as do the labels and
+ * the centred Sr. heading ("Sr.", not ".Sr").
+ */
+.mm-doc[dir="rtl"] :is(.mm-detail > .mm-label, .mm-kv-label, .mm-info-label, .mm-id, .mm-items th.mm-col-serial) {
+  unicode-bidi: plaintext;
+}
+
 /* ------------------------------------------------------------ narrow previews */
 
 /* Screen only: the iframe viewport is the document width. */
@@ -1491,7 +1573,7 @@
     align-items: flex-start;
     width: auto;
     min-width: 0;
-    text-align: left;
+    text-align: start;
   }
 
 
@@ -1500,7 +1582,7 @@
   }
 
   .mm-seller .mm-id-grid {
-    text-align: left;
+    text-align: start;
   }
 
   /* Too narrow for aligned columns: each line wraps on its own. */
@@ -1516,8 +1598,7 @@
   }
 
   .mm-pair,
-  .mm-summary-row,
-  .mm-supply-row {
+  .mm-summary-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1528,12 +1609,12 @@
 
   .mm-pair-box + .mm-pair-box {
     border-top: 1px solid var(--mm-line);
-    border-left: 0;
+    border-inline-start: 0;
   }
 
   /* Bank above totals, in the same box. */
   .mm-bank {
-    border-right: 0;
+    border-inline-end: 0;
     border-bottom: 1px solid var(--mm-line);
   }
 
@@ -1543,10 +1624,11 @@
 }
 
 /*
- * Phone previews: five columns of unbroken figures cannot fit, and nothing outside the items
- * table may scroll (spec K6), so each HSN row becomes a small card of label / value lines.
+ * Narrow previews: up to nine columns of unbroken figures (each tax's Rate and Amount) cannot
+ * fit, and nothing outside the items table may scroll (spec K6), so each HSN row becomes a
+ * small card of label / value lines.
  */
-@media screen and (width <= 480px) {
+@media screen and (width <= 640px) {
   .mm-hsn-table thead {
     display: none;
   }
@@ -1581,14 +1663,14 @@
     padding: 2px 0;
     border: 0;
     background: none;
-    text-align: right;
+    text-align: end;
   }
 
   .mm-hsn-table td[data-label]::before {
     color: var(--mm-muted);
     font-weight: 400;
     content: attr(data-label);
-    text-align: left;
+    text-align: start;
   }
 
   .mm-hsn-table tbody tr:nth-child(even) {
@@ -1597,7 +1679,12 @@
 
   .mm-hsn-table .mm-hsn-words td {
     display: block;
-    text-align: left;
+    text-align: start;
+  }
+
+  /* The Total row's empty Rate cells: nothing to read on a card. */
+  .mm-hsn-table td.mm-hsn-rate {
+    display: none;
   }
 }
 
@@ -1623,7 +1710,11 @@
     --mm-gutter: 0px;
 
     width: 100%;
-    max-width: none;
+
+    /* Never wider than the paper's printable width (helpers.ts printWidth): Refrens' PDF
+       service lays the page out in a window wider than the paper before it prints, and the
+       table fitted there was clipped on the page (user report). */
+    max-width: var(--mm-print-width, none);
     margin: 0;
   }
 
@@ -1640,19 +1731,22 @@
   }
 
   /*
-   * A table whose columns cannot fit the page at 13 px (helpers.ts decides it from the
-   * planner's minimum widths and the paper format) prints compact, as Solvin does: the small
-   * step (11 px) and 4 px side padding, row ends included.
+   * A table wider than its page (fitPrintTable, measured once the print layout applies) takes
+   * tight padding, then its text shrinks just enough to fit by --mm-print-fit, never under the
+   * 10 px floor (ported from the Ecommerce template; it was cut off at the page edge).
    */
-  .mm-items.is-print-compact {
-    font-size: calc(var(--mm-font-size-s) * var(--mm-text-scale, 1));
-    line-height: 1.4545;
-  }
-
-  .mm-items.is-print-compact :is(th, td) {
+  .mm-items.is-print-fit :is(th, td) {
     padding-right: 4px;
     padding-left: 4px;
     font-size: inherit;
+  }
+
+  .mm-items.is-print-fit {
+    font-size: max(10px, calc(var(--mm-font-size-base) * var(--mm-text-scale, 1) * var(--mm-print-fit, 1)));
+  }
+
+  .mm-items.is-print-fit .mm-item-code {
+    font-size: max(10px, calc(var(--mm-font-size-s) * var(--mm-text-scale, 1) * var(--mm-print-fit, 1)));
   }
 
   /* clip is not a scroll container, so a preview scroll offset cannot shift the printout. */
@@ -1679,6 +1773,53 @@
     break-inside: avoid;
   }
 
+  /* Each line item prints whole: its description and image rows move to the next page with
+     it (user rule, 2026-10-19). */
+  .mm-items .mm-detail-row,
+  .mm-items .mm-image-row {
+    break-before: avoid;
+  }
+
+  /* An item's original images never taller than 55 % of a page, in proportion, so an item
+     and its images print together on one page (user, 2026-10-19; as the Viraj template). */
+  .mm-large-image {
+    max-height: min(55vh, 600px); /* px cap: on a Pageless PDF's one tall page vh is the whole document */
+    object-fit: contain;
+  }
+
+  /* Stretch on, a document longer than a page (user, 2026-10-19): where a whole item moves to
+     the next page, the column rules run on to the page's foot and a rule closes each page's
+     piece of the table (helpers.ts columnRules), drawn by the items wrapper; on the last
+     piece the table's own bottom rule lies over it. The row groups are opaque, so the rules
+     show only below the page's last row. */
+  .mm-doc[data-mm-stretch-table] .mm-items-scroll {
+    --mm-column-rule-width: 1px;
+
+    border-bottom: var(--mm-column-rule-width) solid
+      var(--mm-column-rule-color, transparent);
+    background: var(--mm-column-rules, none);
+    box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .mm-doc[data-mm-stretch-table] .mm-items-scroll > :last-child {
+    margin-bottom: calc(-1 * var(--mm-column-rule-width));
+  }
+
+  :where(.mm-doc[data-mm-stretch-table] .mm-items) > :where(thead, tbody, tfoot) {
+    background-color: var(--primary-background, #fff);
+  }
+
+  /* A table in a description or note breaks between its rows, its headings repeated at the top
+     of every page it spans (user, 2026-10-19). */
+  .mm-doc :is(.mm-item-desc, .mm-note-body) .toastui-editor-contents thead {
+    display: table-header-group;
+  }
+
+  .mm-doc :is(.mm-item-desc, .mm-note-body) .toastui-editor-contents tr {
+    break-inside: avoid;
+  }
+
   /*
    * A table split across pages would draw its outline down to the foot of the page. The
    * cells draw it instead, and every row closes with its own bottom rule, so each page's
@@ -1690,12 +1831,12 @@
 
   .mm-items tr > th:first-child,
   .mm-items tr > td:first-child {
-    border-left: 1px solid var(--mm-table-outline);
+    border-inline-start: 1px solid var(--mm-table-outline);
   }
 
   .mm-items tr > th:last-child,
   .mm-items tr > td:last-child {
-    border-right: 1px solid var(--mm-table-outline);
+    border-inline-end: 1px solid var(--mm-table-outline);
   }
 
   .mm-items tbody td,
@@ -1715,9 +1856,19 @@
   .mm-box,
   .mm-pair,
   .mm-summary-row,
-  /* The footer moves to a page whole (helpers.ts sets it on the last page's bottom edge). */
   .mm-doc > .mm-letterhead-footer {
+    /* Boxes move to a page whole; so does the footer (helpers.ts sets it on the edge). */
     break-inside: avoid;
+  }
+
+  /* The status tag prints only when the document asks for it (showStatusTagInPrint). */
+  .mm-status.no-print {
+    display: none;
+  }
+
+  /* A stretched last row (fullHeightTable, helpers.ts) keeps its text at the top. */
+  .mm-items > tbody > tr[data-mm-stretched] > td {
+    vertical-align: top;
   }
 
   .mm-signature-section {
@@ -1746,6 +1897,15 @@
 
   .mm-page-frame-footer {
     display: table-footer-group;
+  }
+
+  /* The letterhead on every page, 16 px above that page's content. */
+  .mm-page-frame-header {
+    display: table-header-group;
+  }
+
+  .mm-page-frame > .mm-page-frame-header > tr > td {
+    padding-bottom: 16px;
   }
 
   .mm-page-frame > * > tr {
@@ -1790,5 +1950,16 @@
     .mm-doc
     .no-dibella:is(.invoice-letterhead, .invoice-letterhead-footer) {
     display: none;
+  }
+}
+
+/*
+ * A box split by a page break closes at the foot of the page and opens again at the top of the
+ * next: its border, corners and padding are drawn on each piece (user, 2026-10-19).
+ */
+@media print {
+  :is(.mm-box, .mm-pair, .mm-pair-box, .mm-bank, .mm-summary-row, .mm-widget-box) {
+    box-decoration-break: clone;
+    box-decoration-break: clone;
   }
 }

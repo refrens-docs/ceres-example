@@ -353,7 +353,7 @@ test("C10: only the fixed sections remain", async ({ page }) => {
     "items",
     "summary",
     "totals",
-    "signature",
+    // CHANGED (user request): no signatory block until a signature is added.
   ]);
 });
 

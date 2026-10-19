@@ -23,19 +23,32 @@ import {
   mapNotes,
   mapAdditionalInfo,
   mapParty,
+  amountInCurrencyWords,
+  statusTag,
+  partyState,
+  taxIdShown,
+  customFieldText,
   mapPrint,
+  printWidth,
+  paperHeight,
+  mapDocumentScript,
+  withDocumentScript,
+  loadScriptFont,
   mapSupply,
   mapSettings,
   themeTint,
   mapSignature,
   mapTotals,
   mapTransport,
+  transportName,
+  staysWhole,
   thumbnailOf,
   mapWords,
   placeOfSupplyText,
   registerModernManufacturingHelpers,
   moneyDigits,
   withMoneyDefaults,
+  withRefrensDefaults,
   planTableLayout,
   headerParts,
   qrImage,
@@ -55,6 +68,7 @@ import { computePaymentColumns } from "../src/widgets/payment-table/utils";
 import { prepareImageGallery } from "../src/widgets/image/utils";
 import registerFormatCurrencyHelper from "../src/widgets/shared/registerFormatCurrencyHelper";
 import registerTaxFlagHelpers from "../src/widgets/shared/registerTaxFlagHelpers";
+import formatPhoneNumberIntl from "../src/widgets/phone-number";
 
 type Json = Record<string, any>;
 
@@ -88,6 +102,10 @@ beforeAll(() => {
   registerModernManufacturingHelpers(HandlebarsRuntime);
   registerFormatCurrencyHelper(HandlebarsRuntime);
   registerTaxFlagHelpers(HandlebarsRuntime);
+  // The shared phone-number widget's helper, as it registers itself in the browser.
+  HandlebarsRuntime.registerHelper("formatPhoneNumber", (phone: unknown) =>
+    phone ? formatPhoneNumberIntl(String(phone)) ?? String(phone) : ""
+  );
 
   HandlebarsRuntime.registerHelper(
     "formateShortDateWithOffset",
@@ -182,10 +200,126 @@ describe("Modern Manufacturing template — render", () => {
       "Additional Info",
       "Net 30 days",
       "Test certificate TC-0921.pdf",
-      "41,966.70",
+      // The HSN summary's Total: each row's tax, as refrens.com prints it.
+      "6,401.70",
+    ].forEach((expected) => expect(html).toContain(expected));
+    // No signature added: no signatory block (user request).
+    expect(html).not.toContain('data-section="signature"');
+    expect(html).not.toContain("For Vertex Foundry Components");
+  });
+
+  it("repeats the letterhead on every printed page unless it is for the first page only", () => {
+    const letterheads = (html: string) =>
+      (html.match(/data-ceres-height="letterhead"/g) || []).length;
+    const everyPage = render((invoice) => {
+      invoice.letterHead = "https://cdn.example/head.png";
+      invoice.template = { pdfOptions: { letterHeadOnFirstPage: false } };
+    });
+    expect(everyPage).toMatch(
+      /<thead class="mm-page-frame-header">[\s\S]*?src="https:\/\/cdn\.example\/head\.png"/
+    );
+    expect(letterheads(everyPage)).toBe(1);
+
+    const firstPage = render((invoice) => {
+      invoice.letterHead = "https://cdn.example/head.png";
+      invoice.template = { pdfOptions: { letterHeadOnFirstPage: true } };
+    });
+    expect(firstPage).not.toContain("mm-page-frame-header");
+    expect(firstPage.indexOf("head.png")).toBeLessThan(
+      firstPage.indexOf("mm-page-frame")
+    );
+    expect(letterheads(firstPage)).toBe(1);
+  });
+
+  it("takes Lydia's colour settings: text, page and box backgrounds", () => {
+    const styles = fs.readFileSync(
+      path.join(TEMPLATE_DIR, "styles.css"),
+      "utf8"
+    );
+    // Secondary colour → text; primary background → page; secondary background → boxes.
+    expect(styles).toContain("--mm-ink: var(--secondary-color, #1a2130);");
+    expect(styles).toMatch(/background: var\(--primary-background, #fff\);/);
+    [
+      ".mm-box",
+      ".mm-pair",
+      ".mm-summary-row:has(> .mm-bank)",
+      ".mm-summary-spacer + .mm-totals",
+      ".mm-widget-box",
+    ].forEach((selector) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      expect(styles).toMatch(
+        new RegExp(
+          `\\n${escaped} \\{[^}]*background: var\\(--secondary-background, transparent\\);`
+        )
+      );
+    });
+    // The theme colour: the accent, with the renderer's --primary-color underneath.
+    expect(styles).toContain(
+      "--mm-accent: var(--mm-theme, var(--primary-color, #013d7f));"
+    );
+  });
+
+  it("hides every totals row with the totals, additional charges included", () => {
+    const html = render((invoice) => {
+      invoice.additionalCharges = [
+        { _id: "c1", label: "Discounts", amount: -500, multiplier: 1 },
+      ];
+      invoice.advanceOptions.hideTotals = true;
+    });
+    const totals = html.slice(html.indexOf('data-section="totals"'));
+    const rows = Array.from(
+      totals.matchAll(/<tr\s+class="(ceres-subtotal-row[^"]*)"/g),
+      (match) => match[1]
+    );
+    expect(rows.length).toBeGreaterThan(2);
+    rows.forEach((row) => expect(row).toContain("is-hidden-by-totals"));
+    expect(totals).toContain("Discounts");
+    expect(html).not.toContain("data-ceres-subtotal-keep");
+    // Shown again with the totals on.
+    const shown = render((invoice) => {
+      invoice.additionalCharges = [
+        { _id: "c1", label: "Discounts", amount: -500, multiplier: 1 },
+      ];
+    });
+    expect(shown).not.toContain("is-hidden-by-totals");
+    // With nothing left to show, the box itself goes.
+    expect(
+      fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8")
+    ).toMatch(
+      /\.mm-totals:not\(:has\(\.ceres-subtotal-row:not\(\.is-hidden-by-totals, \.is-hidden-by-taxes\), \.mm-words\)\) \{\s*display: none;/
+    );
+  });
+
+  it("marks the page for the stretched table only when the toggle is on", () => {
+    const on = render((invoice) => {
+      invoice.template = { pdfOptions: { fullHeightTable: true } };
+      invoice.owner.configuration = {
+        ...invoice.owner.configuration,
+        experimental: { stretchInvoiceTable: true },
+      };
+    });
+    expect(on).toContain(
+      'data-testid="invoice-root" data-mm-stretch-allowed data-mm-stretch-table data-mm-paper-height="1122" dir="ltr"'
+    );
+    expect(render()).not.toContain("data-mm-stretch-table");
+  });
+
+  it("shows the signatory block once a signature is added", () => {
+    const signed = render((invoice) => {
+      invoice.signature = "https://cdn.example/sign.png";
+    });
+    [
+      'data-section="signature"',
+      "mm-signature-image",
       "For Vertex Foundry Components",
       "Authorised Signatory",
-    ].forEach((expected) => expect(html).toContain(expected));
+    ].forEach((expected) => expect(signed).toContain(expected));
+    // A digital signature counts too, awaiting or signed.
+    const digital = render((invoice) => {
+      invoice.signatureMethod = "DIGITAL";
+    });
+    expect(digital).toContain("Awaiting Digital Signature");
+    expect(digital).toContain("For Vertex Foundry Components");
   });
 
   it("ends the banner with the subtitle, after the copy tag", () => {
@@ -205,10 +339,8 @@ describe("Modern Manufacturing template — render", () => {
     const html = render((invoice) => {
       invoice.columns[0].label = "Part Description";
     });
-    const header = html.slice(
-      html.indexOf('data-testid="items-header"'),
-      html.indexOf("</thead>")
-    );
+    const start = html.indexOf('data-testid="items-header"');
+    const header = html.slice(start, html.indexOf("</thead>", start));
     const cells = Array.from(
       header.matchAll(/data-col="([^"]+)"[^>]*>([\s\S]*?)<\/th>/g),
       (match) => [
@@ -244,6 +376,7 @@ describe("Modern Manufacturing template — render", () => {
     const html = render((invoice) => {
       invoice.shippedFrom = { name: "Works", city: "Belgaum" };
       invoice.paymentOptions = { accountTransfer: true };
+      invoice.signature = "https://cdn.example/sign.png";
     });
     const sections = Array.from(
       html.matchAll(/data-testid="section" data-section="([a-z]+)"/g),
@@ -285,25 +418,45 @@ describe("Modern Manufacturing template — render", () => {
       'data-role="ai-value"',
     ].forEach((hook) => expect(html).toContain(hook));
     expect(html).toMatch(/data-testid="item-row" data-item-index="0"/);
-    // The IRN block sits below the dispatch row, above the supply row and the items.
+    // The IRN block sits below the dispatch row, above the items.
     expect(html.indexOf('class="mm-box mm-compliance"')).toBeGreaterThan(
       html.indexOf('data-section="dispatch"')
     );
     expect(html.indexOf('class="mm-box mm-compliance"')).toBeLessThan(
-      html.indexOf('class="mm-supply-row"')
+      html.indexOf('data-section="items"')
     );
   });
 
+  it("marks a foreign-currency document for the tax summary's words", () => {
+    expect(render()).not.toContain("data-mm-currency");
+    expect(
+      render((invoice) => {
+        invoice.currency = "SAR";
+      })
+    ).toContain('data-mm-currency="SAR"');
+    // A currency without known words keeps the widget's line.
+    expect(
+      render((invoice) => {
+        invoice.currency = "XYZ";
+      })
+    ).not.toContain("data-mm-currency");
+  });
+
+  it("prints no title over the details grid (user request)", () => {
+    expect(render()).not.toContain("mm-details-title");
+    expect(render()).not.toContain(">Invoice Details<");
+  });
+
   it("puts transport in the details grid, or in its own box beside Shipped From", () => {
-    // Default (spec v2): E-Way Bill No., Vehicle No., Transporter in the grid, before Place
-    // of Supply; no dispatch row.
+    // Default (spec v2): the Eway Bill first, then Transporter and Vehicle Number in Refrens'
+    // order, in the grid; no dispatch row.
     const html = render();
     const details = html.slice(
       html.indexOf('data-section="details"'),
       html.indexOf('data-section="parties"')
     );
     expect(details).toMatch(
-      /2610 9890 1234[\s\S]*KA01AB1234[\s\S]*Speedway Logistics Pvt Ltd/
+      /2610 9890 1234[\s\S]*Speedway Logistics Pvt Ltd[\s\S]*Vehicle Number[\s\S]*KA01AB1234/
     );
     // Country / Place of Supply have their own row above the items, not grid cells.
     expect(details).not.toContain("Place of Supply");
@@ -350,7 +503,9 @@ describe("Modern Manufacturing template — render", () => {
   });
 
   it("keeps the live-update hooks the host patches, and renders only sections that are on", () => {
-    const html = render();
+    const html = render((invoice) => {
+      invoice.signature = "https://cdn.example/sign.png";
+    });
     [
       'data-ceres-height="letterhead"',
       'data-ceres-height="letterhead-footer"',
@@ -379,6 +534,7 @@ describe("Modern Manufacturing template — render", () => {
     const allTables = render((invoice) => {
       invoice.advanceOptions.taxSummaryView = "TABLE";
       invoice.allPayments = [{ amount: 100, paymentDate: "2026-09-22" }];
+      invoice.signature = "https://cdn.example/sign.png";
     });
     const at = (hook: string) => allTables.indexOf(hook);
     expect(at('data-section="attachments"')).toBeLessThan(
@@ -404,6 +560,93 @@ describe("Modern Manufacturing template — render", () => {
       "Shipped From"
     ) as Json;
     expect(party).toMatchObject({ street: "", region: "Pune, India" });
+  });
+
+  it("reads the document's language, script and right-to-left setting", () => {
+    // Nothing set: left to right, no language, no extra font.
+    expect(mapDocumentScript()).toEqual({
+      direction: "ltr",
+      isRtl: false,
+      lang: "",
+      font: "",
+    });
+    // Lydia's "Change Script": Arabic, right to left.
+    expect(
+      mapDocumentScript({ languageScript: "Arabic", enableRtl: true })
+    ).toEqual({
+      direction: "rtl",
+      isRtl: true,
+      lang: "ar",
+      font: "Noto Sans Arabic",
+    });
+    // Codes, picked options and other spellings; a later source wins.
+    expect(mapDocumentScript({ language: "hi-IN" })).toMatchObject({
+      lang: "hi",
+      font: "Noto Sans Devanagari",
+    });
+    expect(
+      mapDocumentScript({ script: { value: "Tamil", label: "Tamil" } })
+    ).toMatchObject({ lang: "ta", font: "Noto Sans Tamil" });
+    expect(mapDocumentScript({ direction: "RTL" }).isRtl).toBe(true);
+    expect(
+      mapDocumentScript({ direction: "rtl" }, { isRTL: "false" }).isRtl
+    ).toBe(false);
+    expect(mapDocumentScript({ rightToLeft: 1 }).direction).toBe("rtl");
+    expect(mapDocumentScript({ rtl: 0, direction: "rtl" }).isRtl).toBe(false);
+    expect(
+      mapDocumentScript({ isRtl: "yes", textDirection: "ltr" }).isRtl
+    ).toBe(false);
+    // A language Inter covers needs no extra face.
+    expect(mapDocumentScript({ language: "English" })).toMatchObject({
+      lang: "",
+      font: "",
+    });
+
+    // The data mapper reads the top-level template before the normalizer drops it.
+    const mapped = withDocumentScript(
+      { invoice: { template: {} } },
+      {
+        template: { languageScript: "Hebrew", enableRtl: "true" },
+      }
+    );
+    expect(mapped.documentScript).toMatchObject({ lang: "he", isRtl: true });
+    expect(withDocumentScript({}, {})).toEqual({});
+    // Outside a browser there is no font to load.
+    expect(() => loadScriptFont("Noto Sans Arabic")).not.toThrow();
+
+    // The page takes the direction, language and font; the layout mirrors via logical CSS.
+    const html = render((invoice) => {
+      invoice.template = { languageScript: "Arabic", enableRtl: true };
+    });
+    expect(html).toContain(
+      '<div class="mm-doc" data-testid="invoice-root" data-mm-paper-height="1122" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-width: 714px; --mm-script-font: \'Noto Sans Arabic\';'
+    );
+    expect(render()).toContain(
+      'data-testid="invoice-root" data-mm-paper-height="1122" dir="ltr" style='
+    );
+    const styles = fs.readFileSync(
+      path.join(TEMPLATE_DIR, "styles.css"),
+      "utf8"
+    );
+    expect(styles).toMatch(
+      /--mm-font: var\(--subtitle-font, "Inter", sans-serif\), var\(--mm-script-font, sans-serif\);/
+    );
+    // Physical sides only where right-to-left pins them (right is the start of an RTL line).
+    const outsideRtl = styles.replace(
+      /\.mm-doc\[dir="rtl"\][^{]*\{[^}]*\}/g,
+      ""
+    );
+    expect(outsideRtl).not.toMatch(
+      /text-align: (left|right);|border-(left|right):|float: (left|right);|border-(top|bottom)-(left|right)-radius/
+    );
+    // Figures, dates and codes keep their order; "Label: value" lines and labels take the
+    // direction of their own text.
+    expect(styles).toMatch(
+      /\.mm-doc\[dir="rtl"\] :is\(\.mm-num, \.mm-email\) \{\s*direction: ltr;\s*unicode-bidi: isolate;/
+    );
+    expect(styles).toMatch(
+      /\.mm-doc\[dir="rtl"\]\s*:is\([^)]*\.mm-id, \.mm-items th\.mm-col-serial\) \{\s*unicode-bidi: plaintext;/
+    );
   });
 
   it("leads the header with the company name alone when there is no logo", () => {
@@ -456,7 +699,7 @@ describe("Modern Manufacturing template — render", () => {
     expect(html).toContain('data-ceres-field="irn">IRN123</span>');
     // IRN on its own line; Ack No. | Ack Date side by side, like the party fields.
     expect(html).toMatch(
-      /<p class="mm-id-line mm-irn-row"><span class="mm-id">IRN: <span class="mm-irn-value" data-ceres-field="irn">IRN123<\/span><\/span><\/p>\s*<p class="mm-id-line"><span class="mm-id">Ack No\.: <span class="mm-num" data-testid="num">ACK1<\/span><\/span><span class="mm-id">Ack Date: /
+      /<p class="mm-id-line mm-irn-row"><span class="mm-id">IRN No.: <span class="mm-irn-value" data-ceres-field="irn">IRN123<\/span><\/span><\/p>\s*<p class="mm-id-line"><span class="mm-id">Ack No\.: <span class="mm-num" data-testid="num">ACK1<\/span><\/span><span class="mm-id">Ack Date: /
     );
     expect(html).toContain("21-Sep-2026");
     expect(html).toContain('src="data:image/png;base64,AAAA"');
@@ -489,11 +732,15 @@ describe("Modern Manufacturing template — render", () => {
   it("renders the IGST variant of the summary and drops sections that are off", () => {
     const html = render((invoice) => {
       invoice.igst = true;
-      invoice.hsnSummary = invoice.hsnSummary.map((row: Json) => ({
-        ...row,
-        igst: row.cgst * 2,
-        cessAmount: 1,
-      }));
+      invoice.hsnSummary.hsnList = invoice.hsnSummary.hsnList.map(
+        (row: Json) => ({
+          ...row,
+          igstRate: 18,
+          igstAmount: row.cgstAmount * 2,
+          totalCessAmount: 1,
+          taxAmount: row.cgstAmount * 2 + 1,
+        })
+      );
       invoice.columns = invoice.columns.filter((c: Json) => c.key !== "name");
       invoice.bankAccount = undefined;
       invoice.notes = "";
@@ -622,23 +869,33 @@ describe("Modern Manufacturing template — view model", () => {
         invoice.balance = { paid: 1000, due: 500 };
       })
     );
-    // A foreign-currency document: every figure carries its currency and decimals, the
-    // business-currency line follows, and the rate reads "BGN 1 = ₹57.22".
-    const bgn = mapTotals(
-      state((invoice) => {
-        invoice.currency = "BGN";
-        delete invoice.subUnitLength;
-        invoice.conversionRates = { INR: 57.22 };
-        invoice.owner.currency = "INR";
-        invoice.finalTotal.total = 625975;
-      })
-    );
+    // A foreign-currency document with "Show Applied Exchange Rate" on: every figure carries
+    // its currency and decimals, the business-currency line follows, and the rate reads
+    // "BGN 1 = ₹57.22".
+    const foreign = (showExchangeRateOnPdf?: boolean) =>
+      mapTotals(
+        state((invoice) => {
+          invoice.currency = "BGN";
+          delete invoice.subUnitLength;
+          invoice.conversionRates = { INR: 57.22 };
+          invoice.owner.currency = "INR";
+          invoice.finalTotal.total = 625975;
+          invoice.balance = { paid: 1000, due: 500 };
+          invoice.advanceOptions.showExchangeRateOnPdf = showExchangeRateOnPdf;
+        })
+      );
+    const bgn = foreign(true);
     const grand = bgn.main.find((row) => row.key === "total");
     expect(grand?.value).toBe("BGN\u00a06,25,975.00");
     expect(grand?.converted).toBe("₹3,58,18,289.50");
     expect(bgn.main.find((row) => row.key === "conversionRate")?.value).toBe(
       "BGN\u00a01 = ₹57.22"
     );
+    // Off (refrens.com's default): the document's currency only, and no rate row.
+    const plain = foreign(undefined);
+    expect(plain.main.find((row) => row.key === "total")?.converted).toBeNull();
+    expect(plain.main.some((row) => row.key === "conversionRate")).toBe(false);
+    expect(plain.due.every((row) => row.converted === null)).toBe(true);
     // A non-zero round-off is already in the total: still no row of its own.
     expect(rich.main.some((row) => row.key === "roundOff")).toBe(false);
     expect(rich.main[rich.main.length - 1].key).toBe("total");
@@ -700,6 +957,33 @@ describe("Modern Manufacturing template — view model", () => {
     expect(withMoneyDefaults({ other: 1 })).toEqual({ other: 1 });
   });
 
+  it("shows units in their own column unless the document chose otherwise", () => {
+    const options = (advanceOptions?: Json) =>
+      (withRefrensDefaults({ invoice: { advanceOptions } }) as Json).invoice
+        .advanceOptions;
+    expect(options(undefined).unitColumn).toBe("SEPARATE_COLUMN");
+    expect(options({ unitColumn: "MERGE_QUANTITY" }).unitColumn).toBe(
+      "MERGE_QUANTITY"
+    );
+    expect(options({ showUnitInName: true }).unitColumn).toBeUndefined();
+    // A bare invoice (not wrapped in { invoice }) too.
+    expect(
+      (withRefrensDefaults({ items: [] }) as Json).advanceOptions.unitColumn
+    ).toBe("SEPARATE_COLUMN");
+    // Rendered: "2" under Quantity and "KGS" in a Unit column, not "2 KGS".
+    const html = template(
+      normalizeInvoiceTemplateState(
+        withRefrensDefaults(
+          payload((invoice) => {
+            invoice.advanceOptions = {};
+            invoice.items[0].unit = "KGS";
+          })
+        ) as never
+      )
+    );
+    expect(html).toContain('data-col="unit"');
+  });
+
   it("labels every country's tax number and the responsible person", () => {
     const lines = (invoice: Json, party: Json) =>
       (
@@ -711,6 +995,7 @@ describe("Modern Manufacturing template — view model", () => {
       lines(
         {},
         {
+          country: "BG",
           vatNumber: "BG1",
           trnNumber: "T1",
           tinNumber: "N1",
@@ -730,7 +1015,7 @@ describe("Modern Manufacturing template — view model", () => {
     expect(
       lines(
         { customLabels: { trn: "TRN No.", contactPerson: "Contact" } },
-        { trnNumber: "T1", contactPerson: { name: "Asha" } }
+        { country: "AE", trnNumber: "T1", contactPerson: { name: "Asha" } }
       )
     ).toEqual([["TRN No.=T1"], ["Contact=Asha"]]);
     expect(
@@ -754,6 +1039,185 @@ describe("Modern Manufacturing template — view model", () => {
         }
       )
     ).toEqual([["Responsible Person=martin petkov"]]);
+  });
+
+  it("prints the MSIC column and the note's reason as refrens.com does", () => {
+    const keys = (billType: string, hidden = false) =>
+      (
+        mapItemTable(
+          state((invoice) => {
+            invoice.billType = billType;
+            invoice.columns.push({
+              key: "msic",
+              label: "MSIC",
+              isHidden: hidden,
+            });
+          }),
+          ctx
+        ).header as Json[]
+      ).map((cell) => cell.key);
+    // A column like any other on challans, quotations and notes; never on invoices,
+    // proformas or sales orders; and not once the business hid it.
+    expect(keys("DELIVERYCHALLAN")).toContain("msic");
+    expect(keys("CREDITNOTE")).toContain("msic");
+    expect(keys("INVOICE")).not.toContain("msic");
+    expect(keys("SALESORDER")).not.toContain("msic");
+    expect(keys("QUOTATION", true)).not.toContain("msic");
+    // No item with a unit: no Unit column.
+    const noUnit = mapItemTable(
+      state((invoice) => {
+        invoice.items.forEach((item: Json) => {
+          delete item.unit;
+        });
+        invoice.advanceOptions.unitDisplayType = "SEPARATE_COLUMN";
+      }),
+      ctx
+    );
+    expect((noUnit.header as Json[]).map((cell) => cell.key)).not.toContain(
+      "unit"
+    );
+    // A credit or debit note's reason, among the document details.
+    const meta = mapMeta(
+      state((invoice) => {
+        invoice.documentReason = "Product Return";
+      }),
+      []
+    );
+    expect(meta.find((row) => row.key === "documentReason")).toMatchObject({
+      label: "Reason",
+      value: "Product Return",
+    });
+  });
+
+  it("tags the document's status as refrens.com does", () => {
+    const tag = (invoice: Json) => statusTag(invoice)?.text ?? null;
+    expect(tag({ billType: "INVOICE", status: "DRAFT" })).toBe("Draft");
+    expect(tag({ billType: "INVOICE", status: "CANCELED" })).toBe("Canceled");
+    expect(tag({ billType: "QUOTATION", status: "CANCELLED" })).toBe(
+      "Cancelled"
+    );
+    expect(tag({ billType: "INVOICE", status: "PAID" })).toBe("Paid");
+    expect(tag({ billType: "PROFORMAINV", status: "PARTIAL" })).toBe(
+      "Part Paid"
+    );
+    expect(tag({ billType: "DEBITNOTE", status: "PARTIALLY_PAID" })).toBe(
+      "Part Paid"
+    );
+    expect(tag({ billType: "INVOICE", status: "UNPAID" })).toBeNull();
+    expect(tag({ billType: "QUOTATION", status: "OPEN" })).toBe("Created");
+    expect(
+      tag({ billType: "DELIVERYCHALLAN", reminders: { views: [{ open: 0 }] } })
+    ).toBe("Delivery Challan Sent");
+    expect(
+      tag({ billType: "PURCHASEORDER", reminders: { views: [{ open: 2 }] } })
+    ).toBe("Purchase Order Seen");
+    expect(tag({ billType: "CREDITNOTE", creditNoteStatus: "ISSUED" })).toBe(
+      "Issued"
+    );
+    expect(
+      tag({
+        billType: "CREDITNOTE",
+        creditNoteStatus: "ISSUED",
+        isOverdue: true,
+      })
+    ).toBeNull();
+    expect(tag({ billType: "CREDITNOTE", creditNoteStatus: "PARTIAL" })).toBe(
+      "Partially Utilised"
+    );
+    expect(tag({ billType: "CREDITNOTE", creditNoteStatus: "REDEEMED" })).toBe(
+      "Redeemed"
+    );
+    expect(tag({ billType: "SALESORDER", status: "OPEN" })).toBeNull();
+    // On the title bar, right after the title (user request); on paper only when the
+    // document asks for it.
+    const html = render((invoice) => {
+      invoice.status = "PAID";
+    });
+    expect(html).toMatch(
+      /<h2 class="mm-banner-title"[^>]*>[^<]*<\/h2>\s*<span class="mm-status( no-print)?"><span class="invoice-tag success">Paid<\/span><\/span>/
+    );
+  });
+
+  it("prints a party's fields as refrens.com does", () => {
+    const party = (fields: Json, billing = true) =>
+      mapParty({}, { name: "P", ...fields }, "Billed To", billing) as Json;
+    // The state of the GST state code, over the stored state.
+    expect(partyState({ state: "Maharashtra", gstState: "24" })).toBe(
+      "Gujarat"
+    );
+    expect(partyState({ state: "Kerala", gstState: "" })).toBe("Kerala");
+    expect(partyState({ state: "Kerala", gstState: "25" })).toBe("Kerala");
+    expect(
+      party({
+        city: "Mumbai",
+        state: "Maharashtra",
+        gstState: "24",
+        country: "IN",
+      }).address
+    ).toBe("Mumbai, Gujarat, India");
+    expect(party({ country: "US" }).address).toBe(
+      "United States of America (USA)"
+    );
+    // GSTIN / PAN off for a billing party abroad; kept for a shipping address.
+    expect(party({ country: "US", gstin: "G1", panNumber: "P1" }).ids).toEqual(
+      []
+    );
+    expect(party({ country: "US", gstin: "G1" }, false).ids).toEqual([
+      { key: "gstin", label: "GSTIN", value: "G1" },
+    ]);
+    // VAT: shown abroad, off in India, and any switch wins.
+    expect(taxIdShown({}, { country: "AE" }, ["vat"])).toBe(true);
+    expect(taxIdShown({}, { country: "IN" }, ["vat"])).toBe(false);
+    expect(
+      taxIdShown({}, { country: "IN", vatShowInInvoice: true }, ["vat"])
+    ).toBe(true);
+    expect(taxIdShown({}, { country: "AE", hideVat: true }, ["vat"])).toBe(
+      false
+    );
+    expect(
+      taxIdShown(
+        {},
+        { country: "AE", fieldVisibility: { vat: { showInDocument: false } } },
+        ["vat"]
+      )
+    ).toBe(false);
+    expect(
+      taxIdShown(
+        {
+          owner: {
+            configuration: {
+              experimental: { fieldVisibility: { vatNumber: true } },
+            },
+          },
+        },
+        { country: "IN" },
+        ["vat", "vatNumber"]
+      )
+    ).toBe(true);
+    expect(taxIdShown({}, { country: "" }, ["vat"])).toBe(false);
+    // Custom field values: picked options by label, lists joined, yes / no.
+    expect(customFieldText([{ label: "Option 1" }, "Option 2", {}])).toBe(
+      "Option 1, Option 2"
+    );
+    expect(customFieldText({ value: "Option 3" })).toBe("Option 3");
+    expect(customFieldText(true)).toBe("Yes");
+    expect(customFieldText(false)).toBe("No");
+    expect(customFieldText("plain")).toBe("plain");
+    expect(
+      party({
+        customFields: [
+          { label: "newtest", value: [{ label: "Option 1", value: "o1" }] },
+        ],
+      }).lines
+    ).toEqual([
+      [expect.objectContaining({ label: "newtest", value: "Option 1" })],
+    ]);
+    // Phone numbers in Refrens' spacing (the shared phone-number widget).
+    const html = render((invoice) => {
+      invoice.billedTo.phone = "+919876543210";
+      invoice.billedTo.phoneShowInInvoice = true;
+    });
+    expect(html).toContain("+91 98765 43210");
   });
 
   it("maps parties with every optional identifier and visibility flag", () => {
@@ -805,9 +1269,9 @@ describe("Modern Manufacturing template — view model", () => {
     expect(party.address).toBe(
       "Unit 4, Tower B, Ring Road, Pune – 411001, MH, India"
     );
+    // An Indian party's VAT number stays off, as on refrens.com.
     expect(party.ids).toEqual([
       { key: "gstin", label: "GSTIN", value: "27ABC" },
-      { key: "vat", label: "VAT Number", value: "VAT-1" },
     ]);
     expect(party.contacts).toEqual([
       { key: "email", label: "Email", value: "b@example.com", isNum: false },
@@ -824,7 +1288,7 @@ describe("Modern Manufacturing template — view model", () => {
         line.map((item) => `${item.label}=${item.value}`)
       )
     ).toEqual([
-      ["GSTIN=27ABC", "VAT Number=VAT-1"],
+      ["GSTIN=27ABC"],
       ["Email=b@example.com"],
       ["Responsible Person=Asha", "CIN=C1"],
       ["Vendor Code=V9", "Region=West"],
@@ -855,7 +1319,9 @@ describe("Modern Manufacturing template — view model", () => {
       ""
     ) as Json;
     expect(other.address).toBe("Pune – 411001, Haveli, United Arab Emirates");
-    expect(other.ids).toEqual([{ key: "vat", label: "TRN", value: "TRN" }]);
+    expect(other.ids).toEqual([
+      { key: "vatNumber", label: "TRN", value: "TRN" },
+    ]);
     expect(other.contacts).toEqual([]);
     expect(party.hasIdLines).toBe(true);
     // GSTIN | PAN and Phone | Email share one grid in the party box, so their columns align.
@@ -881,7 +1347,7 @@ describe("Modern Manufacturing template — view model", () => {
     // The header labels phone and email too.
     const header = fields.slice(0, fields.indexOf("</header>"));
     expect(header).toContain(
-      '<span class="mm-id">Phone: <span class="mm-num" data-testid="num">+91 831 298 7000</span></span>'
+      '<span class="mm-id">Phone: <span class="mm-num" data-testid="num">\u2066+91 831 298 7000\u2069</span></span>'
     );
     expect(header).toContain(
       '<span class="mm-id">Email: <span class="mm-email">sales@vertexfoundry.com</span></span>'
@@ -982,29 +1448,33 @@ describe("Modern Manufacturing template — view model", () => {
       placeOfSupply: ["Maharashtra (27)", true],
     });
 
-    // Their own row above the items; the live toggles target the row (the shared toggle)
-    // and the Place of Supply cell; hidden parts stay in the page for them.
+    // Under Shipped To only (user decision), Place first; the live toggles target the block
+    // (the shared toggle) and the Place of Supply line; hidden parts stay in the page for them.
     const html = render();
-    const row = html.slice(
-      html.indexOf('<div class="mm-supply-row"'),
-      html.indexOf('data-section="items"')
+    const shipTo = html.slice(html.indexOf("Ship To (Consignee)"));
+    const block = shipTo.slice(
+      shipTo.indexOf('<div class="mm-party-supply"'),
+      shipTo.indexOf("</div>", shipTo.indexOf('<div class="mm-party-supply"'))
     );
-    expect(row).toMatch(
-      /^<div class="mm-supply-row" data-ceres-country-of-supply>/
+    expect(block).toMatch(
+      /^<div class="mm-party-supply" data-ceres-country-of-supply>\s*<p class="mm-id-line" data-ceres-place-of-supply><span class="mm-id">Place of Supply: <span>Maharashtra \(27\)<\/span><\/span><\/p>\s*<p class="mm-id-line"><span class="mm-id">Country of Supply: <span>India<\/span><\/span><\/p>/
+    );
+    expect(html.slice(0, html.indexOf("Ship To (Consignee)"))).not.toContain(
+      "mm-party-supply"
     );
     expect(
       render((invoice) => {
         invoice.advanceOptions.hideCountryOfSupply = true;
       })
     ).toContain(
-      '<div class="mm-supply-row" data-ceres-country-of-supply style="display:none">'
+      '<div class="mm-party-supply" data-ceres-country-of-supply style="display:none">'
     );
-    expect(row).toContain(
-      '<p class="mm-supply-cell"><span class="mm-supply-label">Country of Supply:</span> <span class="mm-supply-value">India</span></p>'
-    );
-    expect(row).toContain(
-      '<p class="mm-supply-cell" data-ceres-place-of-supply><span class="mm-supply-label">Place of Supply:</span> <span class="mm-supply-value">Maharashtra (27)</span></p>'
-    );
+    // No shipping address: neither line prints.
+    expect(
+      render((invoice) => {
+        invoice.shippedTo = null;
+      })
+    ).not.toContain("Place of Supply");
     // No value anywhere: no row.
     expect(
       mapSupply(
@@ -1104,8 +1574,8 @@ describe("Modern Manufacturing template — view model", () => {
         invoice.transportDetails = {
           challanNumber: "CH-1",
           challanDate: "2026-09-20",
-          vehicleType: "Truck",
-          transport: "Road",
+          vehicleType: "OVERDIMENSIONALCARGO",
+          transport: "ROAD",
           transporterName: "Fallback Carrier",
           transporterId: "TID",
           distance: 120,
@@ -1123,9 +1593,44 @@ describe("Modern Manufacturing template — view model", () => {
     expect(byKey.transportMode.value).toBe("Road");
     expect(byKey.transportName.value).toBe("Fallback Carrier");
     expect(byKey.transporterId.value).toBe("TID");
-    expect(byKey.distance.value).toBe("120");
-    expect(byKey.subSupplyType.value).toBe("Job work");
+    expect(byKey.distance).toMatchObject({ label: "Distance", value: "120" });
+    // Codes print as Refrens names them.
+    expect(byKey.vehicleType.value).toBe("Over Dimensional Cargo");
+    // The e-way bill's filing fields are not printed, as on Refrens.
+    expect(byKey.subSupplyType).toBeUndefined();
+    expect(byKey.transactionType).toBeUndefined();
     expect(byKey.vehicleNumber).toBeUndefined();
+    // The fixture's e-way bill first, then the details in the order Refrens prints them.
+    expect((card?.rows || []).map((row) => row.key)).toEqual([
+      "ewayBillNumber",
+      "transportMode",
+      "transportName",
+      "transporterId",
+      "distance",
+      "challanDate",
+      "challanNumber",
+      "vehicleType",
+      "transportExtraInfo",
+    ]);
+    expect(transportName("NEW_MODE")).toBe("New Mode");
+    // A figure field relabelled and filled with text wraps like text.
+    expect(staysWhole("KA01AB1234")).toBe(true);
+    expect(staysWhole("MH 12 AB 1234")).toBe(true);
+    expect(
+      staysWhole("flyadeal warehouse SAUDI ARABIAN AIRLINES NO 160-11")
+    ).toBe(false);
+    expect(staysWhole("North gate")).toBe(false);
+    const relabelled = mapTransport(
+      state((invoice) => {
+        invoice.transportDetails = {
+          challanNumber: "flyadeal warehouse SAUDI ARABIAN AIRLINES NO 160-11",
+        };
+      })
+    );
+    expect(
+      relabelled?.rows.find((row) => row.key === "challanNumber")?.isNum
+    ).toBe(false);
+    expect(transportName("By hand")).toBe("By hand");
 
     const eway = mapTransport(
       state((invoice) => {
@@ -1192,12 +1697,56 @@ describe("Modern Manufacturing template — view model", () => {
     );
     expect(live.showIrn).toBe(true);
     expect(live.rows.map((row) => row.key)).toEqual(["ackNo", "ackDate"]);
+    // One QR (user decision): while the IRN is active its QR prints, not the document QR.
     expect(live.qr).toEqual({
       irn: "data:image/png;base64,QQ",
       zatca: "data:image/png;base64,ZZ",
       lhdn: "",
-      document: "https://cdn.example/doc-qr.png",
+      document: "",
     });
+    // The IRN's own QR text is drawn: the signed one when the business prints that.
+    const drawn = (owner: Json, irn: Json) =>
+      mapCompliance(
+        state((invoice) => {
+          invoice.irn = { Irn: "IRN", ...irn };
+          invoice.owner.configuration = {
+            ...invoice.owner.configuration,
+            ...owner,
+          };
+        })
+      ).qr;
+    expect(drawn({}, { qr: "plain", SignedQRCode: "signed" }).irn).toBe(
+      qrImage("plain")
+    );
+    expect(
+      drawn({ showSignedIrnQr: true }, { qr: "plain", SignedQRCode: "signed" })
+        .irn
+    ).toBe(qrImage("signed"));
+    // A cancelled e-invoice (by status too) gives the document QR back.
+    const statusCancelled = mapCompliance(
+      state((invoice) => {
+        invoice.irn = { Irn: "IRN", qr: "plain" };
+        invoice.einvoiceGeneratedStatus = "CANCELLED";
+        invoice.documentQr = "doc";
+      })
+    ).qr;
+    expect(statusCancelled.irn).toBe("");
+    expect(statusCancelled.document).toBe(qrImage("doc"));
+    // The business can switch the document QR off, in general or for this kind of document.
+    const off = (configuration: Json) =>
+      mapCompliance(
+        state((invoice) => {
+          invoice.irn = {};
+          invoice.documentQr = "doc";
+          invoice.owner.configuration = {
+            ...invoice.owner.configuration,
+            ...configuration,
+          };
+        })
+      ).qr.document;
+    expect(off({ enableQrCode: false })).toBe("");
+    expect(off({ showQrCode: { invoice: false } })).toBe("");
+    expect(off({ showQrCode: { quotation: false } })).toBe(qrImage("doc"));
 
     const cancelled = mapCompliance(
       state((invoice, root) => {
@@ -1231,6 +1780,67 @@ describe("Modern Manufacturing template — view model", () => {
       })
     );
     expect(optedOut.rows).toEqual([]);
+  });
+
+  it("keeps the document QR in the header, also on a document with an IRN (user request)", () => {
+    const html = render((invoice) => {
+      invoice.irn = { Irn: "IRN-123", qr: "plain" };
+      invoice.einvoiceGeneratedStatus = "CANCELLED";
+      invoice.documentQr = "doc";
+    });
+    const header = html.slice(
+      html.indexOf('data-section="header"'),
+      html.indexOf("</header>")
+    );
+    expect(header).toMatch(
+      /data-ceres-field-container="documentQr">\s*<img data-ceres-field="documentQr" src="data:image/
+    );
+  });
+
+  it("follows refrens.com on export supply, a switched-off Unit column and empty % discounts", () => {
+    // A supply abroad prints its country only, no Indian place of supply.
+    const abroad = mapSupply(
+      state((invoice) => {
+        invoice.countryOfSupply = "US";
+        invoice.placeOfSupply = "19";
+      })
+    );
+    expect(abroad.rows.map((row) => row.key)).toEqual(["countryOfSupply"]);
+    const india = mapSupply(
+      state((invoice) => {
+        invoice.countryOfSupply = "IN";
+        invoice.placeOfSupply = "24";
+      })
+    );
+    expect(india.rows.map((row) => row.key)).toContain("placeOfSupply");
+
+    // The business's Unit column switched off: no Unit column, even with units on items.
+    const keys = (edit: (invoice: Json) => void) =>
+      mapItemTable(
+        state((invoice) => {
+          invoice.advanceOptions = { unitColumn: "SEPARATE_COLUMN" };
+          invoice.items[0].unit = "PCS";
+          edit(invoice);
+        }),
+        ctx
+      ).columns.map((entry: Json) => entry.key);
+    expect(keys(() => {})).toContain("unit");
+    expect(
+      keys((invoice) => {
+        invoice.columns = [
+          ...invoice.columns,
+          { key: "unit", label: "Unit", isHidden: true },
+        ];
+      })
+    ).not.toContain("unit");
+
+    // A percentage discount left empty reads 0%.
+    const html = render((invoice) => {
+      invoice.items[0].discount = { discountType: "PERCENTAGE" };
+      invoice.items[1].discount = { discountType: "PERCENTAGE", amount: 5 };
+      invoice.finalTotal.discount = -100;
+    });
+    expect(html).toMatch(/data-testid="num">0%<\/span>/);
   });
 
   it("resolves units and batches from the item and business settings", () => {
@@ -1367,7 +1977,8 @@ describe("Modern Manufacturing template — view model", () => {
     expect((table.rows[0] as Json).originalImages).toEqual([
       "https://cdn.example/b.png",
     ]);
-    // MERGE_QUANTITY folds the unit into the Qty cell; Unit gets no column of its own.
+    // MERGE_QUANTITY (the account's own setting) folds the unit into the Qty cell; Unit gets
+    // no column of its own. The planner itself never merges (as refrens.com).
     expect(table.mergeUnit).toBe(true);
     expect(table.header.map((cell) => cell.key)).not.toContain("unit");
     expect(first).toEqual({
@@ -1663,9 +2274,10 @@ describe("Modern Manufacturing template — view model", () => {
     });
     // 934 px inside the table's outline, less Sr (30 + 8) and the other columns.
     expect(figma.descriptionWidth).toBe(934 - 38 - 573);
-    expect(figma).toMatchObject({ mergeUnit: false, smallNumbers: false });
+    expect(figma).toMatchObject({ smallNumbers: false });
 
-    // Too wide: shrink to content, then merge Unit into Qty, then smaller numbers.
+    // Too wide: shrink to content, then smaller numbers. Unit stays its own column, as on
+    // refrens.com (the planner no longer folds it into Qty).
     const wide = (count: number, value: string, withUnit = true) => [
       name,
       { column: col("quantity", "Qty", "qty"), values: ["10 PCS"] },
@@ -1677,21 +2289,17 @@ describe("Modern Manufacturing template — view model", () => {
       ),
     ];
     expect(planTableLayout(wide(8, "1,250.00"))).toMatchObject({
-      mergeUnit: false,
       smallNumbers: false,
     });
     expect(planTableLayout(wide(8, "1,250.00")).widths.c0).toBe(70);
     expect(planTableLayout(wide(6, "12,50,000.00"))).toMatchObject({
-      mergeUnit: true,
-      smallNumbers: false,
-    });
-    expect(planTableLayout(wide(10, "1,23,45,67,890.00"))).toMatchObject({
-      mergeUnit: true,
       smallNumbers: true,
     });
-    // Without a Unit column, the chain skips straight to smaller numbers.
+    expect(planTableLayout(wide(10, "1,23,45,67,890.00"))).toMatchObject({
+      smallNumbers: true,
+    });
+    // Without a Unit column, the same.
     expect(planTableLayout(wide(10, "12,50,000.00", false))).toMatchObject({
-      mergeUnit: false,
       smallNumbers: true,
     });
     // Description is held to ≥ 22% of the table, even past the last fallback.
@@ -1724,19 +2332,29 @@ describe("Modern Manufacturing template — view model", () => {
     const intra = mapHsnSummary(state(), ctx);
     expect(intra.hasRows).toBe(true);
     expect(intra.isHidden).toBe(false);
-    expect(intra.labels.hsn).toBe("HSN/SAC");
+    // refrens.com's headings, whatever the item column is called.
+    expect(intra.labels).toMatchObject({
+      hsn: "HSN",
+      taxable: "Taxable Value",
+      rate: "Rate",
+      amount: "Amount",
+    });
+    // Each tax's rate and amount; Total is the row's tax (refrens.com).
     expect(intra.rows[3]).toMatchObject({
       hsn: "8483",
-      total: "₹41,966.70",
+      cgstRate: "9%",
+      cgst: "₹3,200.85",
+      sgstRate: "9%",
+      total: "₹6,401.70",
     });
-    expect(intra.totals.total).toBe("₹1,22,088.70");
-    // Tax in words under the Total row: CGST + SGST here, across all five columns.
+    expect(intra.totals.total).toBe("₹18,623.70");
+    // Tax in words under the Total row: CGST + SGST here, across all seven columns.
     expect(intra.words).toEqual({
       label: "Total Tax In Words",
       value:
         "EIGHTEEN THOUSAND SIX HUNDRED TWENTY THREE RUPEES AND SEVENTY PAISE ONLY",
     });
-    expect(intra.columnCount).toBe(5);
+    expect(intra.columnCount).toBe(7);
     // Footer on every page unless the document asks for the last page only.
     const footerHtml = render((invoice) => {
       invoice.letterHeadFooter = "https://cdn.example/footer.png";
@@ -1752,7 +2370,7 @@ describe("Modern Manufacturing template — view model", () => {
     expect(lastOnly).not.toContain("mm-footer-fixed");
     expect(lastOnly).not.toContain("mm-page-frame-footer");
     expect(render()).toMatch(
-      /<tr class="mm-hsn-words">\s*<td colspan="5">Total Tax In Words: EIGHTEEN THOUSAND/
+      /<tr class="mm-hsn-words">\s*<td colspan="7">Total Tax In Words: EIGHTEEN THOUSAND/
     );
 
     const inter = mapHsnSummary(
@@ -1763,25 +2381,86 @@ describe("Modern Manufacturing template — view model", () => {
         );
         invoice.customLabels.hsnSac = "HSN Code";
         invoice.advanceOptions = { showHSNSummaryInInvoice: false };
-        invoice.hsnSummary = {
-          hsnList: [
-            { hsn: "7307", taxableValue: 100, igst: 18, cessAmount: 1 },
-            { hsn: "", taxableValue: 5 },
-          ],
-        };
+        // The older list form, with the short keys.
+        invoice.hsnSummary = [
+          { hsn: "7307", taxableValue: 100, igst: 18, cessAmount: 1 },
+          { hsn: "", taxableValue: 5 },
+        ];
       }),
       ctx
     );
     expect(inter.showIgst).toBe(true);
     expect(inter.hasCess).toBe(true);
-    // IGST + Cess: 18 + 1 in words; HSN, Taxable, IGST, Cess, Total.
+    // IGST + Cess: 18 + 1 in words; HSN, Taxable, IGST and Cess (rate, amount), Total.
     expect(inter.words.value).toBe("NINETEEN RUPEES ONLY");
-    expect(inter.columnCount).toBe(5);
+    expect(inter.columnCount).toBe(7);
     expect(inter.isHidden).toBe(true);
-    expect(inter.labels.hsn).toBe("HSN Code");
+    expect(inter.labels.hsn).toBe("HSN");
+    // The short keys too; no rate given, none printed.
     expect(inter.rows).toEqual([
-      expect.objectContaining({ igst: "₹18.00", total: "₹119.00" }),
+      expect.objectContaining({
+        igst: "₹18.00",
+        igstRate: "",
+        total: "₹19.00",
+      }),
     ]);
+
+    // A foreign-currency document's words in its own currency (refrens.com: "EIGHTEEN
+    // RIYALS ONLY"), from Refrens' stored keys.
+    const riyal = mapHsnSummary(
+      state((invoice) => {
+        invoice.igst = true;
+        invoice.currency = "SAR";
+        invoice.hsnSummary = {
+          hsnList: [
+            {
+              hsn: "111",
+              taxableValue: 100,
+              igstRate: 18,
+              igstAmount: 18,
+              totalCess: 1,
+              totalCessAmount: 1,
+              taxAmount: 19,
+            },
+          ],
+        };
+      }),
+      { ...ctx, currency: "SAR" }
+    );
+    expect(riyal.rows[0]).toMatchObject({
+      igstRate: "18%",
+      cessRate: "1%",
+      cess: expect.stringContaining("1.00"),
+    });
+    expect(riyal.words.value).toBe("NINETEEN RIYALS ONLY");
+    // Rendered: each row under the IGST heading takes its IGST rate and amount, and each
+    // cell its heading as the narrow card's label.
+    const igstHtml = render((invoice) => {
+      invoice.igst = true;
+      invoice.hsnSummary = {
+        hsnList: [
+          { hsn: "111", taxableValue: 300, igstRate: 18, igstAmount: 54 },
+        ],
+      };
+    });
+    const igstBody = igstHtml.slice(
+      igstHtml.indexOf('class="mm-hsn-table"'),
+      igstHtml.indexOf("<tfoot>", igstHtml.indexOf('class="mm-hsn-table"'))
+    );
+    expect(igstBody).toContain('data-label="IGST Rate"');
+    expect(igstBody).toContain(">18%<");
+    expect(igstBody).not.toContain('data-label="CGST');
+
+    // No stored row tax: CGST + SGST (+ Cess) summed.
+    const summed = mapHsnSummary(
+      state((invoice) => {
+        invoice.hsnSummary = [
+          { hsn: "7307", taxableValue: 100, cgst: 9, sgst: 9, cessAmount: 2 },
+        ];
+      }),
+      ctx
+    );
+    expect(summed.rows[0].total).toBe("₹20.00");
   });
 
   it("maps bank rows, UPI and the section gate", () => {
@@ -1811,20 +2490,20 @@ describe("Modern Manufacturing template — view model", () => {
     expect(bank.title).toBe("Bank Details");
     expect(bank.rows.map((row) => `${row.label}=${row.value}`)).toEqual([
       "Account Name=Holder",
-      "Bank Name=Bank",
-      "Account No.=123",
+      "Account Number=123",
       "IFSC=IFSC1",
       "IBAN=IBAN1",
       "BIC=SWIFT1",
       "Sort Code=SC",
       "Account Type=Current",
+      "Bank=Bank",
       "Branch=Main",
       "MICR=400",
     ]);
     expect(bank.upi).toEqual({
       label: "UPI",
       id: "vertex@bank",
-      scanLabel: "Scan to Pay",
+      scanLabel: "Scan to pay via UPI",
       qr: "data:image/png;base64,UU",
       note: "Maximum of 1 lakh can be transferred via UPI in a single day",
     });
@@ -1848,6 +2527,59 @@ describe("Modern Manufacturing template — view model", () => {
     );
     expect(none.show).toBe(false);
     expect(none.upi).toBeNull();
+
+    // Account type: title case, only for a bank in India (as refrens.com).
+    const typed = (bankAccount: Json) =>
+      mapBank(
+        state((invoice) => {
+          invoice.bankAccount = { accountNumber: "1", ...bankAccount };
+        })
+      ).rows.find((row) => row.key === "accountType")?.value;
+    expect(typed({ accountType: "SAVINGS", country: "IN" })).toBe("Savings");
+    expect(typed({ accountType: "SAVINGS", country: "AE" })).toBeUndefined();
+
+    // A delivery challan prints no bank details or UPI.
+    const challan = mapBank(
+      state((invoice) => {
+        invoice.billType = "DELIVERYCHALLAN";
+        invoice.paymentOptions.upi = true;
+        invoice.upi = { vpa: "pay@upi" };
+      })
+    );
+    expect(challan.rows).toEqual([]);
+    expect(challan.upi).toBeNull();
+    expect(challan.show).toBe(false);
+
+    // The UPI limit note: only on a document still to be paid, of ₹100 or more.
+    const note = (edit: (invoice: Json) => void) =>
+      mapBank(
+        state((invoice) => {
+          invoice.paymentOptions.upi = true;
+          invoice.upi = { vpa: "pay@upi" };
+          edit(invoice);
+        })
+      ).upi?.note;
+    expect(
+      note((invoice) => {
+        invoice.status = "PAID";
+      })
+    ).toBe("");
+    expect(
+      note((invoice) => {
+        invoice.finalTotal = { total: 99.5 };
+      })
+    ).toBe("");
+    expect(
+      note((invoice) => {
+        invoice.finalTotal = {};
+      })
+    ).toBe("");
+    expect(
+      note((invoice) => {
+        invoice.status = "PARTIAL";
+        invoice.finalTotal = { total: 100 };
+      })
+    ).toMatch(/lakh/);
   });
 
   it("builds the UPI intent the platform encodes", () => {
@@ -1929,11 +2661,40 @@ describe("Modern Manufacturing template — view model", () => {
     ).toBe(
       "ONE LAKH TWENTY TWO THOUSAND EIGHTY EIGHT RUPEES AND SEVENTY PAISE ONLY"
     );
+    // Nothing stored on a foreign-currency document: the total in that currency's words.
     expect(
       mapWords(
         state((invoice) => {
           invoice.customLabels.totalInWordsValue = "";
           invoice.currency = "USD";
+        })
+      )?.value
+    ).toBe(
+      "ONE HUNDRED TWENTY TWO THOUSAND EIGHTY EIGHT DOLLARS AND SEVENTY CENTS ONLY"
+    );
+    expect(amountInCurrencyWords(1000000, "JPY")).toBe("ONE MILLION YEN ONLY");
+    // No currency, or one without words of its own: rupees (the shared converter).
+    expect(amountInCurrencyWords(2, "")).toContain("TWO RUPEES");
+    expect(amountInCurrencyWords(2, "XYZ")).toContain("TWO RUPEES");
+    expect(
+      mapWords(
+        state((invoice) => {
+          invoice.customLabels.totalInWordsValue = "";
+          invoice.currency = "";
+        })
+      )?.value
+    ).toContain("RUPEES");
+    expect(amountInCurrencyWords(5, "GBP")).toBe("FIVE POUNDS ONLY");
+    expect(amountInCurrencyWords(0, "EUR")).toBe("ZERO EUROS ONLY");
+    expect(amountInCurrencyWords(1001.05, "AED")).toBe(
+      "ONE THOUSAND ONE DIRHAMS AND FIVE FILS ONLY"
+    );
+    // A currency without known words prints none.
+    expect(
+      mapWords(
+        state((invoice) => {
+          invoice.customLabels.totalInWordsValue = "";
+          invoice.currency = "XYZ";
         })
       )
     ).toBeNull();
@@ -2054,7 +2815,9 @@ describe("Modern Manufacturing template — view model", () => {
         ctx
       )
     ).toBeNull();
-    expect(mapAdditionalInfo(state(), ctx)?.title).toBe("Additional Info");
+    expect(mapAdditionalInfo(state(), ctx)?.title).toBe(
+      "Additional Information"
+    );
 
     // The document's Additional Info fields (customFooters / footers) lead, then custom fields.
     const withFooters = mapAdditionalInfo(
@@ -2219,7 +2982,24 @@ describe("Modern Manufacturing template — view model", () => {
     expect(
       buildModernManufacturingView(
         state((invoice) => {
+          invoice.advanceOptions.showPaymentsTable = false;
           invoice.showPaymentsTable = false;
+          invoice.allPayments = [{ amount: 10 }];
+        })
+      ).payments.show
+    ).toBe(false);
+    // Only when the document turns "Show Payments Table" on (as refrens.com).
+    expect(
+      buildModernManufacturingView(
+        state((invoice) => {
+          invoice.allPayments = [{ amount: 10 }];
+        })
+      ).payments
+    ).toEqual({ show: true, heading: "Payments" });
+    expect(
+      buildModernManufacturingView(
+        state((invoice) => {
+          delete invoice.advanceOptions.showPaymentsTable;
           invoice.allPayments = [{ amount: 10 }];
         })
       ).payments.show
@@ -2227,50 +3007,60 @@ describe("Modern Manufacturing template — view model", () => {
     expect(
       buildModernManufacturingView(
         state((invoice) => {
+          delete invoice.advanceOptions.showPaymentsTable;
+          invoice.showPaymentsTable = true;
           invoice.allPayments = [{ amount: 10 }];
         })
       ).payments.show
     ).toBe(true);
   });
 
-  it("prints at true size and compacts a table too wide for the paper", () => {
-    // No zoom of its own: only the text scale and the compact-table flag.
-    expect(mapPrint({})).toEqual({ textScale: "1", compactTable: false });
-    // A4: 718 px printable (the document has no padding of its own); Description keeps 22%.
-    expect(mapPrint({}, 560).compactTable).toBe(false);
-    expect(mapPrint({}, 561).compactTable).toBe(true);
-    expect(mapPrint({ pdfOptions: { format: "A5" } }, 377).compactTable).toBe(
-      false
-    );
-    expect(mapPrint({ pdfOptions: { format: "A5" } }, 378).compactTable).toBe(
-      true
-    );
+  it("prints at true size, stretching the table where the business and document ask", () => {
+    // No zoom of its own: the text scale, the printable width and the stretch flags only.
+    expect(mapPrint({})).toEqual({
+      textScale: "1",
+      printWidth: 714,
+      paperHeight: 1122,
+      stretchAllowed: false,
+      stretchTable: false,
+    });
+    // The printable width caps the page in print (Refrens' PDF service lays the page out in
+    // a wider window): paper less the side margins, under the print zoom, 4 px kept back.
+    expect(printWidth({})).toBe(714);
+    // The paper's height, which a one-page document fits within (the long side, or the
+    // short one in landscape).
+    expect(paperHeight({})).toBe(1122);
+    expect(paperHeight({ format: "a5", landscape: true })).toBe(559);
+    expect(printWidth({ format: "A5", xMargins: "0.5" })).toBe(517);
+    expect(printWidth({ format: "letter", landscape: true })).toBe(976);
+    expect(printWidth({ zoomSize: "0.8" })).toBe(714);
+    expect(printWidth({ zoomSize: "1.1", format: "unknown" })).toBe(641);
+    // "Stretch invoice & quotation tables to fill the page": the business allows it
+    // (experimental.stretchInvoiceTable), the document's own toggle asks for it.
+    const allowed = {
+      invoice: {
+        owner: {
+          configuration: { experimental: { stretchInvoiceTable: true } },
+        },
+      },
+    };
     expect(
-      mapPrint({ pdfOptions: { format: "letter" } }, 577).compactTable
-    ).toBe(false);
+      mapPrint({ ...allowed, pdfOptions: { fullHeightTable: true } })
+    ).toMatchObject({
+      stretchAllowed: true,
+      stretchTable: true,
+    });
     expect(
-      mapPrint({ pdfOptions: { format: "letter" } }, 578).compactTable
+      mapPrint({ ...allowed, pdfOptions: { fullHeightTable: "true" } })
+        .stretchTable
     ).toBe(true);
     expect(
-      mapPrint({ pdfOptions: { format: "tabloid" } }, 561).compactTable
-    ).toBe(true);
-    // The renderer zooms <html> by zoomSize (not at 0.8), which narrows the page.
-    expect(mapPrint({ pdfOptions: { zoomSize: 1.2 } }, 466).compactTable).toBe(
-      false
-    );
-    expect(mapPrint({ pdfOptions: { zoomSize: 1.2 } }, 467).compactTable).toBe(
-      true
-    );
-    expect(
-      mapPrint({ pdfOptions: { zoomSize: "0.8" } }, 560).compactTable
+      mapPrint({ ...allowed, pdfOptions: { fullHeightTable: "false" } })
+        .stretchTable
     ).toBe(false);
-    expect(mapPrint({ pdfOptions: { zoomSize: 0 } }, 561).compactTable).toBe(
-      true
-    );
-    // Larger text needs more room.
-    expect(mapPrint({ pdfOptions: { textScale: 1.1 } }, 520).compactTable).toBe(
-      true
-    );
+    expect(
+      mapPrint({ pdfOptions: { fullHeightTable: true } }).stretchTable
+    ).toBe(false);
     // Text scale as a ratio or a percentage, kept within 0.3–2.
     expect(mapPrint({ pdfOptions: { textScale: 1.1 } }).textScale).toBe("1.1");
     expect(mapPrint({ pdfOptions: { scale: "120" } }).textScale).toBe("1.2");
@@ -2281,8 +3071,11 @@ describe("Modern Manufacturing template — view model", () => {
     const html = render((invoice) => {
       invoice.template = { pdfOptions: { format: "a5", textScale: 1.1 } };
     });
-    expect(html).toContain('style="--mm-text-scale: 1.1;"');
+    expect(html).toContain(
+      'style="--mm-text-scale: 1.1; --mm-print-width: 479px;"'
+    );
     expect(html).not.toContain("--mm-print-zoom");
+    expect(html).not.toContain("is-print-compact");
   });
 
   it("places the document QR in the header, beside the seller", () => {
@@ -2415,8 +3208,8 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       // The document's theme colour first, then the renderer's, then the v2 default blue.
       "--mm-accent: var(--mm-theme, var(--primary-color, #013d7f));",
       "--mm-accent-200: var(--mm-theme-tint, #bddcff);",
-      "--mm-ink: #1a2130;",
-      "--mm-strong: #282828;",
+      "--mm-ink: var(--secondary-color, #1a2130);",
+      "--mm-strong: var(--secondary-color, #282828);",
       "--mm-muted: #666670;",
       "--mm-line: #d1d6e0;",
       "--mm-table-outline: #dcdcdc;",
@@ -2430,7 +3223,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       /border: 1px solid var\(--mm-table-outline\);\s*border-radius: 6px;/
     );
     expect(rule(".mm-items thead th")).toMatch(
-      /border-right: 1px solid var\(--mm-accent-200\);/
+      /border-inline-end: 1px solid var\(--mm-accent-200\);/
     );
   });
 
@@ -2499,7 +3292,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     ).toMatch(
       /width: auto;\s*margin-right: calc\(-1 \* var\(--mm-gutter\)\);\s*margin-left: calc\(-1 \* var\(--mm-gutter\)\);/
     );
-    expect(rule(".mm-doc:has(> .mm-letterhead.is-empty)")).toMatch(
+    expect(rule(".mm-doc:has(.mm-letterhead.is-empty)")).toMatch(
       /padding-top: var\(--mm-gutter\);/
     );
     expect(rule(".mm-doc:has(> .mm-letterhead-footer.is-empty)")).toMatch(
@@ -2560,12 +3353,12 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(css).toMatch(
       /\.mm-hsn-table th,\s*\.mm-hsn-table td\s*\{[^}]*text-align: center;/
     );
-    expect(rule(".mm-hsn-table .is-text")).toMatch(/text-align: left;/);
+    expect(rule(".mm-hsn-table .is-text")).toMatch(/text-align: start;/);
     expect(css).toMatch(
       /\.mm-widget-table \.ceres-table th,\s*\.mm-widget-table \.ceres-table td\s*\{[^}]*text-align: center;/
     );
     expect(css).toMatch(
-      /\.mm-widget-table \.ceres-table th:first-child,\s*\.mm-widget-table \.ceres-table td:first-child,\s*\.mm-widget-table \.ceres-table-words\s*\{\s*text-align: left;/
+      /\.mm-widget-table \.ceres-table th:first-child,\s*\.mm-widget-table \.ceres-table td:first-child,\s*\.mm-widget-table \.ceres-table-words\s*\{\s*text-align: start;/
     );
     // Only a two-row heading hides the rule under its first row.
     expect(css).toContain(
@@ -2610,7 +3403,8 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(sizes.length).toBeGreaterThan(15);
     sizes.forEach((size) =>
       expect(size).toMatch(
-        /^calc\(var\(--mm-font-size-(xs|s|base|m|lg|xl)\) \* var\(--mm-text-scale, 1\)\)$/
+        // A wide printed table also shrinks by its fit (--mm-print-fit), never under 10 px.
+        /^(calc\(var\(--mm-font-size-(xs|s|base|m|lg|xl)\) \* var\(--mm-text-scale, 1\)\)|max\(10px, calc\(var\(--mm-font-size-(s|base)\) \* var\(--mm-text-scale, 1\) \* var\(--mm-print-fit, 1\)\)\))$/
       )
     );
   });
@@ -2640,19 +3434,20 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(source).not.toMatch(/zoom:/);
   });
 
-  it("prints at true size on the full printable width, compacting a wide table", () => {
+  it("prints at true size on the full printable width, fitting a wide table", () => {
     const print = source.slice(source.indexOf("@media print"));
     expect(print).toMatch(/\.mm-doc \{[^}]*width: 100%;[^}]*margin: 0;/);
-    // The planner's screen widths give way to the page; a compact table drops to the s step.
+    // The planner's screen widths give way to the page; a table wider than it fits by shrinking.
     expect(print).toMatch(
       /\.mm-doc \.mm-items th\[style\] \{\s*width: auto !important;/
     );
     expect(print).toMatch(
-      /\.mm-items\.is-print-compact \{\s*font-size: calc\(var\(--mm-font-size-s\)/
+      /\.mm-items\.is-print-fit \{\s*font-size: max\(10px, calc\(var\(--mm-font-size-base\) \* var\(--mm-text-scale, 1\) \* var\(--mm-print-fit, 1\)\)\);/
     );
     expect(print).toMatch(
-      /\.mm-items\.is-print-compact :is\(th, td\) \{\s*padding-right: 4px;\s*padding-left: 4px;/
+      /\.mm-items\.is-print-fit :is\(th, td\) \{\s*padding-right: 4px;\s*padding-left: 4px;/
     );
+    expect(source).not.toContain("is-print-compact");
     expect(print).toMatch(
       /\.mm-items thead,[^{]*\{\s*display: table-header-group;/
     );
@@ -2662,7 +3457,14 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(print).toMatch(
       /\.mm-items-scroll,\s*\.mm-widget-box \{\s*overflow: clip;/
     );
-    expect(print).toMatch(/\.mm-box,[\s\S]*?break-inside: avoid;/);
+    // Boxes never split across pages: the selector list ends in this very rule.
+    expect(print).toMatch(
+      /\.mm-header,\s*\.mm-banner,\s*\.mm-details,\s*\.mm-box,\s*\.mm-pair,\s*\.mm-summary-row,\s*\.mm-doc > \.mm-letterhead-footer \{\s*\/\*[^*]*\*\/\s*break-inside: avoid;/
+    );
+    // The screen frame's display: contents is weak enough for print to restore the table.
+    expect(source).toMatch(
+      /\.mm-page-frame > :where\(thead, tbody\),\s*\.mm-page-frame > :where\(thead, tbody\) > tr,/
+    );
     // A table split across pages ends under its last row on each page: the cells draw the
     // outline and every row closes with its own bottom rule.
     expect(print).toMatch(/\.mm-items \{\s*border: 0;\s*\}/);
@@ -2670,7 +3472,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       /\.mm-items tbody td,\s*\.mm-items tfoot td \{\s*border-top: 0;\s*border-bottom: 1px solid var\(--mm-line\);/
     );
     expect(print).toMatch(
-      /\.mm-items tr > th:last-child,\s*\.mm-items tr > td:last-child \{\s*border-right: 1px solid var\(--mm-table-outline\);/
+      /\.mm-items tr > th:last-child,\s*\.mm-items tr > td:last-child \{\s*border-inline-end: 1px solid var\(--mm-table-outline\);/
     );
     // The page box and margins stay with the browser or PDF service.
     expect(source).not.toMatch(/@page/);
@@ -2698,11 +3500,17 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(rule(".mm-party-label")).toMatch(/color: var\(--mm-accent\);/);
   });
 
-  it("moves the company name below a logo it cannot fit beside", () => {
-    expect(rule(".mm-brand")).toMatch(/flex-wrap: wrap;/);
-    expect(rule(".mm-brand-name")).toMatch(
-      /flex: 1 1 160px;\s*min-width: min\(160px, 100%\);/
+  it("keeps the company name beside the logo until its longest word no longer fits", () => {
+    expect(rule(".mm-brand")).toMatch(
+      /display: flex;\s*flex: 1 1 auto;\s*flex-wrap: wrap;\s*align-items: center;\s*gap: 14px;\s*min-width: 0;/
     );
+    // Never narrower than its longest word: below that it moves under the logo.
+    expect(rule(".mm-brand-name")).toMatch(
+      /flex: 1 0 min-content;\s*min-width: 0;\s*max-width: 100%;[\s\S]*overflow-wrap: break-word;/
+    );
+    expect(rule(".mm-logo")).toMatch(/flex: 0 1 auto;\s*min-width: 0;/);
+    // Brand | seller details 20 px apart (Figma).
+    expect(rule(".mm-header")).toMatch(/gap: 20px;/);
   });
 
   it("lets a details cell hug a value that cannot wrap", () => {
@@ -2720,7 +3528,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     // In the header they are set from the right: a one-field line in the right-hand column,
     // a field wrapping from a fuller line in the left one (as live; user request).
     expect(rule(".mm-seller .mm-id-grid")).toMatch(
-      /justify-content: end;\s*text-align: right;/
+      /justify-content: end;\s*text-align: end;/
     );
     expect(
       rule(".mm-seller .mm-id-grid > .mm-id-line > .mm-id:only-child")
@@ -2754,7 +3562,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       rule(
         ".mm-doc .mm-item-desc .toastui-editor-contents :is(th, td),\n.mm-doc .mm-note-body .toastui-editor-contents :is(th, td)"
       )
-    ).toMatch(/text-align: left;/);
+    ).toMatch(/text-align: start;/);
     // The same bar and text colour as the HSN summary's heading.
     expect(rule(".mm-hsn-table thead th")).toMatch(
       /background: var\(--mm-title-bar\);\s*color: var\(--mm-accent\);/
@@ -2793,7 +3601,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
 
   it("shows the business logo up to 120 px tall and every QR at 120 px", () => {
     expect(rule(".mm-logo .mm-logo-image")).toMatch(
-      /max-width: 240px;\s*max-height: 120px;/
+      /max-width: min\(240px, 100%\);\s*max-height: 120px;/
     );
     expect(rule(".mm-qr.mm-header-qr img")).toMatch(
       /width: 120px;\s*height: 120px;/
@@ -2818,9 +3626,57 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     );
     // The full-width description row has no divider after its empty Sr cell.
     expect(rule(".mm-items .mm-detail-row > td.mm-col-serial")).toMatch(
-      /border-right: 0;/
+      /border-inline-end: 0;/
     );
     expect(rule(".mm-items-scroll")).toMatch(/overflow-x: auto;/);
     expect(css).not.toMatch(/\.mm-num[^{]*\{[^}]*overflow-wrap:\s*anywhere/);
+  });
+});
+
+describe("Modern Manufacturing — description and note tables in print", () => {
+  it("repeats a description or note table's headings on every page, breaking between its rows", () => {
+    const source = fs.readFileSync(
+      path.join(TEMPLATE_DIR, "styles.css"),
+      "utf8"
+    );
+    const print = source.slice(source.indexOf("@media print"));
+    expect(print).toMatch(
+      /\.mm-doc :is\(\.mm-item-desc, \.mm-note-body\) \.toastui-editor-contents thead \{\s*display: table-header-group;/
+    );
+    expect(print).toMatch(
+      /\.mm-doc :is\(\.mm-item-desc, \.mm-note-body\) \.toastui-editor-contents tr \{\s*break-inside: avoid;/
+    );
+  });
+});
+
+describe("Modern Manufacturing — seller block", () => {
+  it("prints no heading over the seller block on any document type", () => {
+    [
+      "INVOICE",
+      "QUOTATION",
+      "PROFORMAINV",
+      "DELIVERYCHALLAN",
+      "CREDITNOTE",
+    ].forEach((billType) => {
+      const html = render((invoice) => {
+        invoice.billType = billType;
+      });
+      expect(html).not.toContain("mm-seller-title");
+      expect(html).not.toMatch(/>(?:Billed By|Quotation From|Issued By)</);
+    });
+  });
+});
+
+describe("Modern Manufacturing — boxes split by a page break", () => {
+  it("draws a split box's border on each page's piece", () => {
+    const source = fs.readFileSync(
+      path.join(TEMPLATE_DIR, "styles.css"),
+      "utf8"
+    );
+    const print = source.slice(source.lastIndexOf("@media print"));
+    expect(print).toContain(
+      ":is(.mm-box, .mm-pair, .mm-pair-box, .mm-bank, .mm-summary-row, .mm-widget-box)"
+    );
+    expect(print).toMatch(/box-decoration-break: clone;/);
   });
 });

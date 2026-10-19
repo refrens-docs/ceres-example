@@ -254,10 +254,13 @@ const CASES = {
     invoice.finalTotal.igst = invoice.finalTotal.cgst + invoice.finalTotal.sgst;
     invoice.finalTotal.cgst = 0;
     invoice.finalTotal.sgst = 0;
-    invoice.hsnSummary.forEach((row) => {
-      row.igst = row.cgst + row.sgst;
-      row.cgst = 0;
-      row.sgst = 0;
+    invoice.hsnSummary.hsnList.forEach((row) => {
+      row.igstRate = row.cgstRate + row.sgstRate;
+      row.igstAmount = row.cgstAmount + row.sgstAmount;
+      row.cgstRate = 0;
+      row.cgstAmount = 0;
+      row.sgstRate = 0;
+      row.sgstAmount = 0;
     });
   },
   D5: (invoice) => {

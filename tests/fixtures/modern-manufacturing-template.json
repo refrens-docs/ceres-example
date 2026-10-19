@@ -76,13 +76,15 @@
       { "_id": "i7", "name": "Coupling Half", "hsn": "8483", "quantity": 16, "unit": "PCS", "rate": 780, "amount": 12480, "gstRate": 18, "cgst": 1123.2, "sgst": 1123.2, "total": 14726.4, "batchSummary": [{ "batchName": "B260906", "quantity": 16 }] },
       { "_id": "i8", "name": "Impeller", "hsn": "8413", "quantity": 6, "unit": "PCS", "rate": 3200, "amount": 19200, "gstRate": 18, "cgst": 1728, "sgst": 1728, "total": 22656, "batchSummary": [{ "batchName": "B260907", "quantity": 6 }] }
     ],
-    "hsnSummary": [
-      { "hsn": "7307", "tax": 18, "taxableValue": 6400, "cgst": 576, "sgst": 576, "igst": 0, "utgst": 0 },
-      { "hsn": "8413", "tax": 18, "taxableValue": 38800, "cgst": 3492, "sgst": 3492, "igst": 0, "utgst": 0 },
-      { "hsn": "8481", "tax": 18, "taxableValue": 10200, "cgst": 918, "sgst": 918, "igst": 0, "utgst": 0 },
-      { "hsn": "8483", "tax": 18, "taxableValue": 35565, "cgst": 3200.85, "sgst": 3200.85, "igst": 0, "utgst": 0 },
-      { "hsn": "8708", "tax": 18, "taxableValue": 12500, "cgst": 1125, "sgst": 1125, "igst": 0, "utgst": 0 }
-    ],
+    "hsnSummary": {
+      "hsnList": [
+        { "hsn": "7307", "taxableValue": 6400, "cgstRate": 9, "cgstAmount": 576, "sgstRate": 9, "sgstAmount": 576, "igstRate": 0, "igstAmount": 0, "taxAmount": 1152 },
+        { "hsn": "8413", "taxableValue": 38800, "cgstRate": 9, "cgstAmount": 3492, "sgstRate": 9, "sgstAmount": 3492, "igstRate": 0, "igstAmount": 0, "taxAmount": 6984 },
+        { "hsn": "8481", "taxableValue": 10200, "cgstRate": 9, "cgstAmount": 918, "sgstRate": 9, "sgstAmount": 918, "igstRate": 0, "igstAmount": 0, "taxAmount": 1836 },
+        { "hsn": "8483", "taxableValue": 35565, "cgstRate": 9, "cgstAmount": 3200.85, "sgstRate": 9, "sgstAmount": 3200.85, "igstRate": 0, "igstAmount": 0, "taxAmount": 6401.7 },
+        { "hsn": "8708", "taxableValue": 12500, "cgstRate": 9, "cgstAmount": 1125, "sgstRate": 9, "sgstAmount": 1125, "igstRate": 0, "igstAmount": 0, "taxAmount": 2250 }
+      ]
+    },
     "subTotal": 103465,
     "finalTotal": {
       "subTotal": 103465,
@@ -132,6 +134,7 @@
     "paymentOptions": { "accountTransfer": true },
     "advanceOptions": {
       "hsnView": "SPLIT",
+      "showPaymentsTable": true,
       "unitColumn": "SEPARATE",
       "showHsnSummary": true,
       "taxSummaryView": "DEFAULT"
