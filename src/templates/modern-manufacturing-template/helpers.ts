@@ -1866,6 +1866,9 @@ export const unitText = (invoice: UnknownRecord, item: UnknownRecord) => {
   );
 };
 
+/* A stock allocation's batch is often only its database id: never a name to print. */
+const OBJECT_ID = /^[0-9a-f]{24}$/i;
+
 export const batchText = (item: UnknownRecord): string =>
   [
     ...asArray(item.batchSummary).map((entry) =>
@@ -1876,11 +1879,34 @@ export const batchText = (item: UnknownRecord): string =>
       const { batch } = allocation;
       return isRecord(batch)
         ? firstText(batch.batchName, batch.name)
-        : firstText(batch, allocation.batchName);
+        : firstText(
+            asRecord(allocation.batchData).batchName,
+            allocation.batchName,
+            OBJECT_ID.test(text(batch)) ? "" : batch
+          );
     }),
   ]
     .filter((value, index, all) => value && all.indexOf(value) === index)
     .join(", ");
+
+/*
+ * The document's own batch columns (Batch Code, Batch Name, Expiry Date, Mfg Batch No.) read
+ * the batch each line's stock came from, as refrens.com prints them: "B-0001" under Batch
+ * Code (checked on invoice 0014's share page). Several batches are listed once each.
+ */
+const allocationBatchValue = (item: UnknownRecord, key: string): unknown => {
+  const values = asArray(item.allocations)
+    .map((entry) => {
+      const allocation = asRecord(entry);
+      return pickFirst(
+        asRecord(allocation.batchData)[key],
+        asRecord(allocation.batch)[key]
+      );
+    })
+    .filter(hasValue)
+    .filter((value, index, all) => all.indexOf(value) === index);
+  return values.length > 1 ? values.map(text).join(", ") : values[0];
+};
 
 const columnKind = (column: UnknownRecord): ColumnKind => {
   const key = text(column.key);
@@ -1930,7 +1956,8 @@ const customCellValue = (item: UnknownRecord, column: ItemColumn): unknown =>
             .map(text)
             .some((name) => name === column.key || name === column.label)
         )
-    ).value
+    ).value,
+    allocationBatchValue(item, column.key)
   );
 
 /* The discount column holds either a flat amount or `{ amount, discountType }`. */
@@ -2020,9 +2047,18 @@ const resolveColumns = (state: UnknownRecord, items: UnknownRecord[]) => {
     );
   const has = (key: string) => columns.some((column) => column.key === key);
 
-  // Batch and unit are not account columns: they come from the item itself.
+  /*
+   * Batch and unit are not account columns: they come from the item itself. The design's
+   * Batch column shows only where the document has no batch columns of its own: with Batch
+   * Code, Expiry Date … (read by customCellValue) refrens.com prints those alone (invoice
+   * 0014), and a batch known only by its database id prints nothing (challan A05077).
+   */
+  const ownBatchColumn = columns.some((column) =>
+    /^(batch|expiry|mfg|manufactur)/i.test(column.key)
+  );
   if (
     !has("batch") &&
+    !ownBatchColumn &&
     !isOff(advanceOptions.showBatchColumnsInInvoice) &&
     items.some((item) => batchText(item))
   ) {
@@ -2093,6 +2129,8 @@ const DESIGN_TABLE_WIDTH = 934;
 /* Every row carries 8 px of padding at both ends: on Sr (30 px) and on the last column. */
 const ROW_END_PADDING = 8;
 const SERIAL_WIDTH = 30 + ROW_END_PADDING;
+// The most figure columns a tablet lays out side by side under the item's name (styles.css).
+const TABLET_FIGURE_COLUMNS = 8;
 const MIN_DESCRIPTION_SHARE = 0.22;
 const CELL_PADDING = 13; // 6 px each side + the 1 px rule
 
@@ -2413,6 +2451,8 @@ export const mapItemTable = (state: UnknownRecord, ctx: FormatContext) => {
             isName: column.kind === "name",
             isNum:
               value !== "" && (NUMBER_KINDS.includes(column.kind) || isWord),
+            // The column's heading beside the figure where a phone lists an item's figures.
+            label: column.label,
             value,
           };
         }),
@@ -2428,6 +2468,7 @@ export const mapItemTable = (state: UnknownRecord, ctx: FormatContext) => {
       className: column.className,
       isName: column.kind === "name",
       isNum: value !== "",
+      label: column.label,
       value,
     };
   });
@@ -2438,6 +2479,13 @@ export const mapItemTable = (state: UnknownRecord, ctx: FormatContext) => {
     rows,
     colspan,
     showThumbnail,
+    // The figure columns (every column but the item's name): a tablet lays them out in as
+    // many equal tracks under the item's name (styles.css); more than TABLET_FIGURE_COLUMNS
+    // cannot sit side by side there, so such a table shows its items as cards.
+    figureCount: columns.filter((column) => column.kind !== "name").length,
+    manyFigures:
+      columns.filter((column) => column.kind !== "name").length >
+      TABLET_FIGURE_COLUMNS,
     serialLabel: labelOr(labels, "serialNumber", "Sr."),
     serialWidth: SERIAL_WIDTH,
     mergeUnit,
@@ -2567,6 +2615,76 @@ export const amountInCurrencyWords = (
 const summaryList = (value: unknown, key: "hsnList" | "taxList") =>
   (Array.isArray(value) ? value : asArray(asRecord(value)[key])).map(asRecord);
 
+/* refrens.com's Batch Summary columns, used when the account has none configured. */
+const BATCH_COLUMNS = [
+  ["itemName", "Item Name"],
+  ["batchName", "Batch Name"],
+  ["quantity", "Qty"],
+  ["warehouse", "Warehouse"],
+  ["manufacturerName", "Mfg Name"],
+  ["manufacturingDate", "Mfg Date"],
+  ["expiryDate", "Expiry Date"],
+].map(([key, label]): UnknownRecord => ({ key, label }));
+
+/*
+ * The Batch Summary: one row per batch the document draws on, in the account's batch-summary
+ * columns (stockSummaryConfig), as refrens.com prints it. The API sends the rows only for a
+ * batch-tracked document with "Show Stock Summary" on; an explicit off still hides them.
+ */
+export const mapBatchSummary = (state: UnknownRecord, ctx: FormatContext) => {
+  const invoice = asRecord(state.invoice);
+  const labels = asRecord(invoice.customLabels);
+  const configured = asArray(
+    asRecord(invoice.stockSummaryConfig).batchSummaryColumns
+  )
+    .map(asRecord)
+    .filter((column) => text(column.key) && column.isHidden !== true);
+  const columns = (configured.length ? configured : BATCH_COLUMNS).map(
+    (column) => ({
+      key: text(column.key),
+      label: firstText(column.label, column.key),
+      showSku: column.showSku === true,
+      showBatchCode: column.showBatchCode === true,
+    })
+  );
+  const rows = asArray(invoice.batchSummary)
+    .map(asRecord)
+    .map((entry) => {
+      const batch = asRecord(entry.batch);
+      return columns.map(({ key, showSku, showBatchCode }) => {
+        const extra = (value: string, code: unknown) =>
+          value && hasValue(code) ? `${value} (${text(code)})` : value;
+        if (key === "itemName")
+          return { value: extra(text(entry.itemName), showSku && entry.sku) };
+        if (key === "batchName")
+          return {
+            value: extra(
+              firstText(batch.batchName, entry.batchName),
+              showBatchCode && batch.batchCode
+            ),
+          };
+        if (key === "quantity")
+          return { value: formatQuantity(entry.quantity, ctx), isNum: true };
+        // The warehouse arrives as an id; only its name prints.
+        if (key === "warehouse") return { value: text(entry.warehouseName) };
+        return {
+          value: firstText(entry[key], batch[key]),
+          isDate: /date$/i.test(key),
+        };
+      });
+    });
+  const advanceOptions = asRecord(state.advanceOptions);
+  return {
+    title: labelOr(labels, "batchSummary", "Batch Summary"),
+    columns,
+    rows,
+    show:
+      rows.length > 0 &&
+      !isOff(advanceOptions.showStockSummary) &&
+      !isOff(asRecord(invoice.advanceOptions).showStockSummary),
+  };
+};
+
 export const mapHsnSummary = (state: UnknownRecord, ctx: FormatContext) => {
   const invoice = asRecord(state.invoice);
   const visibility = asRecord(asRecord(state.mapped).visibility);
@@ -2636,6 +2754,8 @@ export const mapHsnSummary = (state: UnknownRecord, ctx: FormatContext) => {
   );
 
   return {
+    // Its heading, like the Batch Summary and Payments tables (user, 2026-10-20).
+    title: labelOr(labels, "hsnSummary", "HSN Summary"),
     hasRows: body.length > 0,
     // Rendered hidden when switched off so the host's live toggle can reveal it.
     isHidden: !enabled,
@@ -3127,6 +3247,22 @@ export const paperHeight = (pdfOptions: UnknownRecord): number => {
   return Math.floor((paperMm / 25.4) * 96);
 };
 
+/*
+ * An item's large photo is at most 55 % of a printed page tall (styles.css), in the page's own
+ * pixels: from the paper, not 55vh, which is the window while the page is laid out (600 px tall
+ * in Refrens' PDF service) and the page only when it prints, so a photo grew after the long PDF,
+ * the stretch and the footer were measured (long PDF spilt onto a second page). 19 px top and
+ * bottom margins; under the print zoom a page holds fewer of the document's pixels; 600 px most.
+ */
+export const photoCap = (pdfOptions: UnknownRecord): number => {
+  const zoom = positiveNumber(pdfOptions.zoomSize) ?? 1;
+  const rendererZoom = zoom === 0.8 ? 1 : zoom;
+  return Math.min(
+    600,
+    Math.floor((0.55 * (paperHeight(pdfOptions) - 38)) / rendererZoom)
+  );
+};
+
 export const mapPrint = (state: UnknownRecord) => {
   const pdfOptions = asRecord(state.pdfOptions);
   const invoice = asRecord(state.invoice);
@@ -3149,6 +3285,7 @@ export const mapPrint = (state: UnknownRecord) => {
     textScale: compactDecimal(textScale),
     printWidth: printWidth(pdfOptions),
     paperHeight: paperHeight(pdfOptions),
+    photoCap: photoCap(pdfOptions),
     stretchAllowed,
     stretchTable:
       stretchAllowed && flagSetting(pdfOptions.fullHeightTable) === true,
@@ -3275,6 +3412,12 @@ export const buildModernManufacturingView = (root: unknown) => {
     hsn,
     showHsn: hsn.hasRows && !hsn.isHidden,
     showTaxSummary: Boolean(visibility.showTaxTable),
+    taxSummaryTitle: labelOr(
+      asRecord(invoice.customLabels),
+      "taxSummary",
+      "Tax Summary"
+    ),
+    batchSummary: mapBatchSummary(state, ctx),
     // Printed only when the document turns "Show Payments Table" on, as refrens.com does (all
     // 54 test-janvi documents with payments), under its "Payments" title.
     payments: {
@@ -3455,6 +3598,103 @@ const MIN_PRINT_FIT = 0.6;
 // Sub-pixel rounding is not an overflow.
 const PRINT_SLACK = 0.5;
 
+/*
+ * The totals carry on without the item headings (user, 2026-10-19): in print, the rows after
+ * the items move into a table of their own right under the item table, so a page that holds
+ * only them repeats no heading row. Its columns take the item columns' widths, so the TOTAL
+ * row's figures stay under their columns. joinTotals puts them back in the one table.
+ */
+const TOTALS_SPLIT = "data-mm-totals-split";
+const TOTALS_GROUPS = ":scope > tfoot";
+
+export const joinTotals = (root: ParentNode = document): void => {
+  root
+    .querySelectorAll<HTMLTableElement>(`table[${TOTALS_SPLIT}]`)
+    .forEach((split) => {
+      const table = split.previousElementSibling;
+      const marker = Array.from(table?.childNodes || []).find(
+        (node) =>
+          node.nodeType === Node.COMMENT_NODE &&
+          node.textContent === TOTALS_SPLIT
+      );
+      if (table && marker) {
+        Array.from(split.querySelectorAll(TOTALS_GROUPS)).forEach((group) =>
+          table.insertBefore(group, marker)
+        );
+        marker.remove();
+      }
+      // The item table's own column sizing back (splitTotals locked it).
+      if (table instanceof HTMLElement) {
+        table
+          .querySelectorAll(`:scope > colgroup[${TOTALS_SPLIT}]`)
+          .forEach((cols) => cols.remove());
+        const style = table.dataset.mmTotalsStyle;
+        if (style !== undefined) {
+          if (style) table.setAttribute("style", style);
+          else table.removeAttribute("style");
+          delete table.dataset.mmTotalsStyle;
+        }
+      }
+      split.remove();
+    });
+};
+
+export const splitTotals = (root: ParentNode = document): void => {
+  joinTotals(root);
+  const printing =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("print").matches;
+  if (!printing) return;
+  root.querySelectorAll<HTMLTableElement>(".mm-items").forEach((table) => {
+    const groups = Array.from(
+      table.querySelectorAll<HTMLElement>(TOTALS_GROUPS)
+    );
+    const row = Array.from(table.tBodies)
+      .filter((body) => !groups.includes(body))
+      .flatMap((body) => Array.from(body.rows))
+      .reduce<HTMLTableRowElement | undefined>(
+        (best, candidate) =>
+          !best || candidate.cells.length > best.cells.length
+            ? candidate
+            : best,
+        undefined
+      );
+    if (!groups.length || !row || !table.parentElement) return;
+    // Layout pixels: the print zoom scales the measured boxes, not the widths set here.
+    const scale =
+      table.getBoundingClientRect().width / (table.offsetWidth || 1) || 1;
+    const split = document.createElement("table");
+    split.className = table.className;
+    split.setAttribute(TOTALS_SPLIT, "");
+    const style = table.getAttribute("style");
+    if (style) split.setAttribute("style", style);
+    split.style.tableLayout = "fixed";
+    split.style.width = `${table.offsetWidth}px`;
+    const cols = document.createElement("colgroup");
+    Array.from(row.cells).forEach((cell) => {
+      const col = document.createElement("col");
+      col.span = cell.colSpan || 1;
+      col.style.width = `${cell.getBoundingClientRect().width / scale}px`;
+      cols.appendChild(col);
+    });
+    split.appendChild(cols);
+    /*
+     * The item table gets the same columns: without its totals it would size them again
+     * (the totals' wider figures no longer counting) and the two would no longer line up.
+     */
+    const width = table.offsetWidth;
+    const lock = cols.cloneNode(true) as HTMLElement;
+    lock.setAttribute(TOTALS_SPLIT, "");
+    table.dataset.mmTotalsStyle = table.getAttribute("style") ?? "";
+    table.prepend(lock);
+    table.style.tableLayout = "fixed";
+    table.style.width = `${width}px`;
+    groups[0].before(document.createComment(TOTALS_SPLIT));
+    groups.forEach((group) => split.appendChild(group));
+    table.after(split);
+  });
+};
+
 export const fitPrintTable = (root: ParentNode = document): void => {
   const printing =
     typeof window.matchMedia === "function" &&
@@ -3462,6 +3702,7 @@ export const fitPrintTable = (root: ParentNode = document): void => {
   root.querySelectorAll<HTMLElement>(".mm-items").forEach((table) => {
     table.classList.remove("is-print-fit");
     table.style.removeProperty("--mm-print-fit");
+    table.style.removeProperty("--mm-print-squeeze");
     const box = table.parentElement;
     if (!printing || !box) return;
     const overflow = () =>
@@ -3481,6 +3722,17 @@ export const fitPrintTable = (root: ParentNode = document): void => {
       table.style.setProperty("--mm-print-fit", String(fit));
       if (fit === MIN_PRINT_FIT) break;
     }
+    // The text at its floor and still too wide: the whole table scales, never cut off.
+    let squeeze = 1;
+    for (let step = 0; step < 10 && overflow() > PRINT_SLACK; step += 1) {
+      const ratio =
+        box.getBoundingClientRect().width / table.getBoundingClientRect().width;
+      squeeze = Math.min(
+        squeeze - 0.01,
+        Math.floor(squeeze * ratio * 100) / 100
+      );
+      table.style.setProperty("--mm-print-squeeze", String(squeeze));
+    }
   });
 };
 
@@ -3498,68 +3750,12 @@ export const fitPrintTable = (root: ParentNode = document): void => {
 const STRETCH_ATTR = "data-mm-stretch-table";
 const STRETCH_ROW = ".mm-items > tbody > tr:last-child";
 
-/*
- * Stretch on, a document longer than a page (user, 2026-10-19): where a whole item moves to the
- * next page, the space it leaves keeps the table's look. Chrome runs the items wrapper on to
- * the page's foot, so the wrapper draws the column rules there and a rule under each page's
- * piece of the table (styles.css); the table's row groups are opaque in print, so the rules
- * show only below the page's last row. Positions are read off the row with the most cells, as
- * fractions of the wrapper's width (the print zoom scales both alike); the rules' width comes
- * from styles.css (a 0.5 px border reads back as 1 px), their colour from the cells' borders.
- */
-const columnRules = (
-  wrap: HTMLElement,
-  table: HTMLTableElement
-): { layers: string; color: string } | undefined => {
-  const row = Array.from(table.tBodies)
-    .flatMap((body) => Array.from(body.rows))
-    .reduce<HTMLTableRowElement | undefined>(
-      (best, candidate) =>
-        !best || candidate.cells.length > best.cells.length ? candidate : best,
-      undefined
-    );
-  const box = wrap.getBoundingClientRect();
-  if (!row || row.cells.length === 0 || box.width <= 0) return undefined;
-  const style = getComputedStyle(row.cells[0]);
-  const color = parseFloat(style.borderInlineEndWidth)
-    ? style.borderInlineEndColor
-    : style.borderInlineStartColor;
-  const width =
-    parseFloat(
-      getComputedStyle(wrap).getPropertyValue("--mm-column-rule-width")
-    ) || 1;
-  const scale = box.width / (wrap.offsetWidth || box.width);
-  const room = box.width - width * scale;
-  const cells = Array.from(row.cells).map((cell) =>
-    cell.getBoundingClientRect()
-  );
-  const edges = [
-    ...cells.map((cell) => cell.left - box.left),
-    cells[cells.length - 1].right - box.left,
-  ];
-  const layers = edges
-    .map(
-      (x) =>
-        `linear-gradient(${color}, ${color}) ${compactDecimal(
-          Math.min(100, Math.max(0, (x / room) * 100))
-        )}% 0 / var(--mm-column-rule-width) 100% no-repeat`
-    )
-    .join(", ");
-  return { layers, color };
-};
-
 export const resetItemsTableStretch = (root: ParentNode = document): void => {
   root
     .querySelectorAll<HTMLElement>(`.mm-doc ${STRETCH_ROW}[data-mm-stretched]`)
     .forEach((row) => {
       row.style.removeProperty("height");
       row.removeAttribute("data-mm-stretched");
-    });
-  root
-    .querySelectorAll<HTMLElement>(".mm-doc .mm-items-scroll")
-    .forEach((wrap) => {
-      wrap.style.removeProperty("--mm-column-rules");
-      wrap.style.removeProperty("--mm-column-rule-color");
     });
 };
 
@@ -3570,14 +3766,6 @@ export const stretchItemsTable = (root: ParentNode = document): void => {
     .forEach((doc) => {
       const row = doc.querySelector<HTMLElement>(STRETCH_ROW);
       if (!row || !row.getClientRects().length) return;
-      const wrap = doc.querySelector<HTMLElement>(".mm-items-scroll");
-      const table = doc.querySelector<HTMLTableElement>(".mm-items");
-      const rules = wrap && table ? columnRules(wrap, table) : undefined;
-      if (wrap && rules) {
-        wrap.style.setProperty("--mm-column-rules", rules.layers);
-        wrap.style.setProperty("--mm-column-rule-color", rules.color);
-      }
-
       const docEnd = doc.getBoundingClientRect().bottom + window.scrollY;
       // Forced breaks after the document: where its last page ends, and a page's height.
       const breaks = [0, 1].map(() => {
@@ -3712,6 +3900,51 @@ export const respellTaxWords = (root: ParentNode = document): void => {
 };
 
 /*
+ * The Saudi riyal sign (U+20C1, Unicode 17, 2025), which the shared money format writes for
+ * SAR, is in no font the document uses yet, so it printed a box. Each sign is drawn instead:
+ * the outline of the saudi_riyal font (Emran Alhaddad, SIL Open Font License 1.1), the one
+ * refrens.com prints with, in the text's colour (styles.css .mm-riyal). An embedded font
+ * would be simpler, but the renderer's font policy blocks data: fonts, and Google Fonts serves
+ * headless Chrome (the PDF service) a file without the sign.
+ */
+const RIYAL_SIGN = "\u20C1";
+const RIYAL_PATH =
+  "M750,1119C730,1163,716,1211,711,1262C711,1262,1136,1172,1136,1172C1156,1127,1169,1079,1174,1028C1174,1028,750,1119,750,1119ZM1136,901C1136,901,1136,901,1136,901C1156,857,1169,809,1174,758C1174,758,843,828,843,828C843,828,843,693,843,693C843,693,1136,631,1136,631C1156,587,1169,538,1174,488C1174,488,843,558,843,558C843,558,843,72,843,72C793,100,748,138,711,183C711,183,711,586,711,586C711,586,579,614,579,614C579,614,579,6,579,6C528,34,483,72,447,117C447,117,447,642,447,642C447,642,151,705,151,705C131,750,117,798,112,849C112,849,447,777,447,777C447,777,447,948,447,948C447,948,88,1024,88,1024C68,1068,55,1117,50,1167C50,1167,425,1088,425,1088C456,1081,482,1063,499,1038C499,1038,568,936,568,936C568,936,568,936,568,936C575,926,579,913,579,899C579,899,579,749,579,749C579,749,711,721,711,721C711,721,711,992,711,992C711,992,1136,901,1136,901Z";
+
+const riyalSvg = (): SVGSVGElement => {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("class", "mm-riyal");
+  svg.setAttribute("viewBox", "50 6 1124 1256");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "SAR");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", RIYAL_PATH);
+  svg.appendChild(path);
+  return svg;
+};
+
+export const drawRiyalSigns = (root: ParentNode = document): void => {
+  root.querySelectorAll<HTMLElement>(".mm-doc").forEach((doc) => {
+    const walker = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT);
+    const signs: Text[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.nodeValue?.includes(RIYAL_SIGN)) signs.push(node as Text);
+    }
+    signs.forEach((node) => {
+      const drawn = document.createDocumentFragment();
+      String(node.nodeValue)
+        .split(RIYAL_SIGN)
+        .forEach((part, index) => {
+          if (index) drawn.appendChild(riyalSvg());
+          if (part) drawn.appendChild(document.createTextNode(part));
+        });
+      node.replaceWith(drawn);
+    });
+  });
+};
+
+/*
  * Placed when the print layout applies (the print media query turning on: Chrome lays the
  * pages out first, so the measurement is the printed one) and cleared when it ends: first
  * the items table takes the spare height (when stretched), then the last-page footer is set
@@ -3719,6 +3952,136 @@ export const respellTaxWords = (root: ParentNode = document): void => {
  * page format). A Pageless PDF has one page as tall as the content, so there is no spare
  * height and the footer already ends on its edge; the PDF service draws its own footer.
  */
+/*
+ * The item table on a phone or tablet screen (styles.css, "phones and tablets"): on a screen
+ * up to PHONE_WIDTH every item reads as a card (is-cards); on one narrower than an A4 page
+ * (PAPER_WIDTH, 794 px) the table stays as on paper while it fits its box, and one that would
+ * scroll sideways keeps its headings in a row over the items (is-grid), or reads as cards with
+ * more figure columns than a tablet row holds (has-many-figures). A screen as wide as the
+ * page, and print, keep the table as it is, so the preview at A4 width matches the PDF.
+ */
+const PHONE_WIDTH = 640;
+const PAPER_WIDTH = 794;
+
+/* A table that grows after it was fitted (a font, a style set late) is fitted again. */
+let fitTimer = 0;
+let tableWatch: ResizeObserver | undefined;
+const refitSoon = (): void => {
+  window.clearTimeout(fitTimer);
+  fitTimer = window.setTimeout(() => {
+    // eslint-disable-next-line @typescript-eslint/no-use-before-define
+    fitItemsToScreen();
+    // eslint-disable-next-line @typescript-eslint/no-use-before-define
+    labelSummaryCells();
+    // eslint-disable-next-line @typescript-eslint/no-use-before-define
+    stackCrampedFields();
+  }, 0);
+};
+
+/*
+ * The summary widgets' tables (Tax Summary, Batch Summary, Payments) read as cards on a phone,
+ * like the HSN summary (user, 2026-10-20): each cell is labelled with its column's heading,
+ * both heading rows joined ("IGST Rate"), for the card CSS to print beside its value. A Total
+ * row's first cell is its title and a cell with nothing in it is left off the card. A figure
+ * or a date is marked to stay on one line, its column widening for it (user rule: numbers
+ * never wrap).
+ */
+const FIGURE_OR_DATE =
+  /^(?:[\d\s.,:/%()+\-–\u00a0\u20b9$€£¥\u20c1]+|\d{1,2}[-\s][A-Za-z]{3,9}[-\s,]+\d{4}|[A-Za-z]{3,9}\.?\s\d{1,2},?\s\d{4})$/;
+
+export const labelSummaryCells = (root: ParentNode = document): void => {
+  root
+    .querySelectorAll<HTMLTableElement>(".mm-widget-table table.ceres-table")
+    .forEach((table) => {
+      const span = (cell: Element) =>
+        Math.max(1, Number(cell.getAttribute("colspan")) || 1);
+      const headings: string[][] = [];
+      table.querySelectorAll("thead tr").forEach((row) => {
+        let col = 0;
+        [...row.children].forEach((cell) => {
+          const name = cell.textContent?.trim() ?? "";
+          for (let i = 0; i < span(cell); i += 1) {
+            headings[col + i] ??= [];
+            if (name && !headings[col + i].includes(name)) {
+              headings[col + i].push(name);
+            }
+          }
+          col += span(cell);
+        });
+      });
+      table.querySelectorAll("tbody tr, tfoot tr").forEach((row) => {
+        let col = 0;
+        const isTotal = row.parentElement?.tagName === "TFOOT";
+        [...row.children].forEach((cell, index) => {
+          const label =
+            span(cell) === 1 && !(isTotal && index === 0)
+              ? (headings[col] ?? []).join(" ")
+              : "";
+          if (label) cell.setAttribute("data-label", label);
+          else cell.removeAttribute("data-label");
+          const value = cell.textContent?.trim() ?? "";
+          cell.toggleAttribute(
+            "data-mm-empty",
+            !value && !cell.querySelector("img, svg")
+          );
+          cell.toggleAttribute(
+            "data-mm-figure",
+            /\d/.test(value) && FIGURE_OR_DATE.test(value)
+          );
+          col += span(cell);
+        });
+      });
+    });
+};
+
+/*
+ * Two fields side by side in a party box (Phone | Email): when one of them does not fit its half
+ * on one line (a long email, "GSTIN:" over its number), the line puts each field on a row of its
+ * own, the whole width of the box, rather than wrap it (user, 2026-10-20). A field still too
+ * wide for the whole box wraps as before.
+ */
+export const stackCrampedFields = (root: ParentNode = document): void => {
+  root.querySelectorAll<HTMLElement>(".mm-id-grid").forEach((grid) => {
+    const lines = [
+      ...grid.querySelectorAll<HTMLElement>(":scope > .mm-id-line"),
+    ].filter((line) => line.children.length > 1);
+    if (!lines.length) return;
+    lines.forEach((line) => line.classList.remove("is-stacked"));
+    grid.classList.add("is-measuring");
+    const cramped = lines.filter((line) =>
+      [...line.querySelectorAll<HTMLElement>(":scope > .mm-id")].some(
+        (field) => field.scrollWidth > field.clientWidth + 1
+      )
+    );
+    grid.classList.remove("is-measuring");
+    cramped.forEach((line) => line.classList.add("is-stacked"));
+  });
+};
+
+export const fitItemsToScreen = (root: ParentNode = document): void => {
+  const printing =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("print").matches;
+  root.querySelectorAll<HTMLElement>(".mm-items").forEach((table) => {
+    if (typeof ResizeObserver === "function") {
+      tableWatch ??= new ResizeObserver(refitSoon);
+      tableWatch.observe(table);
+    }
+    table.classList.remove("is-cards", "is-grid");
+    const box = table.parentElement;
+    if (printing || !box) return;
+    const width = document.documentElement.clientWidth;
+    if (width >= PAPER_WIDTH) return;
+    const phone = width <= PHONE_WIDTH;
+    if (!phone && box.scrollWidth <= box.clientWidth + 1) return;
+    table.classList.add(
+      phone || table.classList.contains("has-many-figures")
+        ? "is-cards"
+        : "is-grid"
+    );
+  });
+};
+
 export const registerModernManufacturingPrint = (): void => {
   const state = window as typeof window & { mmPrintRegistered?: boolean };
   if (state.mmPrintRegistered || typeof window.matchMedia !== "function") {
@@ -3727,9 +4090,12 @@ export const registerModernManufacturingPrint = (): void => {
   state.mmPrintRegistered = true;
 
   const reset = () => {
+    joinTotals();
     resetItemsTableStretch();
     resetFootersOnPageEdge();
     fitPrintTable();
+    fitItemsToScreen();
+    stackCrampedFields();
   };
   // The table first (its width sets its height), then the stretch, then the footer.
   window.matchMedia("print").addEventListener("change", (event) => {
@@ -3737,7 +4103,11 @@ export const registerModernManufacturingPrint = (): void => {
       reset();
       return;
     }
+    fitItemsToScreen();
+    stackCrampedFields();
+    joinTotals();
     fitPrintTable();
+    splitTotals();
     stretchItemsTable();
     placeFootersOnPageEdge();
   });
@@ -3745,11 +4115,34 @@ export const registerModernManufacturingPrint = (): void => {
   window.addEventListener("message", (event) =>
     applyTemplateUpdate(event.data)
   );
-  // Each render into the page: the tax summary's words in the document's currency.
+  // Each render into the page: the tax summary's words in the document's currency, the
+  // riyal sign drawn, the item table fitted to a phone or tablet screen, the summary tables'
+  // cells labelled for their phone cards, and a party line too tight for its fields stacked.
   const output = document.getElementById("documentOutput");
   if (output && typeof MutationObserver === "function") {
-    new MutationObserver(() => respellTaxWords(output)).observe(output, {
+    new MutationObserver(() => {
+      respellTaxWords(output);
+      drawRiyalSigns(output);
+      fitItemsToScreen(output);
+      labelSummaryCells(output);
+      stackCrampedFields(output);
+    }).observe(output, { childList: true });
+    drawRiyalSigns(output);
+    fitItemsToScreen(output);
+    labelSummaryCells(output);
+    stackCrampedFields(output);
+  }
+  // A window resized, an image or a font arriving, or a description drawn after the render
+  // (the Markdown viewer) changes the table's width. The whole page is watched: the renderer
+  // may add #documentOutput after this runs. Only classes change in a fit, which neither
+  // watch sees, so a fit never sets off another.
+  window.addEventListener("resize", refitSoon);
+  document.addEventListener("load", refitSoon, true);
+  document.fonts?.ready.then(refitSoon);
+  if (typeof MutationObserver === "function") {
+    new MutationObserver(refitSoon).observe(document.documentElement, {
       childList: true,
+      subtree: true,
     });
   }
 };

@@ -6,6 +6,7 @@ import { normalizeInvoiceTemplateState } from "../src/main/invoiceTemplateNormal
 import template from "../src/templates/modern-manufacturing-template/template.hbs";
 import {
   batchText,
+  photoCap,
   buildModernManufacturingView,
   columnNumber,
   formatContext,
@@ -18,6 +19,7 @@ import {
   mapCompliance,
   mapFooter,
   mapHsnSummary,
+  mapBatchSummary,
   mapItemTable,
   mapMeta,
   mapNotes,
@@ -619,7 +621,7 @@ describe("Modern Manufacturing template — render", () => {
       invoice.template = { languageScript: "Arabic", enableRtl: true };
     });
     expect(html).toContain(
-      '<div class="mm-doc" data-testid="invoice-root" data-mm-paper-height="1122" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-width: 714px; --mm-script-font: \'Noto Sans Arabic\';'
+      '<div class="mm-doc" data-testid="invoice-root" data-mm-paper-height="1122" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-width: 714px; --mm-photo-cap: 596px; --mm-script-font: \'Noto Sans Arabic\';'
     );
     expect(render()).toContain(
       'data-testid="invoice-root" data-mm-paper-height="1122" dir="ltr" style='
@@ -630,6 +632,11 @@ describe("Modern Manufacturing template — render", () => {
     );
     expect(styles).toMatch(
       /--mm-font: var\(--subtitle-font, "Inter", sans-serif\), var\(--mm-script-font, sans-serif\);/
+    );
+    // The riyal sign is drawn (drawRiyalSigns), not set in a font: the renderer blocks data: fonts.
+    expect(styles).not.toContain("@font-face");
+    expect(styles).toMatch(
+      /\.mm-riyal \{\s*display: inline-block;\s*width: 0\.67em;\s*height: 0\.75em;\s*vertical-align: -0\.04em;\s*fill: currentcolor;/
     );
     // Physical sides only where right-to-left pins them (right is the start of an RTL line).
     const outsideRtl = styles.replace(
@@ -649,15 +656,30 @@ describe("Modern Manufacturing template — render", () => {
     );
   });
 
-  it("leads the header with the company name alone when there is no logo", () => {
+  it("sets the logo, then the company and its details beside it, the QR alone on the right", () => {
+    // Name, then the address, beside the logo, in the brand (user, 2026-10-20).
     const html = render((invoice) => {
+      invoice.logo = "https://cdn.example/logo.png";
+    });
+    expect(html).toMatch(
+      /<div class="mm-brand">\s*<div class="mm-logo">[\s\S]*?<\/div>\s*<div class="mm-seller">[\s\S]*?<h1 class="mm-brand-name" data-role="company-name">Vertex Foundry Components<\/h1>\s*<div class="mm-seller-address">/
+    );
+    expect(html).toMatch(
+      /<div class="mm-header-end">\s*<div class="mm-qr mm-header-qr/
+    );
+    // No logo, no stand-in: the details lead.
+    const bare = render((invoice) => {
       invoice.logo = "";
     });
-    const brand = (html.match(/<div class="mm-brand">([\s\S]*?)<\/div>/) ||
-      [])[1];
-    expect(brand).toContain('class="mm-brand-name"');
-    expect(brand).not.toContain("mm-logo");
-    expect(html).not.toContain("mm-monogram");
+    expect(bare).toMatch(/<div class="mm-brand">\s*<div class="mm-seller">/);
+    expect(bare).not.toContain("mm-monogram");
+    // A name without seller details still prints.
+    const nameOnly = render((invoice) => {
+      invoice.billedBy = { name: "Works Only" };
+    });
+    expect(nameOnly).toMatch(
+      /<div class="mm-seller">\s*<h1 class="mm-brand-name" data-role="company-name">Works Only<\/h1>\s*<\/div>/
+    );
   });
 
   it("renders letterhead images, logo, signature and full-width descriptions", () => {
@@ -1128,13 +1150,13 @@ describe("Modern Manufacturing template — view model", () => {
       "Redeemed"
     );
     expect(tag({ billType: "SALESORDER", status: "OPEN" })).toBeNull();
-    // On the title bar, right after the title (user request); on paper only when the
-    // document asks for it.
+    // On the title bar after the title and its copy tag (user request); on paper only when
+    // the document asks for it.
     const html = render((invoice) => {
       invoice.status = "PAID";
     });
     expect(html).toMatch(
-      /<h2 class="mm-banner-title"[^>]*>[^<]*<\/h2>\s*<span class="mm-status( no-print)?"><span class="invoice-tag success">Paid<\/span><\/span>/
+      /<h2 class="mm-banner-title"[^>]*>[^<]*<\/h2>\s*<span class="mm-copy" data-role="tag">[^<]*<\/span>\s*<span class="mm-status( no-print)?"><span class="invoice-tag success">Paid<\/span><\/span>/
     );
   });
 
@@ -1906,6 +1928,18 @@ describe("Modern Manufacturing template — view model", () => {
         ],
       })
     ).toBe("B1, B2, B3, B4, B5, B6");
+    // Refrens' allocations name the batch by its database id, the name in batchData.
+    expect(
+      batchText({
+        allocations: [
+          {
+            batch: "64b0000000000000000000a1",
+            batchData: { batchName: "Lot A" },
+          },
+          { batch: "64b0000000000000000000a2" },
+        ],
+      })
+    ).toBe("Lot A");
   });
 
   it("formats each column kind and resolves custom column values", () => {
@@ -2202,6 +2236,24 @@ describe("Modern Manufacturing template — view model", () => {
     );
     expect(noBatch.columns.map((col) => col.key)).not.toContain("batch");
     expect(noBatch.columns.map((col) => col.key)).not.toContain("unit");
+
+    // The document's own Batch Code column reads the allocation's batch; no Batch column then.
+    const ownBatch = mapItemTable(
+      state((invoice) => {
+        invoice.columns.splice(1, 0, column("batchCode"));
+        invoice.items[0].allocations = [
+          {
+            batch: "64b0000000000000000000a3",
+            batchData: { batchCode: "B-0001" },
+          },
+        ];
+      }),
+      ctx
+    );
+    expect(ownBatch.columns.map((col) => col.key)).not.toContain("batch");
+    const codeAt = ownBatch.columns.findIndex((col) => col.key === "batchCode");
+    expect(JSON.stringify(ownBatch.rows[0])).toContain("B-0001");
+    expect(codeAt).toBeGreaterThan(-1);
 
     const accountColumns = mapItemTable(
       state((invoice) => {
@@ -2922,6 +2974,165 @@ describe("Modern Manufacturing template — view model", () => {
     expect(mapFooter(state()).contact).toBeNull();
   });
 
+  describe("Batch Summary (refrens.com, invoice 0014)", () => {
+    const batchRow = {
+      itemName: "Motherboard",
+      sku: "SKU-0001",
+      batch: {
+        batchName: "FEB 2026",
+        batchCode: "B-0001",
+        manufacturerName: "MSI",
+        expiryDate: "2027-02-01T00:00:00.000Z",
+      },
+      warehouse: "000000000000000000000001",
+      warehouseName: "WH0001",
+      quantity: 12,
+    };
+    const withBatches = (invoice: Json, root: Json) => {
+      invoice.batchSummary = [batchRow];
+      invoice.advanceOptions.showStockSummary = true;
+      root.batchSummary = [batchRow];
+    };
+
+    it("prints the account's columns, with the SKU and batch code where asked", () => {
+      const summary = mapBatchSummary(
+        state((invoice, root) => {
+          withBatches(invoice, root);
+          invoice.stockSummaryConfig = {
+            batchSummaryColumns: [
+              { key: "itemName", label: "Item Name", showSku: true },
+              { key: "batchName", label: "Batch Name", showBatchCode: true },
+              { key: "quantity", label: "Qty" },
+              { key: "warehouse", label: "Warehouse" },
+              { key: "manufacturerName", label: "Mfg Name" },
+              { key: "manufacturingDate", label: "Mfg Date" },
+              { key: "expiryDate", label: "Expiry Date" },
+              { key: "sku", label: "SKU", isHidden: true },
+              { label: "No key" },
+            ],
+          };
+        }),
+        ctx
+      );
+      expect(summary.show).toBe(true);
+      expect(summary.title).toBe("Batch Summary");
+      expect(summary.columns.map((c) => c.label)).toEqual([
+        "Item Name",
+        "Batch Name",
+        "Qty",
+        "Warehouse",
+        "Mfg Name",
+        "Mfg Date",
+        "Expiry Date",
+      ]);
+      expect(summary.rows[0]).toEqual([
+        { value: "Motherboard (SKU-0001)" },
+        { value: "FEB 2026 (B-0001)" },
+        { value: "12", isNum: true },
+        { value: "WH0001" },
+        { value: "MSI", isDate: false },
+        { value: "", isDate: true },
+        { value: "2027-02-01T00:00:00.000Z", isDate: true },
+      ]);
+    });
+
+    it("falls back to refrens.com's columns, without codes, and hides when switched off", () => {
+      const plain = mapBatchSummary(
+        state((invoice, root) => {
+          withBatches(invoice, root);
+          invoice.batchSummary = [{ quantity: 2, batchName: "Lot 7" }];
+          root.batchSummary = invoice.batchSummary;
+        }),
+        ctx
+      );
+      expect(plain.columns.map((c) => c.key)).toEqual([
+        "itemName",
+        "batchName",
+        "quantity",
+        "warehouse",
+        "manufacturerName",
+        "manufacturingDate",
+        "expiryDate",
+      ]);
+      expect(plain.rows[0].slice(0, 2)).toEqual([
+        { value: "" },
+        { value: "Lot 7" },
+      ]);
+      const off = mapBatchSummary(
+        state((invoice, root) => {
+          withBatches(invoice, root);
+          invoice.advanceOptions.showStockSummary = false;
+        }),
+        ctx
+      );
+      expect(off.show).toBe(false);
+      expect(mapBatchSummary(state(), ctx).show).toBe(false);
+    });
+
+    it("renders it after the tax summary, before the payments", () => {
+      const html = render(withBatches);
+      expect(html).toContain("data-ceres-batch-summary");
+      expect(html).toMatch(
+        /<h3 class="ceres-table-heading">Batch Summary<\/h3>/
+      );
+      expect(html).toMatch(/<td>FEB 2026<\/td>/);
+      const source = fs.readFileSync(
+        path.join(
+          __dirname,
+          "../src/templates/modern-manufacturing-template/template.hbs"
+        ),
+        "utf8"
+      );
+      const at = (marker: string) =>
+        source.indexOf(`<div class="mm-widget-box mm-widget-table" ${marker}`);
+      expect(at("data-ceres-tax-summary")).toBeLessThan(
+        at("data-ceres-batch-summary")
+      );
+      expect(at("data-ceres-batch-summary")).toBeLessThan(
+        at("data-ceres-payment-table")
+      );
+      expect(render()).not.toContain("data-ceres-batch-summary");
+    });
+  });
+
+  it("heads the HSN and tax summaries, and lines their columns up", () => {
+    const html = render((invoice) => {
+      invoice.advanceOptions.taxSummaryView = "TABLE";
+    });
+    expect(html).toMatch(
+      /data-ceres-hsn-summary>\s*<h3 class="ceres-table-heading">HSN Summary<\/h3>\s*<table class="mm-hsn-table">/
+    );
+    expect(html).toMatch(
+      /data-ceres-tax-summary>\s*<h3 class="ceres-table-heading">Tax Summary<\/h3>/
+    );
+    // Tax Rate as narrow as the HSN summary's HSN column; Rate, Amount and Total share the rest.
+    const styles = fs.readFileSync(
+      path.join(TEMPLATE_DIR, "styles.css"),
+      "utf8"
+    );
+    const width = (n: number, part: string) =>
+      new RegExp(
+        `\\[data-ceres-tax-summary\\]\\s*\\.ceres-table:has\\(tbody tr:first-child > :nth-child\\(${n}\\):last-child\\)\\s*thead\\s*tr:first-child\\s*> ${part} \\{\\s*width: ([\\d.]+)%;`
+      ).exec(styles)?.[1];
+    // IGST: 4 columns here, 5 in the HSN summary (20% each); CGST + SGST: 6 here, 7 there.
+    expect(width(4, ":first-child")).toBe("20");
+    expect(width(4, ":not\\(:first-child, \\[colspan\\]\\)")).toBe("26.6667");
+    expect(width(4, '\\[colspan="2"\\]')).toBe("53.3333");
+    expect(width(6, ":first-child")).toBe("14.2857");
+    expect(width(6, ":not\\(:first-child, \\[colspan\\]\\)")).toBe("17.1429");
+    const named = buildModernManufacturingView(
+      state((invoice) => {
+        invoice.customLabels = {
+          ...invoice.customLabels,
+          hsnSummary: "HSN/SAC",
+          taxSummary: "GST",
+        };
+      })
+    );
+    expect(named.hsn.title).toBe("HSN/SAC");
+    expect(named.taxSummaryTitle).toBe("GST");
+  });
+
   it("assembles the view, with fallbacks for a sparse document", () => {
     const view = buildModernManufacturingView(state());
     expect(view.brand).toMatchObject({
@@ -3021,6 +3232,7 @@ describe("Modern Manufacturing template — view model", () => {
       textScale: "1",
       printWidth: 714,
       paperHeight: 1122,
+      photoCap: 596,
       stretchAllowed: false,
       stretchTable: false,
     });
@@ -3034,6 +3246,12 @@ describe("Modern Manufacturing template — view model", () => {
     expect(printWidth({ format: "A5", xMargins: "0.5" })).toBe(517);
     expect(printWidth({ format: "letter", landscape: true })).toBe(976);
     expect(printWidth({ zoomSize: "0.8" })).toBe(714);
+    // A large photo is at most 55 % of the page from the paper itself, never the window (vh).
+    expect(photoCap({})).toBe(596);
+    expect(photoCap({ format: "a5" })).toBe(415);
+    expect(photoCap({ landscape: true })).toBe(415);
+    expect(photoCap({ zoomSize: "1.2" })).toBe(496);
+    expect(photoCap({ zoomSize: "0.8" })).toBe(596);
     expect(printWidth({ zoomSize: "1.1", format: "unknown" })).toBe(641);
     // "Stretch invoice & quotation tables to fill the page": the business allows it
     // (experimental.stretchInvoiceTable), the document's own toggle asks for it.
@@ -3072,7 +3290,7 @@ describe("Modern Manufacturing template — view model", () => {
       invoice.template = { pdfOptions: { format: "a5", textScale: 1.1 } };
     });
     expect(html).toContain(
-      'style="--mm-text-scale: 1.1; --mm-print-width: 479px;"'
+      'style="--mm-text-scale: 1.1; --mm-print-width: 479px; --mm-photo-cap: 415px;"'
     );
     expect(html).not.toContain("--mm-print-zoom");
     expect(html).not.toContain("is-print-compact");
@@ -3240,20 +3458,39 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       /font-size: 18px;\s*line-height: [\d.]+;\s*font-weight: 600;/
     );
     expect(rule(".mm-banner .mm-banner-title")).toMatch(
-      /font-size: 14px;\s*line-height: [\d.]+;\s*font-weight: 700;/
+      /font-size: 16px;\s*line-height: [\d.]+;\s*font-weight: 600;/
     );
+    // The copy tag reads like the subtitle (user request).
     expect(rule(".mm-copy")).toMatch(
-      /font-size: 13px;\s*line-height: [\d.]+;\s*font-weight: 600;/
+      /font-size: 13px;\s*line-height: [\d.]+;\s*font-weight: 400;/
     );
-    // The seller's street in bold, then city, state and country in grey (user request, as the
-    // spec had it).
+    expect(rule(".mm-copy")).not.toMatch(/opacity/);
+    // Title, copy tag and status together at the start; the subtitle takes the free space.
+    expect(rule(".mm-banner .mm-banner-title")).toMatch(
+      /margin-inline-end: 0;/
+    );
+    expect(rule(".mm-subtitle")).toMatch(/margin-inline-start: auto;/);
+    // The whole address in grey, the street too (user, 2026-10-20).
     expect(rule(".mm-seller-address")).toMatch(/color: var\(--mm-muted\);/);
     expect(rule(".mm-seller-street")).toMatch(
-      /color: var\(--mm-strong\);\s*font-weight: 600;/
+      /color: var\(--mm-muted\);\s*font-weight: 400;/
     );
-    expect(rule(".mm-items thead th")).toMatch(/font-weight: 700;/);
-    expect(rule(".mm-item-name")).toMatch(/font-weight: 700;/);
-    expect(rule(".mm-signature-for")).toMatch(/font-weight: 700;/);
+    // No weight above 600 but the grand total amount (user request): not even text the
+    // browser or the notes library makes bold, and the box titles are 600 too.
+    expect(css).not.toMatch(/font-weight: 700;/);
+    expect(css).toMatch(
+      /\.mm-doc :is\(strong, b, th\),\s*\.mm-doc \.toastui-editor-contents :is\(strong, b\) \{\s*font-weight: 600;/
+    );
+    expect(rule(".mm-party-label")).toMatch(/font-weight: 600;/);
+    // Field values (transport, bank, additional information) at 500 (user request).
+    expect(rule(".mm-kv-value")).toMatch(/font-weight: 500;/);
+    expect(rule(".mm-info-value")).toMatch(/font-weight: 500;/);
+    expect(css).toMatch(
+      /600, not the shared widget's 700\. \*\/\n\.mm-totals \.ceres-subtotal-row-grand > \.ceres-subtotal-value \{\s*font-weight: 600;/
+    );
+    expect(rule(".mm-items thead th")).toMatch(/font-weight: 600;/);
+    expect(rule(".mm-item-name")).toMatch(/font-weight: 600;/);
+    expect(rule(".mm-signature-for")).toMatch(/font-weight: 600;/);
     expect(rule(".mm-party-name")).toMatch(
       /font-size: 13px;\s*line-height: [\d.]+;\s*font-weight: 600;/
     );
@@ -3264,10 +3501,10 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       /\.mm-totals:has\(\.ceres-subtotal-table-extra, \.ceres-subtotal-table-due\) \.mm-words \{\s*padding-top: 8px;\s*border-top: 1px solid var\(--mm-line\);/
     );
     expect(rule(".mm-section-title")).toMatch(
-      /font-size: 13px;[^}]*font-weight: 700;/
+      /font-size: 13px;[^}]*font-weight: 600;/
     );
     expect(css).toMatch(
-      /\[data-role="grand-total"\]\s*\{[^}]*font-size: 18px;\s*line-height: [\d.]+;\s*font-weight: 800;/
+      /\[data-role="grand-total"\]\s*\{[^}]*font-size: 18px;\s*line-height: [\d.]+;\s*font-weight: 600;/
     );
     // Grand total label 18/500.
     expect(css).toMatch(
@@ -3280,7 +3517,9 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
   });
 
   it("uses the spec's spacing: sections, boxes, cells and images", () => {
+    // 16 px between sections (user request).
     expect(rule(".mm-doc")).toMatch(/gap: 16px;/);
+    expect(rule(".mm-banner")).toMatch(/gap: 12px;\s*padding: 10px 12px;/);
     // One 32 px gutter at the sides, as the default template has (user request: Lydia adds
     // none); the letterhead and footer run through it to the page's edges, and the gutter
     // keeps the content off the top / bottom edge when there is no letterhead / footer.
@@ -3305,20 +3544,19 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(rule(".mm-pair-box")).toMatch(/padding: 12px;/);
     // Parties: padding 14, 6 px between lines.
     expect(css).toMatch(
-      /\.mm-parties > \.mm-pair-box,\s*\.mm-dispatch > \.mm-pair-box \{\s*gap: 6px;\s*padding: 14px;/
+      /\.mm-parties > \.mm-pair-box,\s*\.mm-dispatch > \.mm-pair-box \{\s*gap: 6px;\s*padding: 12px;/
     );
-    expect(rule(".mm-detail")).toMatch(/gap: 4px;[\s\S]*padding: 10px;/);
-    // Item cells 8 × 6, plus 8 px at the row ends.
+    expect(rule(".mm-detail")).toMatch(/gap: 4px;[\s\S]*padding: 12px;/);
+    expect(rule(".mm-detail .mm-value")).toMatch(/font-weight: 500;/);
+    expect(rule(".mm-banner")).toMatch(/border-radius: 6px;/);
+    // Item headers and cells: 6 px on every side, the row ends too (user request).
     expect(css).toMatch(
-      /\.mm-items th,\s*\.mm-items td\s*\{[^}]*padding: 8px 6px;/
+      /\.mm-items th,\s*\.mm-items td\s*\{[^}]*padding: 6px;/
     );
-    // The row-end 8 px is split evenly on both sides of the first and last cells.
-    expect(css).toMatch(
-      /\.mm-items tr > :first-child,\s*\.mm-items tr > :last-child \{\s*padding-right: 10px;\s*padding-left: 10px;/
+    expect(css).not.toMatch(
+      /\.mm-items tr > :first-child,\s*\.mm-items tr > :last-child \{/
     );
-    expect(rule(".mm-items tr > .mm-col-serial")).toMatch(
-      /padding-right: 8px;\s*padding-left: 8px;/
-    );
+    expect(rule(".mm-items tr > .mm-col-serial")).toBe("");
     // 8 px between a box title and its content; 12 px between groups.
     expect(rule(".mm-note-group")).toMatch(/gap: 8px;/);
     expect(rule(".mm-note-block")).toMatch(/gap: 12px;/);
@@ -3332,15 +3570,18 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     // Summary tables (HSN, tax summary, payment record): cells 6 × 8 px, the same at the
     // row ends (user request).
     expect(css).toMatch(
-      /\.mm-hsn-table th,\s*\.mm-hsn-table td\s*\{[^}]*padding: 6px 8px;/
+      /\.mm-hsn-table th,\s*\.mm-hsn-table td\s*\{[^}]*padding: 6px;/
     );
     expect(css).not.toMatch(/padding-(left|right): 18px;/);
     expect(css).toMatch(
-      /\.mm-widget-table \.ceres-table th,\s*\.mm-widget-table \.ceres-table td\s*\{\s*padding: 6px 8px;/
+      /\.mm-widget-table \.ceres-table th,\s*\.mm-widget-table \.ceres-table td\s*\{\s*padding: 6px;/
     );
-    expect(rule(".mm-widget-table .ceres-table-heading")).toMatch(
-      /padding: 6px 8px;/
-    );
+    // The summary headings (HSN Summary, Tax Summary, Batch Summary, Payments) share a rule.
+    expect(
+      rule(
+        ".mm-widget-table .ceres-table-heading,\n.mm-hsn .ceres-table-heading"
+      )
+    ).toMatch(/padding: 6px;/);
     // Columns share the width evenly (user request; the spec had 150 px numeric columns).
     expect(rule(".mm-hsn-table")).toMatch(/table-layout: fixed;/);
     expect(rule(".mm-widget-table .ceres-table")).toMatch(/min-width: 560px;/);
@@ -3365,7 +3606,8 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       ".mm-widget-table .ceres-table thead tr:first-child:not(:only-child) th:not([colspan])"
     );
     expect(rule(".mm-items .ceres-image-gallery")).toMatch(/gap: 8px;/);
-    expect(rule(".mm-signature-section")).toMatch(/margin-top: 16px;/);
+    // One 16 px section gap above the signature too (user request).
+    expect(rule(".mm-signature-section")).not.toMatch(/margin-top/);
     // The signature block (and its rule) grows with its text, 240 px at the least.
     expect(rule(".mm-signature")).toMatch(
       /width: max-content;\s*min-width: min\(240px, 100%\);\s*max-width: 100%;/
@@ -3374,12 +3616,13 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
   });
 
   it("gives every text size its line height on a 4 px rhythm", () => {
-    // 11 → 16, 12 → 18, 13 → 20, 14 → 20, 18 → 24, 20 → 24 px, as ratios so they scale.
+    // 11 → 16, 12 → 18, 13 → 20, 14 → 20, 16 → 24, 18 → 24, 20 → 24 px, as ratios so they scale.
     const expected: Record<string, string> = {
       "11": "1.4545",
       "12": "1.5",
       "13": "1.5385",
       "14": "1.4286",
+      "16": "1.5",
       "18": "1.3333",
       "20": "1.2",
     };
@@ -3420,9 +3663,10 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     const print = source.slice(source.indexOf("@media print"));
     const screen = steps(source.slice(0, source.indexOf("@media")));
     const paper = steps(print);
-    expect(screen).toEqual({ xs: 10, s: 11, base: 13, m: 14, lg: 18, xl: 20 });
+    // m is the banner title: 16 px on screen and paper (user request).
+    expect(screen).toEqual({ xs: 10, s: 11, base: 13, m: 16, lg: 18, xl: 20 });
     // Print compresses only the steps above base.
-    expect(paper).toEqual({ xs: 10, s: 11, base: 13, m: 14, lg: 16, xl: 18 });
+    expect(paper).toEqual({ xs: 10, s: 11, base: 13, m: 16, lg: 16, xl: 18 });
     // Nothing below 10 px anywhere (the parser found declarations, so this is not vacuous).
     const all = Array.from(
       source.matchAll(/(?:font-size|--mm-font-size-\w+):\s*(\d+(?:\.\d+)?)px/g),
@@ -3430,8 +3674,11 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     );
     expect(all.length).toBeGreaterThanOrEqual(12);
     all.forEach((size) => expect(size).toBeGreaterThanOrEqual(10));
-    // No page-fit zoom: print is true size; the renderer's print size does the scaling.
-    expect(source).not.toMatch(/zoom:/);
+    // No page-fit zoom: print is true size; the renderer's print size does the scaling. The one
+    // zoom is the last resort of a table still too wide at the 10 px floor, never cut off.
+    expect(source.match(/zoom:[^;]*;/g)).toEqual([
+      "zoom: var(--mm-print-squeeze, 1);",
+    ]);
   });
 
   it("prints at true size on the full printable width, fitting a wide table", () => {
@@ -3500,16 +3747,59 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(rule(".mm-party-label")).toMatch(/color: var\(--mm-accent\);/);
   });
 
-  it("keeps the company name beside the logo until its longest word no longer fits", () => {
-    expect(rule(".mm-brand")).toMatch(
-      /display: flex;\s*flex: 1 1 auto;\s*flex-wrap: wrap;\s*align-items: center;\s*gap: 14px;\s*min-width: 0;/
+  it("splits the HSN and tax tables' width equally between their columns", () => {
+    expect(rule(".mm-widget-table .ceres-table")).toMatch(
+      /table-layout: fixed;/
     );
-    // Never narrower than its longest word: below that it moves under the logo.
+    expect(rule(".mm-hsn-table")).toMatch(/table-layout: fixed;/);
+    // A tax heading over Rate | Amount takes two shares of a four-column table.
+    expect(css).toMatch(
+      /:nth-child\(4\):last-child\)\s*\[colspan="2"\] \{\s*width: 50%;/
+    );
+    // Long entries wrap inside their own column instead of running into the next.
+    const cells = rule(
+      ".mm-widget-table .ceres-table th,\n.mm-widget-table .ceres-table td"
+    );
+    expect(cells).toMatch(/overflow-wrap: anywhere;/);
+    expect(cells).not.toMatch(/nowrap/);
+    // The Batch Summary is sized by its content, words kept whole (user request).
+    expect(rule("[data-ceres-batch-summary] .ceres-table")).toMatch(
+      /table-layout: auto;/
+    );
+    expect(css).toMatch(
+      /\.mm-widget-table:not\(\[data-ceres-batch-summary\]\)\s*\.ceres-table:has/
+    );
+    // The Payments table keeps its earlier layout (user request): content-sized, one line.
+    expect(rule("[data-ceres-payment-table] .ceres-table")).toMatch(
+      /table-layout: auto;/
+    );
+    expect(
+      rule(
+        "[data-ceres-payment-table] .ceres-table th,\n[data-ceres-payment-table] .ceres-table td"
+      )
+    ).toMatch(/white-space: nowrap;/);
+  });
+
+  it("lines up the second field mid-box in every party box", () => {
+    expect(rule(".mm-party .mm-id-grid")).toMatch(
+      /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/
+    );
+  });
+
+  it("sets the logo and the seller details side by side on the left", () => {
+    expect(rule(".mm-brand")).toMatch(
+      /display: flex;\s*flex: 1 1 auto;\s*flex-wrap: wrap;\s*align-items: flex-start;\s*gap: 14px;\s*min-width: 0;/
+    );
+    // Left-aligned, taking the room up to the QR; under the logo below 260 px.
+    expect(rule(".mm-seller")).toMatch(
+      /display: flex;\s*flex: 1 1 260px;\s*flex-direction: column;\s*align-items: flex-start;\s*gap: 8px;\s*min-width: 0;/
+    );
+    expect(rule(".mm-seller")).not.toMatch(/text-align: end/);
     expect(rule(".mm-brand-name")).toMatch(
-      /flex: 1 0 min-content;\s*min-width: 0;\s*max-width: 100%;[\s\S]*overflow-wrap: break-word;/
+      /max-width: 100%;[\s\S]*overflow-wrap: break-word;/
     );
     expect(rule(".mm-logo")).toMatch(/flex: 0 1 auto;\s*min-width: 0;/);
-    // Brand | seller details 20 px apart (Figma).
+    // Brand | QR 20 px apart (Figma).
     expect(rule(".mm-header")).toMatch(/gap: 20px;/);
   });
 
@@ -3525,14 +3815,11 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
 
   it("spaces identifier lines 4 px apart wherever they are", () => {
     expect(rule(".mm-id-grid")).toMatch(/gap: 4px 12px;/);
-    // In the header they are set from the right: a one-field line in the right-hand column,
-    // a field wrapping from a fuller line in the left one (as live; user request).
-    expect(rule(".mm-seller .mm-id-grid")).toMatch(
-      /justify-content: end;\s*text-align: end;/
+    // In the header too, from the left, beside the logo (user, 2026-10-20).
+    expect(rule(".mm-seller .mm-id-grid")).toBe("");
+    expect(css).not.toContain(
+      ".mm-seller .mm-id-grid > .mm-id-line > .mm-id:only-child"
     );
-    expect(
-      rule(".mm-seller .mm-id-grid > .mm-id-line > .mm-id:only-child")
-    ).toMatch(/grid-column: -2 \/ -1;/);
     expect(css).not.toContain(":last-child:nth-child(odd)");
   });
 
@@ -3555,7 +3842,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
         ".mm-doc .mm-item-desc .toastui-editor-contents th,\n.mm-doc .mm-note-body .toastui-editor-contents th"
       )
     ).toMatch(
-      /border-color: var\(--mm-line\);\s*background: var\(--mm-title-bar\);\s*color: var\(--mm-accent\);\s*font-weight: 700;/
+      /border-color: var\(--mm-line\);\s*background: var\(--mm-title-bar\);\s*color: var\(--mm-accent\);\s*font-weight: 600;/
     );
     // Headings and cells read from the left (user request).
     expect(
@@ -3621,6 +3908,35 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
 
   it("keeps figures on one line; original images fill their row", () => {
     expect(rule(".mm-num")).toMatch(/white-space: nowrap;/);
+    // A value holding two numbers ("12345678901 / 12345678901") stays on one line too: the bank
+    // and transport halves widen for it rather than wrap it (user rule).
+    expect(rule(".mm-kv-value.mm-num")).toBe("");
+    expect(rule(".mm-summary-row")).toMatch(
+      /grid-template-columns: repeat\(2, minmax\(min-content, 1fr\)\);/
+    );
+    expect(rule(".mm-bank-rows")).toMatch(
+      /minmax\(100px, max-content\) minmax\(min-content, 1fr\)/
+    );
+    expect(rule(".mm-dispatch")).toMatch(
+      /repeat\(2, minmax\(min-content, 1fr\)\)/
+    );
+    expect(rule(".mm-widget-table .ceres-table td[data-mm-figure]")).toMatch(
+      /white-space: nowrap;/
+    );
+    expect(rule("[data-ceres-payment-table] .ceres-table th")).toMatch(
+      /white-space: normal;/
+    );
+    // On a phone the summary tables read as cards, like the HSN summary.
+    expect(css).toMatch(
+      /\.mm-doc \.mm-widget-table \.ceres-table td\[data-label\]::before \{[^}]*content: attr\(data-label\);/
+    );
+    // A party line whose field does not fit its half on one line stacks its fields instead.
+    expect(rule(".mm-id-grid > .mm-id-line.is-stacked > .mm-id")).toMatch(
+      /grid-column: 1 \/ -1;/
+    );
+    expect(rule(".mm-id-grid.is-measuring > .mm-id-line .mm-id")).toMatch(
+      /white-space: nowrap;/
+    );
     expect(rule(".mm-large-image")).toMatch(
       /width: 100%;\s*max-width: 100%;\s*height: auto;/
     );
@@ -3673,7 +3989,9 @@ describe("Modern Manufacturing — boxes split by a page break", () => {
       path.join(TEMPLATE_DIR, "styles.css"),
       "utf8"
     );
-    const print = source.slice(source.lastIndexOf("@media print"));
+    const print = source.slice(
+      source.indexOf("A box split by a page break closes")
+    );
     expect(print).toContain(
       ":is(.mm-box, .mm-pair, .mm-pair-box, .mm-bank, .mm-summary-row, .mm-widget-box)"
     );

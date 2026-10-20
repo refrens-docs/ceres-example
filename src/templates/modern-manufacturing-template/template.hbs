@@ -13,7 +13,7 @@
   data-role / data-col are the spec's test hooks (section 11).
 --}}
 {{#with (mmView @root) as |view|}}
-<div class="mm-doc" data-testid="invoice-root"{{#if view.foreignCurrency}} data-mm-currency="{{view.foreignCurrency}}"{{/if}}{{#if view.print.stretchAllowed}} data-mm-stretch-allowed{{/if}}{{#if view.print.stretchTable}} data-mm-stretch-table{{/if}} data-mm-paper-height="{{view.print.paperHeight}}" dir="{{view.script.direction}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}} style="--mm-text-scale: {{view.print.textScale}}; --mm-print-width: {{view.print.printWidth}}px;{{#if view.script.font}} --mm-script-font: '{{view.script.font}}';{{/if}}{{#if view.theme}} --mm-theme: {{view.theme.accent}}; --mm-theme-tint: {{view.theme.tint}};{{/if}}">
+<div class="mm-doc" data-testid="invoice-root"{{#if view.foreignCurrency}} data-mm-currency="{{view.foreignCurrency}}"{{/if}}{{#if view.print.stretchAllowed}} data-mm-stretch-allowed{{/if}}{{#if view.print.stretchTable}} data-mm-stretch-table{{/if}} data-mm-paper-height="{{view.print.paperHeight}}" dir="{{view.script.direction}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}} style="--mm-text-scale: {{view.print.textScale}}; --mm-print-width: {{view.print.printWidth}}px; --mm-photo-cap: {{view.print.photoCap}}px;{{#if view.script.font}} --mm-script-font: '{{view.script.font}}';{{/if}}{{#if view.theme}} --mm-theme: {{view.theme.accent}}; --mm-theme-tint: {{view.theme.tint}};{{/if}}">
   {{#unless view.letterheadEveryPage}}
     <div class="no-dibella invoice-letterhead mm-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}">
       {{#if @root.invoice.letterHead}}
@@ -64,18 +64,17 @@
         <td class="mm-page-frame-cell">
           <div class="mm-page-body">
           <header class="mm-header" data-testid="section" data-section="header">
+            {{!-- The logo, then the company and its details beside it, on the left (user, 2026-10-20);
+                 no logo, no stand-in. --}}
             <div class="mm-brand">
-              {{!-- No logo, no stand-in: the company name leads the header (user request). --}}
               {{#if view.brand.logo}}
                 <div class="mm-logo">{{> CeresImage src=view.brand.logo alt=view.brand.name class="mm-logo-image"}}</div>
               {{/if}}
-              {{#if view.brand.name}}<h1 class="mm-brand-name" data-role="company-name">{{view.brand.name}}</h1>{{/if}}
-            </div>
-            {{!-- The seller block, then the document QR beside it (12 px apart). --}}
-            <div class="mm-header-end">
               {{#if view.brand.seller}}
                 <div class="mm-seller">
                   {{!-- No heading over the seller block on any document type (user, 2026-10-19: "Quotation From" not required). --}}
+                  {{!-- The company name heads the seller block, above the address (user, 2026-10-20). --}}
+                  {{#if view.brand.name}}<h1 class="mm-brand-name" data-role="company-name">{{view.brand.name}}</h1>{{/if}}
                   {{#if view.brand.seller.address}}
                     <div class="mm-seller-address">
                       {{#if view.brand.seller.street}}<p class="mm-seller-street">{{view.brand.seller.street}}</p>{{/if}}
@@ -90,7 +89,12 @@
                     </div>
                   {{/if}}
                 </div>
+              {{else if view.brand.name}}
+                <div class="mm-seller"><h1 class="mm-brand-name" data-role="company-name">{{view.brand.name}}</h1></div>
               {{/if}}
+            </div>
+            {{!-- The document QR alone on the right. --}}
+            <div class="mm-header-end">
               <div class="mm-qr mm-header-qr{{#unless view.compliance.qr.document}} is-empty{{/unless}}" data-ceres-field-container="documentQr">
                 <img data-ceres-field="documentQr"{{#if view.compliance.qr.document}} src="{{view.compliance.qr.document}}"{{/if}} alt="Document QR Code" />
               </div>
@@ -100,10 +104,11 @@
           {{#if view.title}}
             <div class="mm-banner" data-testid="section" data-section="banner">
               <h2 class="mm-banner-title" data-role="title">{{view.title}}</h2>
-              {{!-- The status tag (Paid, Created…) right after the title (user request); on paper only when the document asks. --}}
-              {{#if view.status}}<span class="mm-status{{#unless view.status.inPrint}} no-print{{/unless}}"><span class="invoice-tag {{view.status.color}}">{{view.status.text}}</span></span>{{/if}}
-              {{!-- The copy tag, then the subtitle last, at the banner's right end. --}}
+              {{!-- The copy tag ("Original for Recipient") just after the title (user request). --}}
               {{#if view.copy}}<span class="mm-copy" data-role="tag">{{view.copy}}</span>{{/if}}
+              {{!-- The status tag (Paid, Created…) next (user request); on paper only when the document asks. --}}
+              {{#if view.status}}<span class="mm-status{{#unless view.status.inPrint}} no-print{{/unless}}"><span class="invoice-tag {{view.status.color}}">{{view.status.text}}</span></span>{{/if}}
+              {{!-- The subtitle last, at the banner's right end. --}}
               {{#if view.subtitle}}<span class="mm-subtitle">{{view.subtitle}}</span>{{/if}}
             </div>
           {{/if}}
@@ -208,7 +213,7 @@
 
           <section class="mm-items-section" data-testid="section" data-section="items">
             <div class="mm-items-scroll" data-testid="items-scroll">
-              <table class="mm-items{{#if view.table.showThumbnail}} has-thumbnails{{/if}}{{#if view.table.smallNumbers}} has-small-numbers{{/if}}" data-testid="items-table">
+              <table class="mm-items{{#if view.table.manyFigures}} has-many-figures{{/if}}{{#if view.table.showThumbnail}} has-thumbnails{{/if}}{{#if view.table.smallNumbers}} has-small-numbers{{/if}}" data-testid="items-table" style="--mm-figures: {{view.table.figureCount}}; --mm-serial-width: {{view.table.serialWidth}}px;">
                 <thead>
                   <tr data-testid="items-header">
                     <th class="mm-col-serial is-fixed" data-col="sr" style="width: {{view.table.serialWidth}}px">{{view.table.serialLabel}}</th>
@@ -245,7 +250,7 @@
                               {{/if}}
                             </td>
                           {{else}}
-                            <td class="{{className}}" data-col="{{col}}">{{#if isNum}}<span class="mm-num" data-testid="num">{{value}}</span>{{else}}{{value}}{{/if}}</td>
+                            <td class="{{className}}" data-label="{{label}}" data-col="{{col}}">{{#if isNum}}<span class="mm-num" data-testid="num">{{value}}</span>{{else}}{{value}}{{/if}}</td>
                           {{/if}}
                         {{/each}}
                       </tr>
@@ -276,7 +281,7 @@
                     <tr class="mm-total-row" data-testid="items-total">
                       <td class="mm-col-serial is-fixed" data-col="sr">{{#if view.table.footer.labelInSerial}}{{view.table.footer.label}}{{/if}}</td>
                       {{#each view.table.footer.cells}}
-                        <td class="{{className}}" data-col="{{col}}">{{#if isName}}{{view.table.footer.label}}{{else if isNum}}<span class="mm-num" data-testid="num">{{value}}</span>{{/if}}</td>
+                        <td class="{{className}}"{{#unless isName}} data-label="{{label}}"{{/unless}} data-col="{{col}}">{{#if isName}}{{view.table.footer.label}}{{else if isNum}}<span class="mm-num" data-testid="num">{{value}}</span>{{/if}}</td>
                       {{/each}}
                     </tr>
                   </tfoot>
@@ -459,6 +464,7 @@
 
           {{#if view.showHsn}}
             <section class="mm-box mm-hsn" data-testid="section" data-section="hsn" data-ceres-hsn-summary>
+              <h3 class="ceres-table-heading">{{view.hsn.title}}</h3>
               <table class="mm-hsn-table">
                 <thead>
                   <tr>
@@ -535,7 +541,27 @@
           {{!-- The optional tax summary and payment record follow the HSN summary. --}}
           {{#if view.showTaxSummary}}
             <div class="mm-widget-box mm-widget-table" data-ceres-tax-summary>
+              <h3 class="ceres-table-heading">{{view.taxSummaryTitle}}</h3>
               {{> TaxSummaryTable (computeTaxSummary @root.invoice.items isIgst=(showIgst @root.invoice) isUtgst=(showUtgst @root.invoice)) }}
+            </div>
+          {{/if}}
+
+          {{!-- Batch Summary (refrens.com), styled like the other summary tables. --}}
+          {{#if view.batchSummary.show}}
+            <div class="mm-widget-box mm-widget-table" data-ceres-batch-summary>
+              <div class="ceres-table-section">
+                <h3 class="ceres-table-heading">{{view.batchSummary.title}}</h3>
+                <table class="ceres-table">
+                  <thead>
+                    <tr>{{#each view.batchSummary.columns}}<th>{{label}}</th>{{/each}}</tr>
+                  </thead>
+                  <tbody>
+                    {{#each view.batchSummary.rows}}
+                      <tr>{{#each this}}<td>{{#if isDate}}{{mmDate value @root.invoice.ownerOffset}}{{else}}{{value}}{{/if}}</td>{{/each}}</tr>
+                    {{/each}}
+                  </tbody>
+                </table>
+              </div>
             </div>
           {{/if}}
 

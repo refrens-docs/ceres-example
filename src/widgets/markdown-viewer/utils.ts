@@ -24,8 +24,9 @@ export const defaultCustomLinkProps = Object.freeze({
   rel: "noreferrer nofollow noopener external",
 });
 
+// Inline emphasis stays (refrens.com prints <strong> text bold); everything else is stripped.
 const DOMPURIFY_CONFIG = {
-  ALLOWED_TAGS: ["br", "a"],
+  ALLOWED_TAGS: ["br", "a", "strong", "b", "em", "i", "u", "s", "del"],
   ALLOWED_ATTR: ["href", "title"],
   KEEP_CONTENT: true,
 } as const;

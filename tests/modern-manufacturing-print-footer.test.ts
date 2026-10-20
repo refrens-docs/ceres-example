@@ -12,6 +12,9 @@ import {
   registerModernManufacturingPrint,
   resetFootersOnPageEdge,
   respellTaxWords,
+  drawRiyalSigns,
+  stackCrampedFields,
+  labelSummaryCells,
 } from "../src/templates/modern-manufacturing-template/helpers";
 
 /*
@@ -646,5 +649,121 @@ describe("Modern Manufacturing — the tax summary's words in the document's cur
       summary("SAR");
     await Promise.resolve();
     expect(words()).toBe("Total Tax In Words: EIGHTEEN RIYALS ONLY");
+    // The riyal sign is drawn on the same pass.
+    expect(document.querySelectorAll("svg.mm-riyal").length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toContain("\u20c1");
+  });
+});
+
+describe("Modern Manufacturing — the Saudi riyal sign", () => {
+  it("draws every sign in the document, in the text's place, and leaves other text alone", () => {
+    document.body.innerHTML =
+      '<p class="outside">\u20c1 1.00</p><div class="mm-doc"><span>\u20c1 100.00</span><i class="paid">(\u20c1 118.00) / \u20c1\u20c1</i><b>\u20b9 5.00</b></div>';
+    drawRiyalSigns();
+    const doc = document.querySelector(".mm-doc") as HTMLElement;
+    const signs = doc.querySelectorAll("svg.mm-riyal");
+    expect(signs).toHaveLength(4);
+    expect(doc.textContent).toBe(" 100.00( 118.00) / \u20b9 5.00");
+    expect(signs[0].getAttribute("aria-label")).toBe("SAR");
+    expect(signs[0].getAttribute("viewBox")).toBe("50 6 1124 1256");
+    expect(signs[0].querySelector("path")?.getAttribute("d")).toMatch(
+      /^M750,1119C/
+    );
+    // The sign sits where the character was: before the amount, inside the parentheses.
+    expect((doc.querySelector(".paid") as HTMLElement).innerHTML).toMatch(
+      /^\(<svg[^>]*>.*?<\/svg> 118\.00\) \/ <svg/
+    );
+    // Outside the document, nothing is touched; a second pass finds nothing left.
+    expect(document.querySelector(".outside")?.textContent).toBe("\u20c1 1.00");
+    drawRiyalSigns();
+    expect(doc.querySelectorAll("svg.mm-riyal")).toHaveLength(4);
+  });
+});
+
+describe("Modern Manufacturing — party fields too wide for their half", () => {
+  // jsdom has no layout: each field reports the width it needs on one line.
+  const grid = (needs: number[][]) => {
+    document.body.innerHTML = `<div class="mm-id-grid">${needs
+      .map(
+        (line) =>
+          `<p class="mm-id-line">${line
+            .map(() => '<span class="mm-id"></span>')
+            .join("")}</p>`
+      )
+      .join("")}</div>`;
+    const fields = [...document.querySelectorAll<HTMLElement>(".mm-id")];
+    needs.flat().forEach((need, i) => {
+      Object.defineProperty(fields[i], "clientWidth", { value: 200 });
+      Object.defineProperty(fields[i], "scrollWidth", {
+        get: () => (fields[i].closest(".is-measuring") ? need : 200),
+      });
+    });
+    return [...document.querySelectorAll<HTMLElement>(".mm-id-line")];
+  };
+
+  it("stacks a line whose field needs more than its half, measured on one line", () => {
+    const lines = grid([[150, 180], [150, 260], [320]]);
+    stackCrampedFields();
+    expect(lines.map((line) => line.classList.contains("is-stacked"))).toEqual([
+      false,
+      true,
+      false,
+    ]);
+    expect(document.querySelector(".is-measuring")).toBeNull();
+  });
+
+  it("puts a line back side by side once its fields fit again", () => {
+    const lines = grid([[150, 180]]);
+    lines[0].classList.add("is-stacked");
+    stackCrampedFields();
+    expect(lines[0].classList.contains("is-stacked")).toBe(false);
+  });
+});
+
+describe("Modern Manufacturing — summary tables as phone cards", () => {
+  it("labels each cell with its column's headings, the Total row by its first cell", () => {
+    document.body.innerHTML = `<div class="mm-widget-table"><table class="ceres-table">
+      <thead><tr><th>Tax Rate</th><th colspan="2">IGST</th><th>Total</th></tr>
+        <tr><th></th><th>Rate</th><th>Amount</th><th></th></tr></thead>
+      <tbody><tr><td>18%</td><td>18%</td><td>$900.54</td><td>$900.54</td></tr></tbody>
+      <tfoot><tr><td><strong>Total</strong></td><td></td><td>$900.54</td><td>$900.54</td></tr>
+        <tr><td colspan="99" class="ceres-table-words">Total Tax In Words: NINE HUNDRED</td></tr></tfoot>
+    </table></div>`;
+    labelSummaryCells();
+    const labels = (row: string) =>
+      [...document.querySelectorAll(`${row} td`)].map((cell) =>
+        cell.getAttribute("data-label")
+      );
+    expect(labels("tbody tr")).toEqual([
+      "Tax Rate",
+      "IGST Rate",
+      "IGST Amount",
+      "Total",
+    ]);
+    expect(labels("tfoot tr:first-child")).toEqual([
+      null,
+      "IGST Rate",
+      "IGST Amount",
+      "Total",
+    ]);
+    expect(labels("tfoot tr:last-child")).toEqual([null]);
+    expect(
+      document
+        .querySelector("tfoot td:nth-child(2)")
+        ?.hasAttribute("data-mm-empty")
+    ).toBe(true);
+  });
+
+  it("marks figures and dates to stay on one line, never words", () => {
+    document.body.innerHTML = `<div class="mm-widget-table"><table class="ceres-table">
+      <thead><tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th></tr></thead>
+      <tbody><tr><td>Sep 15, 2026</td><td>26-Dec-2025</td><td> $3.54 </td><td>Account Transfer</td><td>Bank account 0001</td></tr></tbody>
+    </table></div>`;
+    labelSummaryCells();
+    expect(
+      [...document.querySelectorAll("td")].map((cell) =>
+        cell.hasAttribute("data-mm-figure")
+      )
+    ).toEqual([true, true, true, false, false]);
   });
 });

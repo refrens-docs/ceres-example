@@ -116,6 +116,7 @@ async function measure(page: Page) {
         count: boxes.length,
         widths: boxes.map((b) => b.getBoundingClientRect().width / rowW),
         heights: boxes.map((b) => Math.round(b.getBoundingClientRect().height)),
+        tops: boxes.map((b) => Math.round(b.getBoundingClientRect().top)),
       };
     });
 
@@ -169,10 +170,27 @@ async function measure(page: Page) {
       overflowing,
       pastRightEdge,
       cols,
+      // CHANGED (user request, 2026-10-20): on a phone, or a tablet where the table would
+      // scroll, the items read as cards or a headings row (fitItemsToScreen); there the
+      // description runs across the item instead of holding a column of the table.
       descRatio:
-        table && descTh
+        table && descTh && !table.matches(".is-cards, .is-grid")
           ? descTh.getBoundingClientRect().width /
             table.getBoundingClientRect().width
+          : null,
+      stackedDesc:
+        table && table.matches(".is-cards, .is-grid")
+          ? Math.min(
+              ...Array.from(
+                table.querySelectorAll<HTMLElement>(
+                  '.mm-item-row > [data-col="desc"]'
+                )
+              ).map(
+                (cell) =>
+                  cell.getBoundingClientRect().width /
+                  cell.parentElement!.getBoundingClientRect().width
+              )
+            )
           : null,
       // CHANGED (user request, 2026-10-06): original images fill the table's width in a row
       // of their own instead of a fixed 280 × 280; measured against their cell's content box.
@@ -211,13 +229,14 @@ function checkLayout(m: Awaited<ReturnType<typeof measure>>) {
   expect(order, "K1 section order").toEqual(
     SECTION_ORDER.filter((s) => order.includes(s))
   );
-  // K2 pairs: single box full width, two boxes equal height
+  // K2 pairs: single box full width, two boxes side by side equal height. CHANGED (user
+  // request): stacked on a narrow page, each box hugs its own content.
   for (const p of m.pairs) {
     if (p.count === 1)
       expect(p.widths[0], `K2 ${p.name} single box full width`).toBeGreaterThan(
         0.99
       );
-    if (p.count === 2 && p.name !== "summary") {
+    if (p.count === 2 && p.name !== "summary" && p.tops[0] === p.tops[1]) {
       // bank + totals may differ in height inside one container
       expect(
         Math.abs(p.heights[0] - p.heights[1]),
@@ -239,6 +258,11 @@ function checkLayout(m: Awaited<ReturnType<typeof measure>>) {
   // K7 description width, large images
   if (m.descRatio !== null)
     expect(m.descRatio, "K7 description ≥ 22%").toBeGreaterThanOrEqual(0.215);
+  if (m.stackedDesc !== null)
+    expect(
+      m.stackedDesc,
+      "K7 stacked items: the description runs across the item"
+    ).toBeGreaterThanOrEqual(0.8);
   // CHANGED (user request): each original image fills its own row, which spans the table.
   for (const [w, inner, span, cells] of m.largeImages) {
     expect(
@@ -250,7 +274,8 @@ function checkLayout(m: Awaited<ReturnType<typeof measure>>) {
   }
   // K8 signature placement
   if (m.sigGap !== null)
-    expect(Math.abs(m.sigGap - 32), "K8 signature gap").toBeLessThanOrEqual(2);
+    // CHANGED (user request): the 16 px section gap above the signature too (was 32).
+    expect(Math.abs(m.sigGap - 16), "K8 signature gap").toBeLessThanOrEqual(2);
   if (m.sigRightAligned !== null)
     expect(m.sigRightAligned, "K8 signature right-aligned").toBe(true);
 }
@@ -416,17 +441,18 @@ test("D1: tokens, typography, spacing and column widths match Figma", async ({
   // CHANGED (user request, 2026-10-07): body text 12 px → 13 px.
   const type: [string, string, string][] = [
     ['[data-section="header"] [data-role="company-name"]', "18px", "600"],
-    ['[data-section="banner"] [data-role="title"]', "14px", "700"],
-    ['[data-testid="items-header"] [data-col="desc"]', "13px", "700"],
+    ['[data-section="banner"] [data-role="title"]', "16px", "600"],
+    ['[data-testid="items-header"] [data-col="desc"]', "13px", "600"],
     ['[data-testid="item-row"] [data-col="qty"]', "13px", "400"],
-    ['[data-testid="item-row"] [data-col="amt"]', "13px", "700"],
-    ['[data-section="totals"] [data-role="grand-total"]', "18px", "800"],
+    ['[data-testid="item-row"] [data-col="amt"]', "13px", "600"],
+    ['[data-section="totals"] [data-role="grand-total"]', "18px", "600"],
     // CHANGED (user request): section titles 10 px → 12 px → 13 px.
-    ['[data-section="terms"] [data-role="title"]', "13px", "700"],
+    ['[data-section="terms"] [data-role="title"]', "13px", "600"],
     ['[data-section="parties"] [data-role="address"]', "13px", "400"],
-    ['[data-section="banner"] [data-role="tag"]', "13px", "600"],
+    // The copy tag reads like the subtitle (user request).
+    ['[data-section="banner"] [data-role="tag"]', "13px", "400"],
     ['[data-section="additional"] [data-role="ai-label"]', "13px", "400"],
-    ['[data-section="additional"] [data-role="ai-value"]', "13px", "600"],
+    ['[data-section="additional"] [data-role="ai-value"]', "13px", "500"],
   ];
   for (const [sel, size, weight] of type) {
     expect(await style(sel, "font-size"), `size ${sel}`).toBe(size);
@@ -434,12 +460,17 @@ test("D1: tokens, typography, spacing and column widths match Figma", async ({
   }
 
   // K11 spacing
-  expect(await style('[data-testid="item-row"] td', "padding-top")).toBe("8px");
+  // Item cells: 6 px on every side (user request).
+  expect(await style('[data-testid="item-row"] td', "padding-top")).toBe("6px");
+  expect(await style('[data-testid="item-row"] td', "padding-left")).toBe(
+    "6px"
+  );
+  // Party boxes: 12 px padding (user request).
   expect(await style('[data-section="parties"] > *', "padding-top")).toBe(
-    "14px"
+    "12px"
   );
   expect(await style('[data-section="details"] > *', "padding-top")).toBe(
-    "10px"
+    "12px"
   );
   const gaps = await page.evaluate(() => {
     const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
