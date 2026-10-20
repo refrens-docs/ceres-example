@@ -37,11 +37,18 @@
 
   /*
    * Type scale (design-to-template §4a): 13 table headings, small print and the amount in
-   * words (user request, was 12); 13 body, table and every label; 20 the title. Print
-   * compresses only the top step.
+   * words (user request, was 12); 13 body, table and every label; 14 the section titles; 20
+   * the title; 11 an item's SKU / HSN / unit line (user request). Print compresses only the top
+   * step.
+   *
+   * Weights, three steps (user request: a clear hierarchy): 700 the title, section titles,
+   * table headings and totals; 600 names and labels (the business and the client, "GSTIN:",
+   * the signatory); 400 the values.
    */
+  --ec-font-size-xs: 11px;
   --ec-font-size-s: 13px;
   --ec-font-size-base: 13px;
+  --ec-font-size-m: 14px;
   --ec-font-size-xl: 20px;
 
   /* 32 px around the frame on screen; the letterhead and footer run to the edges. */
@@ -158,20 +165,27 @@
 
 /* ------------------------------------------------------------ frame */
 
-/* The design's ruled frame around the whole document: 8 px inside, 20 px between sections. */
+/*
+ * The ruled frame around the whole document: 12 px inside, 16 px between sections (user
+ * request: spacing neither tight nor loose; was 8 px inside, 20 px between, which set the
+ * text against the rule while the sections floated apart).
+ */
 .ec-frame {
+  --ec-frame-pad: 12px;
+
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 8px;
+  gap: 16px;
+  padding: var(--ec-frame-pad);
   border: 1px solid var(--ec-ink);
-  box-decoration-break: clone;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- Chrome before 130 needs it */
+  -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
 
-/* A label in bold, its value regular on the same line: "Order Number: 407-…". */
+/* A label in semibold, its value regular on the same line: "Order Number: 407-…". */
 .ec-field-label {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* ------------------------------------------------------------ masthead */
@@ -194,6 +208,12 @@
   align-items: center;
   max-width: 200px;
   min-height: 80px;
+}
+
+/* A logo that failed to load (helpers.ts marks it) gives up its box: no empty space above the
+   parties. */
+.ec-logo:has(.is-broken) {
+  display: none;
 }
 
 .ec-logo .ec-logo-image {
@@ -297,8 +317,15 @@
 }
 
 .ec-party-title {
+  margin-bottom: 4px; /* as every section title: 4 px to its content */
   font-family: var(--ec-title-font);
+  font-size: calc(var(--ec-font-size-m) * var(--ec-text-scale, 1));
   font-weight: 700;
+}
+
+/* The business's or the client's name leads its address. */
+.ec-party-name {
+  font-weight: 600;
 }
 
 /* The design's 4 px between a party's address and its first field (GSTIN, Phone…). */
@@ -343,12 +370,13 @@
   display: none;
 }
 
-/* Transport Details: the title 4 px above its lines, the lines set close like the parties'. */
-.ec-block.ec-transport {
+/* Transport Details and Additional Information: the title 4 px above its "Label: value" lines,
+   the lines set close like the parties' and the bank's. */
+.ec-block:is(.ec-transport, [data-section="additional"]) {
   gap: 0;
 }
 
-.ec-transport .ec-block-title {
+.ec-block:is(.ec-transport, [data-section="additional"]) .ec-block-title {
   margin-bottom: 4px;
 }
 
@@ -373,7 +401,6 @@
   overflow: hidden;
   background-color: currentcolor;
   -webkit-text-fill-color: transparent;
-  mask: url("data:image/png;base64,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") center / contain no-repeat;
   mask: url("data:image/png;base64,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") center / contain no-repeat;
 }
 
@@ -467,7 +494,7 @@
   background: var(--ec-head-fill);
   font-family: var(--ec-title-font);
   font-size: calc(var(--ec-font-size-s) * var(--ec-text-scale, 1));
-  font-weight: 700;
+  font-weight: 600; /* semibold, as the field labels (user request) */
   vertical-align: top;
   overflow-wrap: normal;
 }
@@ -557,8 +584,9 @@
 }
 
 /* The last column (Amount) reads from the end edge, heading and figures, in line with the
-   totals under it (user request). */
-.ec-items thead th:last-child:not(.ec-col-name, .ec-col-serial),
+   totals under it (user request). The table's own heading row only: a table in a description
+   keeps its headings at the start edge ("Pcs" ran to the end, user report). */
+.ec-items > thead th:last-child:not(.ec-col-name, .ec-col-serial),
 .ec-items .ec-item-row > td:last-child:not(.ec-col-name, .ec-col-serial) {
   text-align: end;
 }
@@ -598,7 +626,7 @@
   flex-wrap: wrap;
   gap: 0 12px;
   color: var(--ec-ink); /* SKU, HSN/SAC, unit: in the item's own ink (user request) */
-  font-size: calc(var(--ec-font-size-s) * var(--ec-text-scale, 1));
+  font-size: calc(var(--ec-font-size-xs) * var(--ec-text-scale, 1));
 }
 
 .ec-item-detail {
@@ -606,8 +634,19 @@
   color: var(--ec-ink); /* the description in the item's own ink (user request) */
 }
 
+/* The description row's 6 px above and below sit on the description itself and repeat on
+   every page it runs over: an item taller than a page carries its table on below the
+   repeated item headings with that space, never against them (user report). */
+.ec-items .ec-detail-row > td:not(.ec-col-serial) {
+  padding-block: 0;
+}
+
 .ec-detail-row .ec-item-detail {
   margin-top: 0;
+  padding-block: 6px;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- Chrome before 130 needs it */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .ec-group-row td {
@@ -699,7 +738,7 @@
 
 .ec-words-label {
   margin-inline-end: 8px;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -726,7 +765,7 @@
   margin: 0;
   color: var(--ec-ink);
   font-family: var(--ec-title-font);
-  font-size: calc(var(--ec-font-size-base) * var(--ec-text-scale, 1));
+  font-size: calc(var(--ec-font-size-m) * var(--ec-text-scale, 1));
   font-weight: 700;
   line-height: 1.5;
   letter-spacing: 0;
@@ -734,6 +773,12 @@
 
 .ec-summary .ceres-table-heading {
   margin-bottom: 4px;
+}
+
+/* HSN Summary, Tax Summary, Payments: a little air between the heading and its table (user
+   request). */
+.ec-summary > .ec-block-title {
+  margin-bottom: 8px;
 }
 
 /*
@@ -826,18 +871,18 @@
 
 /* ------------------------------------------------------------ signature */
 
-/* "For <business>", the signature, "Authorized Signatory": on the end edge, 16 px apart. */
+/* "For <business>", the signature, "Authorized Signatory": on the end edge, 8 px apart. */
 .ec-signature {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
   align-items: flex-end;
   text-align: end;
 }
 
 .ec-signature-for,
 .ec-signature-label {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /*
@@ -861,6 +906,12 @@
 
 .ec-doc[dir="rtl"] .ec-signature-mark img {
   object-position: left center;
+}
+
+/* An image that failed to load (helpers.ts) keeps its box, so nothing moves, but shows no
+   broken-image mark or alt text. */
+.ec-doc img.is-broken {
+  visibility: hidden;
 }
 
 .ec-signature-banner {
@@ -897,12 +948,14 @@
 
 .ec-bank {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16px 48px; /* the QR stands well clear of the bank details (user request) */
+  gap: 16px 24px; /* the QR 24 px after the bank details (user request) */
   align-items: flex-start; /* Scan to Pay level with the Bank Details title (user request) */
 }
 
+/* The UPI QR follows the bank details, 24 px after their longest line: longer details move it
+   along; details too long for the row wrap, keeping the QR beside them (user request). */
 .ec-bank-details {
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -910,6 +963,7 @@
 
 /* Scan to Pay, the QR and the limit note centred under one another (user request). */
 .ec-upi {
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -921,6 +975,7 @@
 
 .ec-upi-caption {
   font-family: var(--ec-title-font);
+  font-size: calc(var(--ec-font-size-m) * var(--ec-text-scale, 1));
   font-weight: 700;
   line-height: 1.5;
   white-space: nowrap;
@@ -969,12 +1024,12 @@
 
 /*
  * The enquiry line is a box of its own at the foot of the frame (user request): its top rule
- * runs the frame's full width, edge to edge (out through the frame's 8 px padding), and it
+ * runs the frame's full width, edge to edge (out through the frame's padding), and it
  * shares the frame's sides and bottom; the line centred in it.
  */
 .ec-contact {
-  margin: 0 -8px -8px;
-  padding: 10px 8px;
+  margin: 0 calc(-1 * var(--ec-frame-pad)) calc(-1 * var(--ec-frame-pad));
+  padding: 10px var(--ec-frame-pad);
   border-top: 1px solid var(--ec-ink);
   text-align: center;
 }
@@ -1035,6 +1090,13 @@
 .ec-doc .ec-item-desc .toastui-editor-contents li + li,
 .ec-doc .ec-note-body .toastui-editor-contents li + li {
   margin-top: 4px;
+}
+
+/* A table in an item description fills the description's whole width (user request), with
+   none of the viewer's own margins round it. */
+.ec-doc .ec-item-desc .toastui-editor-contents table {
+  width: 100%;
+  margin: 0;
 }
 
 .ec-doc .ec-item-desc .toastui-editor-contents :is(th, td),
@@ -1135,6 +1197,13 @@
 
 }
 
+/* On a phone the QR goes under the bank details. */
+@container ec-doc (width < 400px) {
+  .ec-bank {
+    flex-wrap: wrap;
+  }
+}
+
 /* ------------------------------------------------------------------ print / PDF */
 
 /*
@@ -1148,7 +1217,11 @@
     --ec-gutter: 0px;
 
     width: 100%;
-    max-width: none;
+
+    /* Never wider than the paper's printable width (helpers.ts mapPrint): Refrens' PDF
+       service lays the page out in a window wider than the paper before it prints, and the
+       table measured there was clipped on the page (user report). */
+    max-width: var(--ec-print-width, none);
     margin: 0;
   }
 
@@ -1212,11 +1285,17 @@
   }
 
   .ec-items.is-print-fit thead th,
-  .ec-items.is-print-fit .ec-item-codes,
   .ec-items.is-print-fit .ec-words-value {
     font-size: max(
       10px,
       calc(var(--ec-font-size-s) * var(--ec-text-scale, 1) * var(--ec-print-fit, 1))
+    );
+  }
+
+  .ec-items.is-print-fit .ec-item-codes {
+    font-size: max(
+      10px,
+      calc(var(--ec-font-size-xs) * var(--ec-text-scale, 1) * var(--ec-print-fit, 1))
     );
   }
 
@@ -1235,15 +1314,54 @@
     display: table-row-group;
   }
 
-  .ec-items tr,
+  /*
+   * Each line item prints whole: at a page break it moves to the next page with its name,
+   * description (a table in it included) and images, never split between two pages (user
+   * request). Only an item taller than a page still splits.
+   */
+  .ec-items > tbody > tr {
+    break-inside: avoid;
+  }
+
+  .ec-items .ec-item-row.has-name-row,
+  .ec-items .ec-detail-row,
+  .ec-items .ec-image-row {
+    break-before: avoid;
+  }
+
+  /* A table in a description or note breaks between its rows, its headings repeated at the top
+     of every page it spans (user, 2026-10-19). */
+  .ec-doc :is(.ec-item-desc, .ec-note-body) .toastui-editor-contents thead {
+    display: table-header-group;
+  }
+
+  .ec-doc :is(.ec-item-desc, .ec-note-body) .toastui-editor-contents tr,
   .ec-summary .ceres-table tr {
     break-inside: avoid;
   }
 
-  /* A row taller than a third of a page breaks rather than leaving its page blank (helpers.ts
-     markTallRows). */
-  .ec-items tr.is-tall {
-    break-inside: auto;
+  /* Stretch on, a document longer than a page (user, 2026-10-19): where a whole item moves to
+     the next page, the column rules run on to the page's foot and a rule closes each page's
+     piece of the table (helpers.ts columnRules), drawn by the items wrapper; on the last
+     piece the table's own bottom rule lies over it. The row groups are opaque, so the rules
+     show only below the page's last row. */
+  .ec-doc.is-stretch .ec-items-scroll {
+    --ec-column-rule-width: var(--ec-rule-width);
+
+    border-bottom: var(--ec-column-rule-width) solid
+      var(--ec-column-rule-color, transparent);
+    background: var(--ec-column-rules, none);
+    /* stylelint-disable-next-line property-no-vendor-prefix -- Chrome before 130 needs it */
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .ec-doc.is-stretch .ec-items-scroll > :last-child {
+    margin-bottom: calc(-1 * var(--ec-column-rule-width));
+  }
+
+  :where(.ec-doc.is-stretch .ec-items) > :where(thead, tbody, tfoot) {
+    background-color: #fff;
   }
 
   .ec-doc.is-stretch .ec-items .ec-filler {
@@ -1292,7 +1410,7 @@
   .ec-large-image {
     width: auto;
     max-width: 100%;
-    max-height: 45vh;
+    max-height: min(45vh, 490px); /* px cap: on a Pageless PDF's one tall page vh is the whole document */
     margin-inline: 0; /* from the start edge: centred, a table wider than its page (A5) pushed it past the page edge */
     object-fit: contain;
   }
@@ -1321,8 +1439,21 @@
     break-inside: avoid;
   }
 
+  /* Terms, notes and attachments carry on line by line across a page break, never moving to
+     the next page whole (user request). */
+  .ec-block:is([data-section="terms"], [data-section="notes"], [data-section="attachments"]) {
+    break-inside: auto;
+  }
+
   .ec-block-title {
     break-after: avoid-page;
+  }
+
+  /* The enquiry line closes the frame and never starts a page alone: there it printed as an
+     empty strip of frame over its own rule (user report). What comes before it goes over
+     with it. */
+  .ec-contact {
+    break-before: avoid;
   }
 
   /*
@@ -1428,5 +1559,22 @@
     .ec-doc
     .no-dibella:is(.invoice-letterhead, .invoice-letterhead-footer) {
     display: none;
+  }
+}
+
+/*
+ * In print the totals sit in a table of their own under the items (helpers.ts splitTotals), so a
+ * page holding only them repeats no item headings. It overlaps the item table by one rule, so
+ * the two meet on a single line.
+ */
+@media print {
+  .ec-items[data-ec-totals-split] {
+    margin-top: calc(-1 * var(--ec-rule-width));
+  }
+
+  /* One solid ground under the totals: painted cell by cell, the hairline seams between their
+     empty cells let the stretch column rules (columnRules) show through. */
+  .ec-items[data-ec-totals-split] {
+    background-color: #fff;
   }
 }

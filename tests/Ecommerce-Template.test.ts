@@ -18,6 +18,9 @@ import {
   htmlToMarkdown,
   withRefrensDefaults,
   registerEcommerceHelpers,
+  mapPrint,
+  collapseBlankLines,
+  hasMarkdownTable,
 } from "../src/templates/Ecommerce-Template/helpers";
 import taxSummaryPartial from "../src/widgets/tax-summary/TaxSummaryTable.hbs";
 import hsnSummaryPartial from "../src/widgets/hsn-summary/HsnSummaryTable.hbs";
@@ -169,9 +172,9 @@ describe("Ecommerce template — render", () => {
       html.indexOf('data-section="parties"')
     );
     const text = `${plain(parties)} ${plain(shipping)}`;
-    expect(text).toContain("Sold By :");
-    expect(text).toContain("Billing Address :");
-    expect(text).toContain("Shipping Address :");
+    expect(text).toContain("Sold By:");
+    expect(text).toContain("Billing Address:");
+    expect(text).toContain("Shipping Address:");
     expect(text).toContain("Bengaluru, Karnataka, India - 560055");
     expect(text).toContain("GSTIN: 29AAAAA0000A1Z5");
     // Nothing derived: no State/UT Code, no Place of delivery (user request).
@@ -206,7 +209,7 @@ describe("Ecommerce template — render", () => {
       expect(totals).toMatch(new RegExp(`data-ceres-subtotal-row="${key}`))
     );
     expect(plain(totals)).toMatch(
-      /Amount In Words : FIVE THOUSAND FIVE HUNDRED NINETY SEVEN RUPEES AND SEVENTY SIX PAISE ONLY$/
+      /Amount In Words: FIVE THOUSAND FIVE HUNDRED NINETY SEVEN RUPEES AND SEVENTY SIX PAISE ONLY$/
     );
   });
 
@@ -462,7 +465,7 @@ describe("Ecommerce template — settings and data", () => {
         "shipping"
       )
     );
-    expect(text).toMatch(/^Shipping Address :/);
+    expect(text).toMatch(/^Shipping Address:/);
   });
 
   it("follows the custom labels", () => {
@@ -477,10 +480,10 @@ describe("Ecommerce template — settings and data", () => {
         };
       })
     );
-    expect(text).toContain("Seller :");
-    expect(text).toContain("Bill To :");
+    expect(text).toContain("Seller:");
+    expect(text).toContain("Bill To:");
     expect(text).toContain("Bill No.: 2024000001");
-    expect(text).toContain("In Words :");
+    expect(text).toContain("In Words:");
   });
 
   it("letterhead and footer: every page by default, first / last page when asked", () => {
@@ -675,7 +678,69 @@ describe("Ecommerce template — bank details and UPI", () => {
     expect(qr.indexOf('data-testid="upi-qr"')).toBeLessThan(
       qr.indexOf("Maximum of 1 lakh")
     );
-    expect(css).toMatch(/\.ec-bank \{[^}]*gap: 16px 48px;/);
+    expect(css).toMatch(/\.ec-bank \{[^}]*gap: 16px 24px;/);
+  });
+
+  it("lets a table in a full-width item description fill the whole row, Sr.No column included", () => {
+    const table = "| Colour | Pcs |\n| --- | --- |\n| Colour 106 | 18 |";
+    expect(hasMarkdownTable(table)).toBe(true);
+    expect(hasMarkdownTable("Plain text | with a bar")).toBe(false);
+    const rows = (description: string) =>
+      render((invoice) => {
+        invoice.showDescriptionInFullWidth = true;
+        invoice.items[0].description = description;
+      }).match(/<tr class="ec-detail-row"[\s\S]*?<\/tr>/)?.[0] ?? "";
+    const withTable = rows(table);
+    expect(withTable).not.toContain('class="ec-col-serial"');
+    const plainText = rows("Plain description");
+    expect(plainText).toContain('class="ec-col-serial"');
+    const span = (row: string) => Number(row.match(/colspan="(\d+)"/)?.[1]);
+    expect(span(withTable)).toBe(span(plainText) + 1);
+    expect(css).toMatch(
+      /\.ec-doc \.ec-item-desc \.toastui-editor-contents table \{\s*width: 100%;/
+    );
+  });
+
+  it("keeps the description row's space above and below on every page it runs over", () => {
+    expect(css).toMatch(
+      /\.ec-items \.ec-detail-row > td:not\(\.ec-col-serial\) \{\s*padding-block: 0;/
+    );
+    expect(css).toMatch(
+      /\.ec-detail-row \.ec-item-detail \{[^}]*padding-block: 6px;[^}]*box-decoration-break: clone;/
+    );
+  });
+
+  it("sets an item's SKU / HSN / unit line at 11 px", () => {
+    expect(css).toMatch(/--ec-font-size-xs: 11px;/);
+    expect(css).toMatch(
+      /\.ec-item-codes \{[^}]*font-size: calc\(var\(--ec-font-size-xs\) \* var\(--ec-text-scale, 1\)\);/
+    );
+  });
+
+  it("sets the item table's headings in semibold", () => {
+    expect(css).toMatch(/\.ec-items thead th \{[^}]*font-weight: 600;/);
+  });
+
+  it("sets the summary headings 8 px above their tables", () => {
+    expect(css).toMatch(
+      /\.ec-summary > \.ec-block-title \{\s*margin-bottom: 8px;/
+    );
+  });
+
+  it("keeps the UPI QR 24 px after the bank details, beside them even with a long address", () => {
+    const rule = (selector: string) =>
+      css.match(
+        new RegExp(`\\n${selector.replace(/[.]/g, "\\.")} \\{([^}]*)\\}`)
+      )?.[1] ?? "";
+    expect(rule(".ec-bank")).not.toContain("flex-wrap");
+    expect(rule(".ec-bank-details")).toMatch(
+      /flex: 0 1 auto;[^}]*min-width: 0;/
+    );
+    expect(rule(".ec-upi")).toContain("flex: none;");
+    // Only a phone-width document puts the QR under the details.
+    expect(css).toMatch(
+      /@container ec-doc \(width < 400px\) \{\s*\.ec-bank \{\s*flex-wrap: wrap;/
+    );
   });
 });
 
@@ -1009,7 +1074,7 @@ describe("Ecommerce template — Change Script", () => {
   it("isolates every piece of the business's text, so its punctuation stays put", () => {
     const html = render();
     [
-      "Sold By :",
+      "Sold By:",
       "Sample Pharmacy",
       "12 Sample Road, Sample Town",
       "TOTAL:",
@@ -1166,12 +1231,90 @@ describe("Ecommerce template — files and CSS", () => {
     expect(block).toContain("break-inside: avoid;");
   });
 
-  it("never leaves a page blank before a tall item row, an image row or a group", () => {
-    expect(css).toMatch(/\.ec-items tr\.is-tall \{\s*break-inside: auto;/);
-    expect(css).toMatch(/\.ec-items \.ec-group-row \{\s*break-after: avoid;/);
+  it("caps the printed page at the paper's printable width, whatever the window", () => {
+    const width = (pdfOptions: Record<string, unknown>) =>
+      mapPrint({ pdfOptions }).printWidth;
+    // A4 at 1 cm side margins: 794 - 76 - 4 px kept back.
+    expect(width({})).toBe(714);
+    expect(width({ xMargins: "0.5" })).toBe(751);
+    expect(width({ zoomSize: "0.9" })).toBe(802);
+    expect(width({ landscape: true })).toBe(1042);
     const print = css.slice(css.indexOf("@media print"));
+    expect(print).toMatch(/max-width: var\(--ec-print-width, none\);/);
+    expect(render()).toContain("--ec-print-width: 714px;");
+  });
+
+  it("keeps a clear type hierarchy: section titles 14 px bold, names and labels semibold", () => {
+    expect(css).toMatch(/--ec-font-size-m: 14px;/);
+    [".ec-party-title {", ".ec-block-title {", ".ec-upi-caption {"].forEach(
+      (rule) => {
+        const at = css.indexOf(rule.replace(" {", ""));
+        expect(at).toBeGreaterThan(-1);
+      }
+    );
+    expect(css).toMatch(
+      /\.ec-party-title \{[^}]*font-size: calc\(var\(--ec-font-size-m\)/
+    );
+    expect(css).toMatch(
+      /\.ec-block-title \{[^}]*font-size: calc\(var\(--ec-font-size-m\)/
+    );
+    expect(css).toMatch(/\.ec-field-label \{\s*font-weight: 600;/);
+    expect(css).toMatch(/\.ec-party-name \{\s*font-weight: 600;/);
+    expect(render()).toContain('class="ec-text">Sold By:</span>');
+  });
+
+  it("spaces the page evenly: 12 px inside the frame, 16 px between sections, no empty logo box", () => {
+    expect(css).toMatch(/\.ec-frame \{\s*--ec-frame-pad: 12px;[^}]*gap: 16px;/);
+    expect(css).toMatch(/\.ec-signature \{[^}]*gap: 8px;/);
+    expect(css).toMatch(/\.ec-logo:has\(\.is-broken\) \{\s*display: none;/);
+  });
+
+  it("prints runs of empty lines in notes and descriptions as one paragraph break", () => {
+    expect(collapseBlankLines("a\n\n<br>\nb\n\n\n\nc<br><br><br>d")).toBe(
+      "a\n\nb\n\nc\n\nd"
+    );
+    expect(collapseBlankLines("one<br>two\nthree")).toBe("one<br>two\nthree");
+  });
+
+  it("never prints the enquiry line alone at the top of a page", () => {
+    const print = css.slice(css.indexOf("@media print"));
+    expect(print).toMatch(/\.ec-contact \{\s*break-before: avoid;/);
+  });
+
+  it("lets terms, notes and attachments carry on line by line across a page break", () => {
+    expect(css).toMatch(
+      /\.ec-block:is\(\[data-section="terms"\], \[data-section="notes"\], \[data-section="attachments"\]\) \{\s*break-inside: auto;/
+    );
+  });
+
+  it("repeats a description or note table's headings on every page, breaking between its rows", () => {
+    const print = css.slice(css.indexOf("@media print"));
+    expect(print).toMatch(
+      /\.ec-doc :is\(\.ec-item-desc, \.ec-note-body\) \.toastui-editor-contents thead \{\s*display: table-header-group;/
+    );
+    expect(print).toMatch(
+      /\.ec-doc :is\(\.ec-item-desc, \.ec-note-body\) \.toastui-editor-contents tr,\s*\.ec-summary \.ceres-table tr \{\s*break-inside: avoid;/
+    );
+    // The item table's last-column alignment stays on its own heading row.
+    expect(css).toContain(
+      ".ec-items > thead th:last-child:not(.ec-col-name, .ec-col-serial),"
+    );
+  });
+
+  it("prints each line item whole, its description and images kept with it", () => {
+    const print = css.slice(css.indexOf("@media print"));
+    expect(print).toMatch(/\.ec-items > tbody > tr \{\s*break-inside: avoid;/);
+    expect(print).toMatch(
+      /\.ec-items \.ec-item-row\.has-name-row,\s*\.ec-items \.ec-detail-row,\s*\.ec-items \.ec-image-row \{\s*break-before: avoid;/
+    );
+    expect(print).toMatch(
+      /\.ec-summary \.ceres-table tr \{\s*break-inside: avoid;/
+    );
+    expect(css).toMatch(/\.ec-items \.ec-group-row \{\s*break-after: avoid;/);
     const image = print.slice(print.indexOf(".ec-large-image {"));
-    expect(image.slice(0, image.indexOf("}"))).toContain("max-height: 45vh;");
+    expect(image.slice(0, image.indexOf("}"))).toContain(
+      "max-height: min(45vh, 490px);"
+    );
   });
 
   it("closes the item table with a rule at every page break (print-only repeating footer)", () => {
@@ -1211,7 +1354,7 @@ describe("Ecommerce template — files and CSS", () => {
 
   it("closes the frame with the contact line as a box of its own, edge to edge", () => {
     expect(css).toMatch(
-      /\.ec-contact \{[^}]*margin: 0 -8px -8px;[^}]*border-top: 1px solid var\(--ec-ink\)/
+      /\.ec-contact \{[^}]*margin: 0 calc\(-1 \* var\(--ec-frame-pad\)\) calc\(-1 \* var\(--ec-frame-pad\)\);[^}]*border-top: 1px solid var\(--ec-ink\)/
     );
   });
 
@@ -1266,7 +1409,7 @@ describe("Ecommerce template — files and CSS", () => {
 
   it("draws the design's frame, rules and header fill", () => {
     expect(css).toMatch(
-      /\.ec-frame \{[^}]*padding: 8px;[^}]*border: 1px solid var\(--ec-ink\)/
+      /\.ec-frame \{[^}]*padding: var\(--ec-frame-pad\);[^}]*border: 1px solid var\(--ec-ink\)/
     );
     expect(css).toContain("--ec-ink: #282828;");
     expect(css).toContain("--ec-rule-width: 0.5px;");
@@ -1669,5 +1812,18 @@ describe("Ecommerce template — as refrens.com prints real documents", () => {
       "ONE MILLION TWO HUNDRED FIFTY THOUSAND DOLLARS ONLY"
     );
     expect(amountInCurrencyWords(118, "INR")).toMatch(/RUPEES/);
+  });
+});
+
+describe("Ecommerce template — frame split by a page break", () => {
+  it("draws the frame's border on each page's piece", () => {
+    const source = fs.readFileSync(
+      path.join(TEMPLATE_DIR, "styles.css"),
+      "utf8"
+    );
+    const frame = source.slice(source.indexOf(".ec-frame {"));
+    expect(frame.slice(0, frame.indexOf("}"))).toMatch(
+      /-webkit-box-decoration-break: clone;\s*box-decoration-break: clone;/
+    );
   });
 });

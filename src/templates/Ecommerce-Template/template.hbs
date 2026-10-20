@@ -15,7 +15,7 @@
   update targets.
 --}}
 {{#with (ecView @root) as |view|}}
-<div class="ec-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.hideFooter}} is-footer-hidden{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" data-ec-currency="{{@root.invoice.currency}}" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--ec-text-scale: {{view.print.textScale}};{{#if view.theme}} --ec-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --ec-script-font: '{{view.script.font}}';{{/if}}">
+<div class="ec-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.hideFooter}} is-footer-hidden{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" data-ec-currency="{{@root.invoice.currency}}" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--ec-text-scale: {{view.print.textScale}}; --ec-print-width: {{view.print.printWidth}}px;{{#if view.theme}} --ec-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --ec-script-font: '{{view.script.font}}';{{/if}}">
   {{!-- The Language/Script setting's font, for the glyphs Inter lacks. --}}
   {{#if view.script.fontUrl}}<link rel="stylesheet" href="{{view.script.fontUrl}}" />{{/if}}
   {{#unless view.letterheadEveryPage}}
@@ -93,7 +93,7 @@
               <section class="ec-parties" data-testid="section" data-section="{{section}}">
                 {{#each parties}}
                   <div class="ec-party" data-role="{{role}}">
-                    {{#if title}}<p class="ec-party-title"><span class="ec-text">{{title}} :</span></p>{{/if}}
+                    {{#if title}}<p class="ec-party-title"><span class="ec-text">{{title}}:</span></p>{{/if}}
                     <p class="ec-party-name"><span class="ec-text">{{name}}</span></p>
                     {{#if street}}<p class="ec-party-line" data-role="address"><span class="ec-text">{{street}}</span></p>{{/if}}
                     {{#if region}}<p class="ec-party-line" data-role="address"><span class="ec-text">{{region}}</span></p>{{/if}}
@@ -250,7 +250,7 @@
                         {{#if hasDetail}}
                           {{!-- Full-width description row (isDescriptionFullWidth), kept for the live toggle. --}}
                           <tr class="ec-detail-row" data-testid="item-detail-row" data-item-index="{{itemIndex}}" data-ceres-description-row{{#unless detailRow}} style="display: none;"{{/unless}}>
-                            <td class="ec-col-serial"></td>
+                            {{#unless detailSpansAll}}<td class="ec-col-serial"></td>{{/unless}}
                             <td colspan="{{detailColspan}}">
                               <div class="ec-item-detail ec-span" data-ceres-description-full-width>
                                 {{#if detailRow}}
@@ -347,7 +347,7 @@
                     {{/each}}
                     {{#if view.words}}
                       <tr class="ec-words-row ceres-subtotal-words{{#if view.totals.hidden}} is-hidden-by-totals{{/if}}{{#if view.words.hiddenBySetting}} is-hidden-by-words-setting{{/if}}" data-ceres-total-in-words>
-                        <td colspan="{{view.table.colspan}}"><span class="ec-words-label ec-text">{{view.words.label}} :</span> <span class="ec-words-value ec-text">{{view.words.value}}</span></td>
+                        <td colspan="{{view.table.colspan}}"><span class="ec-words-label ec-text">{{view.words.label}}:</span> <span class="ec-words-value ec-text">{{view.words.value}}</span></td>
                       </tr>
                     {{/if}}
                   </tbody>
