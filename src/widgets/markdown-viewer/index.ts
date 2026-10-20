@@ -16,6 +16,8 @@ import {
 type MarkdownViewerPayload = {
   sanitizedMarkdown: string;
   fallbackMarkdown: string;
+  /** The content as written: sanitized when it is drawn, once DOMPurify has loaded. */
+  rawMarkdown?: string;
   customLinkProps: typeof defaultCustomLinkProps;
   forceFallbackRenderer: boolean;
 };
@@ -81,6 +83,36 @@ function loadVendorManifest(): Promise<VendorManifest> {
 
 let dependenciesPromise: Promise<void> | null = null;
 
+/** Set when Toast UI could not load, so notes already shown as plain text go to marked. */
+let viewerUnavailable = false;
+
+/*
+ * Each widget's payload, read once. The plain-text first pass replaces the widget's content,
+ * payload script included, so the upgrade to the formatted view must not depend on it: without
+ * this a note drawn before Toast UI loaded stayed as raw text for good (**bold**, | --- |).
+ */
+const payloads = new WeakMap<Element, MarkdownViewerPayload>();
+
+/**
+ * The markdown to draw: sanitized now when DOMPurify is loaded, so the result no longer
+ * depends on whether it had loaded when the template rendered.
+ * @param payload
+ */
+function viewerMarkdown(payload: MarkdownViewerPayload): string {
+  return typeof payload.rawMarkdown === "string" && (window as any).DOMPurify
+    ? sanitizeMarkdown(payload.rawMarkdown, "viewer")
+    : payload.sanitizedMarkdown;
+}
+
+/**
+ * @param payload
+ */
+function fallbackMarkdown(payload: MarkdownViewerPayload): string {
+  return typeof payload.rawMarkdown === "string" && (window as any).DOMPurify
+    ? prepareFallbackMarkdown(payload.rawMarkdown)
+    : payload.fallbackMarkdown;
+}
+
 /**
  *
  * @param src
@@ -130,11 +162,12 @@ function loadDependencies(): Promise<void> {
   if (dependenciesPromise) return dependenciesPromise;
 
   dependenciesPromise = loadVendorManifest().then((manifest) => {
-    const dp = manifest["dompurify"];
+    const dp = manifest.dompurify;
     const tu = manifest["toastui-editor"];
 
     if (!dp?.js) throw new Error("Vendor manifest missing dompurify entry");
-    if (!tu?.js) throw new Error("Vendor manifest missing toastui-editor entry");
+    if (!tu?.js)
+      throw new Error("Vendor manifest missing toastui-editor entry");
 
     if (tu.css) loadCSS(`./${tu.css}`);
 
@@ -152,8 +185,8 @@ function loadDependencies(): Promise<void> {
  */
 function loadFallbackDependency(): Promise<void> {
   return loadVendorManifest().then((manifest) => {
-    const dp = manifest["dompurify"];
-    const mk = manifest["marked"];
+    const dp = manifest.dompurify;
+    const mk = manifest.marked;
 
     if (!dp?.js) throw new Error("Vendor manifest missing dompurify entry");
     if (!mk?.js) throw new Error("Vendor manifest missing marked entry");
@@ -235,17 +268,32 @@ function initViewer(
       loadFallbackDependency().then(() => {
         renderFallback(
           container,
-          payload.fallbackMarkdown,
+          fallbackMarkdown(payload),
           payload.customLinkProps
         );
       });
+    }
+
+    // Toast UI is not coming: a note shown as plain text is drawn with marked now.
+    if (
+      container.dataset.mvInitialized === "fallback" &&
+      viewerUnavailable &&
+      (window as any).marked
+    ) {
+      renderFallback(
+        container,
+        fallbackMarkdown(payload),
+        payload.customLinkProps
+      );
+      container.dataset.mvInitialized = "true";
+      return;
     }
 
     // Only render fallback if not yet initialized at all
     if (!container.dataset.mvInitialized) {
       renderFallback(
         container,
-        payload.fallbackMarkdown,
+        fallbackMarkdown(payload),
         payload.customLinkProps
       );
       // Mark as potential for upgrade unless forced
@@ -257,9 +305,11 @@ function initViewer(
   try {
     const Viewer = toastui.Editor;
 
+    // Clear the plain-text first pass (or the payload script) before drawing.
+    container.textContent = "";
     new Viewer({
       el: container,
-      initialValue: payload.sanitizedMarkdown,
+      initialValue: viewerMarkdown(payload),
       usageStatistics: false,
       customHTMLRenderer: {
         link(node: any, context: any) {
@@ -282,7 +332,7 @@ function initViewer(
     // On error, stay in fallback state final
     renderFallback(
       container,
-      payload.fallbackMarkdown,
+      fallbackMarkdown(payload),
       payload.customLinkProps
     );
     container.dataset.mvInitialized = "true";
@@ -302,23 +352,26 @@ function processWidgets(): void {
   );
 
   widgets.forEach((widget) => {
-    const script = widget.querySelector(
-      "script[data-md-viewer]"
-    ) as HTMLScriptElement | null;
+    let payload = payloads.get(widget);
 
-    if (!script) return;
+    if (!payload) {
+      const script = widget.querySelector(
+        "script[data-md-viewer]"
+      ) as HTMLScriptElement | null;
 
-    const encoded = script.getAttribute("data-payload");
-    if (!encoded) return;
+      if (!script) return;
 
-    let payload: MarkdownViewerPayload;
+      const encoded = script.getAttribute("data-payload");
+      if (!encoded) return;
 
-    try {
-      payload = decodePayload(encoded);
-    } catch (err) {
-      widget.setAttribute("data-mv-initialized", "error");
-      console.error("Failed to parse MarkdownViewer payload", err);
-      return;
+      try {
+        payload = decodePayload(encoded);
+      } catch (err) {
+        widget.setAttribute("data-mv-initialized", "error");
+        console.error("Failed to parse MarkdownViewer payload", err);
+        return;
+      }
+      payloads.set(widget, payload);
     }
 
     initViewer(widget as HTMLElement, payload);
@@ -338,6 +391,7 @@ function startObserver(): void {
     .then(() => processWidgets())
     .catch((err) => {
       console.warn("ToastUI failed loading, falling back to marked", err);
+      viewerUnavailable = true;
       // If ToastUI fails, load marked for fallback rendering
       return loadFallbackDependency().then(() => processWidgets());
     });
@@ -386,6 +440,7 @@ function register(): void {
       const payload: MarkdownViewerPayload = {
         sanitizedMarkdown: sanitizeMarkdown(safeContent, "viewer"),
         fallbackMarkdown: prepareFallbackMarkdown(safeContent),
+        rawMarkdown: safeContent,
         customLinkProps: defaultCustomLinkProps,
         forceFallbackRenderer: options?.hash?.forceFallback === true,
       };
@@ -417,6 +472,6 @@ try {
   console.error("MarkdownViewer registration failed:", error);
 }
 
-export { };
+export {};
 
 /* eslint-enable @typescript-eslint/ban-ts-comment, no-new, consistent-return */

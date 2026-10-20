@@ -141,6 +141,27 @@ describe("markdown-viewer/utils — with DOMPurify mock", () => {
       expect(result).toBe("test content");
     });
 
+    it("keeps inline emphasis (bold, italic, underline, strikethrough), as refrens.com prints it", () => {
+      sanitizeMarkdown("<strong>a</strong>", "viewer");
+      const config = (mockSanitize.mock.calls[0] as unknown[])[1] as {
+        ALLOWED_TAGS: string[];
+      };
+      expect(config.ALLOWED_TAGS).toEqual(
+        expect.arrayContaining([
+          "br",
+          "a",
+          "strong",
+          "b",
+          "em",
+          "i",
+          "u",
+          "s",
+          "del",
+        ])
+      );
+      expect(config.ALLOWED_TAGS).not.toContain("script");
+    });
+
     it("calls DOMPurify.sanitize in fallback mode", () => {
       sanitizeMarkdown("test", "fallback");
       expect(mockSanitize).toHaveBeenCalled();
