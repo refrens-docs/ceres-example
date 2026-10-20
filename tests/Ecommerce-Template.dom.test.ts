@@ -7,6 +7,7 @@ import {
   drawRiyalSigns,
   fitTotals,
   placeFootersOnPageEdge,
+  registerEcommerceLogo,
   respellTaxWords,
 } from "../src/templates/Ecommerce-Template/helpers";
 
@@ -16,6 +17,22 @@ const css = fs.readFileSync(
 );
 
 describe("Ecommerce template — after the render, in the browser", () => {
+  it("hides an image that fails to load, so no broken mark or alt text prints", () => {
+    registerEcommerceLogo();
+    document.body.innerHTML =
+      '<div class="ec-doc"><img class="ec-signature-image" alt="Authorised Signatory" /></div><img id="outside" alt="" />';
+    const signature = document.querySelector(
+      ".ec-signature-image"
+    ) as HTMLImageElement;
+    signature.dispatchEvent(new Event("error"));
+    document.getElementById("outside")?.dispatchEvent(new Event("error"));
+    expect(signature.classList.contains("is-broken")).toBe(true);
+    expect(
+      document.getElementById("outside")?.classList.contains("is-broken")
+    ).toBe(false);
+    expect(css).toMatch(/\.ec-doc img\.is-broken \{\s*visibility: hidden;/);
+  });
+
   it("draws each Saudi riyal sign from an image, the empty box gone", () => {
     document.body.innerHTML =
       '<div class="ec-doc"><td>\u20C1 100.00</td><span>(\u20C1 18.00)</span></div>';
