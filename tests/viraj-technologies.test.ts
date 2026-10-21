@@ -10,6 +10,7 @@ import {
   fieldPairs,
   foreignAmountInWords,
   mapDetails,
+  mapPrint,
   registerVirajHelpers,
   summaryWords,
   withGstColumnLabels,
@@ -229,6 +230,25 @@ describe("Viraj Technologies template — layout", () => {
     expect(plain(section(render(), "parties"))).not.toContain(
       "quotes@example.com"
     );
+  });
+
+  it("prints the E-commerce Operator after the dates, its GSTIN in brackets", () => {
+    const rows = mapDetails(
+      state((invoice) => {
+        invoice.ecommerceOperator = { name: "test", gstin: "24AAAAA0000A1Z5" };
+      })
+    );
+    expect(rows.at(-1)).toMatchObject({
+      label: "E-commerce Operator",
+      value: "test (24AAAAA0000A1Z5)",
+    });
+    expect(
+      mapDetails(
+        state((invoice) => {
+          invoice.ecommerceOperator = null;
+        })
+      ).map((row) => row.key)
+    ).not.toContain("ecommerceOperator");
   });
 
   it("closes with the document's Contact Details as refrens.com words them, after the signature", () => {
@@ -553,6 +573,17 @@ describe("Viraj Technologies template — as refrens.com prints real documents",
     expect(html).not.toContain('data-ceres-field-container="documentQr"');
   });
 
+  it("prints the active e-invoice QR in the IRN details, not in the details box", () => {
+    const html = render((invoice) => {
+      invoice.irn = { Irn: "abc123", AckNo: "1826", qr: "signed-qr-text" };
+      invoice.qrCode = "https://example.com/irn-qr.png";
+    });
+    expect(section(html, "compliance")).toContain(
+      'data-ceres-field="qrCode" src="https://example.com/irn-qr.png"'
+    );
+    expect(section(html, "parties")).not.toContain("irn-qr.png");
+  });
+
   it("prints no 'For <business>' line over the signature", () => {
     const html = render((invoice) => {
       invoice.signature = "https://example.com/sign.png";
@@ -723,5 +754,119 @@ describe("Viraj Technologies template — files and CSS", () => {
       /\.vt-items \{[^}]*border: var\(--vt-rule-width\) solid var\(--vt-rule\)/
     );
     expect(sheet).toMatch(/\.vt-upi-qr \{[^}]*width: 120px;[^}]*height: 120px/);
+  });
+});
+
+describe("Viraj Technologies — description and note tables in print", () => {
+  it("repeats a description or note table's headings on every page, breaking between its rows", () => {
+    const source = fs.readFileSync(
+      path.join(TEMPLATE_DIR, "styles.css"),
+      "utf8"
+    );
+    const print = source.slice(source.indexOf("@media print"));
+    expect(print).toMatch(
+      /\.vt-doc :is\(\.vt-item-desc, \.vt-note-body\) \.toastui-editor-contents thead \{\s*display: table-header-group;/
+    );
+    expect(print).toMatch(
+      /\.vt-doc :is\(\.vt-item-desc, \.vt-note-body\) \.toastui-editor-contents tr \{\s*break-inside: avoid;/
+    );
+  });
+});
+
+describe("Viraj Technologies — stretch to the page", () => {
+  const stretched = (enabled: boolean, full: boolean, billType?: string) =>
+    render((invoice, root) => {
+      if (billType) invoice.billType = billType;
+      invoice.owner = {
+        ...(invoice.owner || {}),
+        configuration: { experimental: { stretchInvoiceTable: enabled } },
+      };
+      root.pdfOptions = { ...(root.pdfOptions || {}), fullHeightTable: full };
+      invoice.template = {
+        ...(invoice.template || {}),
+        pdfOptions: {
+          ...(invoice.template?.pdfOptions || {}),
+          fullHeightTable: full,
+        },
+      };
+    });
+
+  it("stretches the item table only when the business and the document ask, on every document type", () => {
+    expect(stretched(true, true)).toContain("vt-doc is-stretch");
+    expect(stretched(false, true)).not.toContain("is-stretch");
+    expect(stretched(true, false)).not.toContain("is-stretch");
+    expect(stretched(true, true, "DELIVERYCHALLAN")).toContain(
+      "vt-doc is-stretch"
+    );
+  });
+
+  it("sizes the stretch from the page area in CSS, not from the window", () => {
+    const source = fs.readFileSync(
+      path.join(TEMPLATE_DIR, "helpers.ts"),
+      "utf8"
+    );
+    expect(source).toContain("calc(100vh / ");
+    expect(source).not.toContain("height:100vh;");
+  });
+
+  it("caps the printed page at the paper's printable width, whatever the window", () => {
+    const width = (pdfOptions: Record<string, unknown>) =>
+      mapPrint({ pdfOptions }).printWidth;
+    // A4 at 1 cm side margins: 794 - 76 - 4 px kept back.
+    expect(width({})).toBe(714);
+    expect(width({ xMargins: "0.5" })).toBe(751);
+    expect(width({ landscape: true })).toBe(1042);
+    const print = css().slice(css().indexOf("@media print"));
+    expect(print).toMatch(/max-width: var\(--vt-print-width, none\);/);
+    expect(render()).toContain("--vt-print-width: 714px;");
+  });
+});
+
+describe("Viraj Technologies — boxes split by a page break", () => {
+  it("draws a split box's border on each page's piece", () => {
+    const source = fs.readFileSync(
+      path.join(TEMPLATE_DIR, "styles.css"),
+      "utf8"
+    );
+    const print = source.slice(
+      source.indexOf("A box split by a page break closes")
+    );
+    expect(print).toContain(
+      ":is(.vt-panel, .vt-panel-body, .vt-billing, .vt-billing-fields, .vt-details)"
+    );
+    expect(print).toMatch(/box-decoration-break: clone;/);
+  });
+
+  it("closes each page's piece of the item table with a print-only footer row", () => {
+    const html = render();
+    expect(html).toMatch(
+      /<tfoot class="vt-page-close" aria-hidden="true"><tr><td colspan="\d+"><\/td><\/tr><\/tfoot>\s*<\/table>/
+    );
+    const source = css();
+    expect(source).toMatch(
+      /\.vt-items > tfoot\.vt-page-close \{\s*display: none;/
+    );
+    expect(source).toMatch(
+      /\.vt-doc \.vt-items > tfoot\.vt-page-close \{\s*display: table-footer-group;/
+    );
+  });
+
+  it("leaves 4 px above and below a letterhead, on screen and on every printed page", () => {
+    const source = css();
+    expect(source).toMatch(
+      /\.vt-doc:has\(\.vt-letterhead:not\(\.is-empty\)\) > \.vt-title-block \{\s*margin-bottom: calc\(4px - var\(--vt-section-gap\)\);/
+    );
+    expect(source).toMatch(
+      /\.vt-page-body > \.vt-letterhead:not\(\.is-empty\) \{\s*margin-bottom: calc\(4px - var\(--vt-section-gap\)\);/
+    );
+    expect(source).toMatch(
+      /\.vt-page-frame-header \.vt-letterhead:not\(\.is-empty\) \{\s*margin-bottom: 4px;/
+    );
+  });
+
+  it("draws the UPI separator in the space a page break drops", () => {
+    expect(css()).toMatch(
+      /\.vt-bank-rows \+ \.vt-upi::before \{\s*position: absolute;\s*top: calc\(-1 \* var\(--vt-pad\)\);/
+    );
   });
 });

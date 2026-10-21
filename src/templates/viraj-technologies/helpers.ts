@@ -2079,20 +2079,17 @@ export const mapCompliance = (state: UnknownRecord) => {
       .filter((_, index) => index % 2 === 0)
       .map((_, index) => rows.slice(index * 2, index * 2 + 2)),
     /*
-     * One QR, as refrens.com prints it (checked on real documents): while the e-invoice is
-     * active its QR takes the document QR's place (signed or plain, per showSignedIrnQr);
-     * the document QR itself never prints in this template (user request). The e-invoice
-     * section keeps its lines (IRN, Ack, E-way) without a second QR.
+     * One QR: while the e-invoice is active its QR (signed or plain, per showSignedIrnQr)
+     * prints on the end edge of the IRN details, beside the IRN it belongs to (user,
+     * 2026-10-20); the details box then holds none. The document QR itself never prints in
+     * this template (user request).
      */
     qr: {
-      irn: "",
+      irn: irnQr && !isCancelled ? irnQr : "",
       zatca: text(invoice.zatcaQrCode),
       lhdn: text(invoice.lhdnQrCode),
-      // This template prints no document QR (user request): the slot holds the e-invoice QR
-      // while the IRN is active, and nothing otherwise.
-      document: irnQr && !isCancelled ? irnQr : "",
-      documentAlt:
-        irnQr && !isCancelled ? "E-Invoice QR Code" : "Document QR Code",
+      document: "",
+      documentAlt: "Document QR Code",
     },
   };
 };
@@ -2540,6 +2537,8 @@ const DESIGN_TABLE_WIDTH = 958;
  * Every cell, header included, carries 6 px of padding each side (user request); the Sr
  * column is the design's 28 px widened by that padding.
  */
+// The most figure columns a tablet lays out side by side under the item's name (styles.css).
+const TABLET_FIGURE_COLUMNS = 8;
 const SERIAL_WIDTH = 43;
 /* Item columns holding a tax amount (IGST, CGST, SGST, UTGST, cess…). */
 const TAX_COLUMN = /^(igst|cgst|sgst|utgst|cess|vat|tax)/i;
@@ -3042,6 +3041,8 @@ export const mapItemTable = (
             isName: column.kind === "name",
             isNum:
               value !== "" && (NUMBER_KINDS.includes(column.kind) || isWord),
+            // The column's heading beside the figure where a phone lists an item's figures.
+            label: column.label,
             value,
           };
         }),
@@ -3057,6 +3058,7 @@ export const mapItemTable = (
       className: column.className,
       isName: column.kind === "name",
       isNum: value !== "",
+      label: column.label,
       value,
     };
   });
@@ -3098,6 +3100,14 @@ export const mapItemTable = (
       (_, i) => i
     ),
     showThumbnail,
+    // The figure columns (every column but the item's name): a tablet lays them out in as
+    // many equal tracks under the item's name (styles.css).
+    figureCount: columns.filter((column) => column.kind !== "name").length,
+    // More than this many figure columns cannot sit side by side on a tablet: such a table
+    // shows its items as cards there too.
+    manyFigures:
+      columns.filter((column) => column.kind !== "name").length >
+      TABLET_FIGURE_COLUMNS,
     // Up to eight columns, each keeps room for a two-line heading ("Price Each in Rs."); a
     // wider table drops to the narrow floor so it still fits the page.
     roomy: columns.length <= ROOMY_COLUMNS,
@@ -4014,6 +4024,21 @@ export const mapPrint = (
   const pageZoom = positiveNumber(pdfOptions.zoomSize) ?? 1;
   const rendererZoom = pageZoom === 0.8 ? 1 : pageZoom;
   const pageWidth = ((paperMm / 25.4) * 96 - PRINT_MARGINS_PX) / rendererZoom;
+  /*
+   * The printable width in the document's own pixels, which caps the page in print
+   * (styles.css): the PDF service lays the page out in a window wider than the paper before
+   * it prints. Side margins are xMargins centimetres (1 when unset), and Chrome scales them
+   * with the print zoom like the rest of the page; 4 px kept back for rounding.
+   */
+  const sideMarginCm = positiveNumber(pdfOptions.xMargins) ?? 1;
+  const printWidth = Math.floor(
+    ((paperMm / 25.4) * 96) / rendererZoom - (2 * sideMarginCm * 96) / 2.54 - 4
+  );
+  // A browser's own print (Lydia's print button, Ctrl+P) keeps its own 1 cm margins, whatever
+  // xMargins says: the page is fitted for the narrower of the two (prepareBrowserPrint).
+  const browserPrintWidth = Math.floor(
+    ((paperMm / 25.4) * 96) / rendererZoom - (2 * 96) / 2.54 - 4
+  );
   const rawScale =
     positiveNumber(pdfOptions.textScale) ?? positiveNumber(pdfOptions.scale);
   // A percentage (110) or a ratio (1.1); kept readable either way.
@@ -4039,6 +4064,8 @@ export const mapPrint = (
       : 1;
   return {
     textScale: compactDecimal(textScale),
+    printWidth,
+    browserPrintWidth,
     compactTable,
     tableFit:
       tableFit < 1 ? compactDecimal(Math.floor(tableFit * 100) / 100) : "",
@@ -4526,8 +4553,34 @@ const mapShippingPanel = (
  * document's details only. Its Contact Details (invoice.contact) close the document instead
  * (mapDocumentContact), as refrens.com prints them.
  */
-export const mapDetails = (state: UnknownRecord) =>
-  mapMeta(state, []).map((row) => ({
+/*
+ * The document's E-commerce Operator (GST), after the dates as refrens.com prints it:
+ * "E-commerce Operator  test (24AAAAA0000A1Z5)", the GSTIN in brackets when there is one.
+ */
+const mapEcommerceOperator = (invoice: UnknownRecord) => {
+  const operator = asRecord(invoice.ecommerceOperator);
+  const name = text(operator.name);
+  if (!name) return [];
+  const gstin = text(operator.gstin);
+  return [
+    {
+      key: "ecommerceOperator",
+      label: labelOr(
+        asRecord(invoice.customLabels),
+        "ecommerceOperator",
+        "E-commerce Operator"
+      ),
+      value: gstin ? `${name} (${gstin})` : name,
+      isDate: false,
+      isNum: false,
+      isEmail: false,
+      isPhone: false,
+    },
+  ];
+};
+
+export const mapDetails = (state: UnknownRecord) => [
+  ...mapMeta(state, []).map((row) => ({
     key: row.key,
     label: bareLabel(row.label),
     value: row.value,
@@ -4535,7 +4588,9 @@ export const mapDetails = (state: UnknownRecord) =>
     isNum: Boolean(row.isNum),
     isEmail: false,
     isPhone: false,
-  }));
+  })),
+  ...mapEcommerceOperator(asRecord(state.invoice)),
+];
 
 /*
  * The document's Contact Details (invoice.contact), worded as refrens.com closes a document:
@@ -4803,13 +4858,16 @@ export const registerVirajLogo = (): void => {
 const MIN_PRINT_FIT = 0.6;
 // Sub-pixel rounding is not an overflow.
 const PRINT_SLACK = 0.5;
+// The share of the page's width a fitted table may take (see fitPrintTable).
+const PRINT_ROOM = 0.99;
 
 /*
- * An item row prints whole (break-inside: avoid) so a short row never splits across pages —
- * but one taller than TALL_ROW (a long description, many images) would leave the rest of its
- * page blank before it (real documents left most of a page empty). Such a row may break.
+ * An item row prints whole (break-inside: avoid; user rule 2026-10-19: a line item never
+ * splits), moving to the next page when it does not fit. Only a row taller than most of a
+ * page's room between the letterhead and the footer (TALL_ROW) may break, as it could not
+ * fit on any page; 320 px split ordinary items with a long description.
  */
-const TALL_ROW = 320;
+const TALL_ROW = 640;
 
 export const markTallRows = (root: ParentNode = document): void => {
   root
@@ -4823,54 +4881,363 @@ export const markTallRows = (root: ParentNode = document): void => {
 };
 
 /*
+ * Laid-out pixels per CSS pixel at an element (the renderer zooms <html> for the print size):
+ * read off a 1000 px probe, as offsetHeight rounds to whole pixels.
+ */
+const layoutScale = (parent: HTMLElement, before: Element): number => {
+  const probe = document.createElement("div");
+  probe.style.cssText = "height: 1000px; margin: 0; break-inside: avoid;";
+  parent.insertBefore(probe, before);
+  const scale = probe.getBoundingClientRect().height / 1000;
+  probe.remove();
+  return scale > 0 ? scale : 1;
+};
+
+/*
  * Stretch the item table to the page (view.print.stretchTable): in print, while the whole
  * document fits on one page, its empty filler row takes the page's spare height so the footer
  * sits at the page's foot, the column rules running down through it. A document longer than
  * a page keeps its natural height (Refrens stretches single-page PDFs only).
+ *
+ * The page's height is left to CSS (100vh): Refrens' PDF service lays the page out in a
+ * window shorter than the paper and only then prints, so a height measured here was the
+ * window's (the table barely stretched in a short window and ran onto a second page in a
+ * tall one). 100vh is the page area when the PDF is made; the content's own height is
+ * measured here (the width is the paper's already, styles.css). Under the print zoom Chrome
+ * scales the page margins as well, so 100vh / zoom is a few px off: kept back with the
+ * slack. A document longer than a page comes out at 0.
  */
+const STRETCH_SLACK = 16;
+// The error under a zoom above 1 grows with it: 2 × the margin × (1 − 1 / zoom), for margins
+// up to 80 px (about 2 cm).
+const STRETCH_ZOOM_SLACK = 160;
+
+/*
+ * Stretch on, a document longer than a page (user, 2026-10-19): where a whole item moves to the
+ * next page, the space it leaves keeps the table's look. Chrome runs the items wrapper on to
+ * the page's foot, so the wrapper draws the column rules there and a rule under each page's
+ * piece of the table (styles.css); the table's row groups are opaque in print, so the rules
+ * show only below the page's last row. Positions are read off the row with the most cells, as
+ * fractions of the wrapper's width (the print zoom scales both alike); the rules' width comes
+ * from styles.css (a 0.5 px border reads back as 1 px), their colour from the cells' borders.
+ */
+const columnRules = (
+  wrap: HTMLElement,
+  table: HTMLTableElement
+): { layers: string; color: string } | undefined => {
+  const row = Array.from(table.tBodies)
+    .flatMap((body) => Array.from(body.rows))
+    .reduce<HTMLTableRowElement | undefined>(
+      (best, candidate) =>
+        !best || candidate.cells.length > best.cells.length ? candidate : best,
+      undefined
+    );
+  const box = wrap.getBoundingClientRect();
+  if (!row || row.cells.length === 0 || box.width <= 0) return undefined;
+  const style = getComputedStyle(row.cells[0]);
+  const color = parseFloat(style.borderInlineEndWidth)
+    ? style.borderInlineEndColor
+    : style.borderInlineStartColor;
+  const width =
+    parseFloat(
+      getComputedStyle(wrap).getPropertyValue("--vt-column-rule-width")
+    ) || 1;
+  const scale = box.width / (wrap.offsetWidth || box.width);
+  const room = box.width - width * scale;
+  const cells = Array.from(row.cells).map((cell) =>
+    cell.getBoundingClientRect()
+  );
+  const edges = [
+    ...cells.map((cell) => cell.left - box.left),
+    cells[cells.length - 1].right - box.left,
+  ];
+  const layers = edges
+    .map(
+      (x) =>
+        `linear-gradient(${color}, ${color}) ${compactDecimal(
+          Math.min(100, Math.max(0, (x / room) * 100))
+        )}% 0 / var(--vt-column-rule-width) 100% no-repeat`
+    )
+    .join(", ");
+  return { layers, color };
+};
+
 export const stretchItemTable = (root: ParentNode = document): void => {
   const doc = root.querySelector<HTMLElement>(".vt-doc.is-stretch");
   const filler = doc?.querySelector<HTMLElement>(".vt-items .vt-filler");
   const frame = doc?.querySelector<HTMLElement>(".vt-page-frame");
   if (!doc || !filler || !frame) return;
   filler.style.removeProperty("--vt-filler-height");
+  const wrap = doc.querySelector<HTMLElement>(".vt-items-scroll");
+  const table = doc.querySelector<HTMLTableElement>(".vt-items");
+  wrap?.style.removeProperty("--vt-column-rules");
+  wrap?.style.removeProperty("--vt-column-rule-color");
+  const printing =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("print").matches;
+  if (!printing || !frame.parentElement) return;
+  const rules = wrap && table ? columnRules(wrap, table) : undefined;
+  if (wrap && rules) {
+    wrap.style.setProperty("--vt-column-rules", rules.layers);
+    wrap.style.setProperty("--vt-column-rule-color", rules.color);
+  }
+  const zoom =
+    parseFloat(getComputedStyle(document.documentElement).zoom || "1") || 1;
+  // The whole document: the frame, and the letterhead footer after it when it prints on the
+  // last page only (on every page it sits in the frame's repeating footer space).
+  const content =
+    doc.getBoundingClientRect().height /
+    layoutScale(frame.parentElement, frame);
+  const slack =
+    STRETCH_SLACK + (zoom > 1 ? STRETCH_ZOOM_SLACK * (1 - 1 / zoom) : 0);
+  filler.style.setProperty(
+    "--vt-filler-height",
+    `max(0px, calc(100vh / ${compactDecimal(zoom)} - ${Math.ceil(
+      content + slack
+    )}px))`
+  );
+};
+
+/*
+ * A totals figure has no width of its own (styles.css .vt-fig), so it never widens the item
+ * table's last column (user, 2026-10-21, as in the Ecommerce template). Once laid out, when the
+ * widest figure on show does not fit its cell, every totals row's figure cell takes the same
+ * whole columns to its left from the label, so the one rule between label and figure stays a
+ * straight line on an item column's edge. Each layout starts over from the last column alone;
+ * a row hidden at the time (hideTotals / hideTaxes) is not measured.
+ */
+export const fitTotals = (root: ParentNode = document): void => {
+  root.querySelectorAll<HTMLTableElement>("table.vt-items").forEach((table) => {
+    const pairs = Array.from(
+      table.querySelectorAll<HTMLTableRowElement>(
+        ":scope > tbody.vt-totals > tr.ceres-subtotal-row"
+      )
+    )
+      .map((row) => ({
+        label: row.querySelector<HTMLTableCellElement>(
+          ":scope > .ceres-subtotal-label"
+        ),
+        value: row.querySelector<HTMLTableCellElement>(
+          ":scope > .ceres-subtotal-value"
+        ),
+      }))
+      .filter(
+        (
+          pair
+        ): pair is {
+          label: HTMLTableCellElement;
+          value: HTMLTableCellElement;
+        } => Boolean(pair.label && pair.value)
+      );
+    if (!pairs.length) return;
+    const columns = pairs[0].label.colSpan + pairs[0].value.colSpan;
+    pairs.forEach(({ label, value }) => {
+      label.colSpan = columns - 1;
+      value.colSpan = 1;
+    });
+    // Phones and tablets read the totals as label | figure lines: no columns to line up with.
+    if (table.matches(".is-cards, .is-grid") || columns < 2) return;
+    const row = Array.from(table.tBodies)
+      .flatMap((body) => Array.from(body.rows))
+      .find((candidate) => candidate.cells.length === columns);
+    if (!row) return;
+    const widths = Array.from(row.cells).map(
+      (cell) => cell.getBoundingClientRect().width
+    );
+    let need = 0;
+    pairs.forEach(({ value }) => {
+      if (!value.getClientRects().length) return;
+      const figure = value.querySelector(".vt-fig");
+      if (!figure) return;
+      const style = getComputedStyle(value);
+      const padding =
+        (parseFloat(style.paddingInlineStart) || 0) +
+        (parseFloat(style.paddingInlineEnd) || 0);
+      // At least a whole pixel for the rule: a 0.5 px rule still paints a full device pixel.
+      const rule = Math.max(
+        1,
+        Math.ceil(parseFloat(style.borderInlineStartWidth) || 0)
+      );
+      Array.from(figure.children).forEach((child) => {
+        need = Math.max(
+          need,
+          child.getBoundingClientRect().width + padding + rule
+        );
+      });
+    });
+    let span = 1;
+    let room = widths[columns - 1];
+    while (need > room && span < columns - 1) {
+      span += 1;
+      room += widths[columns - span];
+    }
+    if (span === 1) return;
+    pairs.forEach(({ label, value }) => {
+      label.colSpan = columns - span;
+      value.colSpan = span;
+    });
+  });
+};
+
+/*
+ * The totals carry on without the item headings (user, 2026-10-19): in print, the rows after
+ * the items move into a table of their own right under the item table, so a page that holds
+ * only them repeats no heading row. Its columns take the item columns' widths, so the TOTAL
+ * row's figures stay under their columns. joinTotals puts them back in the one table.
+ */
+const TOTALS_SPLIT = "data-vt-totals-split";
+const TOTALS_GROUPS = ":scope > tbody.vt-items-total, :scope > tbody.vt-totals";
+
+export const joinTotals = (root: ParentNode = document): void => {
+  root
+    .querySelectorAll<HTMLTableElement>(`table[${TOTALS_SPLIT}]`)
+    .forEach((split) => {
+      const table = split.previousElementSibling;
+      const marker = Array.from(table?.childNodes || []).find(
+        (node) =>
+          node.nodeType === Node.COMMENT_NODE &&
+          node.textContent === TOTALS_SPLIT
+      );
+      if (table && marker) {
+        Array.from(split.querySelectorAll(TOTALS_GROUPS)).forEach((group) =>
+          table.insertBefore(group, marker)
+        );
+        marker.remove();
+      }
+      split.remove();
+    });
+};
+
+/*
+ * The summary tables (Tax, HSN, Batch, Payments) read as cards on a phone, as in the Modern
+ * Manufacturing template (user, 2026-10-20): each cell is labelled with its column's heading,
+ * both heading rows joined ("IGST Rate"), for the card CSS to print beside its value. A Total
+ * row's first cell is its title, and a cell with nothing in it is left off the card.
+ */
+export const labelSummaryCells = (root: ParentNode = document): void => {
+  root
+    .querySelectorAll<HTMLTableElement>(".vt-summary table.ceres-table")
+    .forEach((table) => {
+      const span = (cell: Element) =>
+        Math.max(1, Number(cell.getAttribute("colspan")) || 1);
+      const headings: string[][] = [];
+      table.querySelectorAll("thead tr").forEach((row) => {
+        let col = 0;
+        Array.from(row.children).forEach((cell) => {
+          const name = cell.textContent?.trim() ?? "";
+          for (let i = 0; i < span(cell); i += 1) {
+            headings[col + i] ??= [];
+            if (name && !headings[col + i].includes(name)) {
+              headings[col + i].push(name);
+            }
+          }
+          col += span(cell);
+        });
+      });
+      table.querySelectorAll("tbody tr, tfoot tr").forEach((row) => {
+        let col = 0;
+        const isTotal = row.parentElement?.tagName === "TFOOT";
+        Array.from(row.children).forEach((cell, index) => {
+          const label =
+            span(cell) === 1 && !(isTotal && index === 0)
+              ? (headings[col] ?? []).join(" ")
+              : "";
+          if (label) cell.setAttribute("data-label", label);
+          else cell.removeAttribute("data-label");
+          cell.toggleAttribute(
+            "data-vt-empty",
+            !(cell.textContent ?? "").trim() && !cell.querySelector("img, svg")
+          );
+          col += span(cell);
+        });
+      });
+    });
+};
+
+export const splitTotals = (root: ParentNode = document): void => {
+  joinTotals(root);
   const printing =
     typeof window.matchMedia === "function" &&
     window.matchMedia("print").matches;
   if (!printing) return;
-  const probe = document.createElement("div");
-  probe.style.cssText = "position:absolute;visibility:hidden;height:100vh;";
-  doc.appendChild(probe);
-  const page = probe.getBoundingClientRect().height;
-  probe.remove();
-  // 12 px kept back: Chrome's page breaking needs a few px more than the measured layout
-  // (a 6 px shortfall moved the closing contact line onto a second page in testing).
-  const spare = page - frame.getBoundingClientRect().height - 12;
-  if (spare > 0 && spare < page) {
-    filler.style.setProperty("--vt-filler-height", `${Math.floor(spare)}px`);
-  }
+  root.querySelectorAll<HTMLTableElement>(".vt-items").forEach((table) => {
+    const groups = Array.from(
+      table.querySelectorAll<HTMLElement>(TOTALS_GROUPS)
+    );
+    const row = Array.from(table.tBodies)
+      .filter((body) => !groups.includes(body))
+      .flatMap((body) => Array.from(body.rows))
+      .reduce<HTMLTableRowElement | undefined>(
+        (best, candidate) =>
+          !best || candidate.cells.length > best.cells.length
+            ? candidate
+            : best,
+        undefined
+      );
+    if (!groups.length || !row || !table.parentElement) return;
+    const split = document.createElement("table");
+    split.className = table.className;
+    split.setAttribute(TOTALS_SPLIT, "");
+    const style = table.getAttribute("style");
+    if (style) split.setAttribute("style", style);
+    split.style.tableLayout = "fixed";
+    groups[0].before(document.createComment(TOTALS_SPLIT));
+    groups.forEach((group) => split.appendChild(group));
+    table.after(split);
+    /*
+     * Measured once the totals have left: the item table sizes its columns again without
+     * them, and widths taken before drifted a few px from the rules above (user report).
+     * Layout pixels: the print zoom scales the measured boxes, not the widths set here.
+     */
+    const scale =
+      table.getBoundingClientRect().width / (table.offsetWidth || 1) || 1;
+    split.style.width = `${table.offsetWidth}px`;
+    const cols = document.createElement("colgroup");
+    Array.from(row.cells).forEach((cell) => {
+      const col = document.createElement("col");
+      col.span = cell.colSpan || 1;
+      col.style.width = `${cell.getBoundingClientRect().width / scale}px`;
+      cols.appendChild(col);
+    });
+    split.prepend(cols);
+  });
 };
 
-export const fitPrintTable = (root: ParentNode = document): void => {
+export const fitPrintTable = (
+  root: ParentNode = document,
+  force = false
+): void => {
   const printing =
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("print").matches;
+    force ||
+    (typeof window.matchMedia === "function" &&
+      window.matchMedia("print").matches);
   root.querySelectorAll<HTMLElement>(".vt-items").forEach((table) => {
     table.classList.remove("is-print-fit");
     table.style.removeProperty("--vt-print-fit");
     table.style.removeProperty("zoom");
     const box = table.parentElement;
     if (!printing || !box) return;
-    const overflow = () =>
-      table.getBoundingClientRect().width - box.getBoundingClientRect().width;
+    // 1 % kept back: Chrome sets the PDF's text a little wider than the layout measured it, and a
+    // word on the table's edge ("Amount", "Expiry") was cut there.
+    const room = () => box.getBoundingClientRect().width * PRINT_ROOM;
+    // The table fills its box (width 100 %), so its own width always exceeds 99 % of it: what
+    // counts is how narrow its columns can go, measured at width 0 (a table is never narrower
+    // than its content). Read as it stood, a table that fit was shrunk to the 10 px floor.
+    const need = () => {
+      const { width } = table.style;
+      table.style.width = "0px";
+      const narrowest = table.getBoundingClientRect().width;
+      table.style.width = width;
+      return narrowest;
+    };
+    const overflow = () => need() - room();
     if (overflow() <= PRINT_SLACK) return;
     table.classList.add("is-print-fit");
     let fit = 1;
     // Shrinks by the measured ratio, and by at least a step each time, so the last pixel or
     // two of overflow (the floors, padding and rules do not scale exactly) still goes.
     for (let step = 0; step < 20 && overflow() > PRINT_SLACK; step += 1) {
-      const ratio =
-        box.getBoundingClientRect().width / table.getBoundingClientRect().width;
+      const ratio = room() / need();
       fit = Math.max(
         MIN_PRINT_FIT,
         Math.min(fit - 0.01, Math.floor(fit * ratio * 100) / 100)
@@ -4884,11 +5251,147 @@ export const fitPrintTable = (root: ParentNode = document): void => {
     // cut off at the page edge. Rules and rounding keep a pixel or two: it settles in steps.
     let scale = 1;
     for (let step = 0; step < 10 && overflow() > PRINT_SLACK; step += 1) {
-      const ratio =
-        box.getBoundingClientRect().width / table.getBoundingClientRect().width;
+      const ratio = room() / need();
       scale = Math.min(scale - 0.005, Math.floor(scale * ratio * 1000) / 1000);
       table.style.setProperty("zoom", String(scale));
     }
+  });
+};
+
+/* ------------------------------------------------------------------ print: a browser's own print */
+
+/*
+ * A browser's own print (Lydia's print button, Ctrl+P) counts the pages from the print layout
+ * as it stands when printing starts; the print media listener runs after that, so a table it
+ * fitted left blank pages at the end (two on A4, four on A5 in Modern Manufacturing, user report 2026-10-20). Just
+ * before printing (beforeprint), the stylesheets' print rules are switched on for one
+ * synchronous measurement, the table is fitted as print lays it out, and the rules go back:
+ * the fit styles print only, so the screen never changes, and the page count is right.
+ * Refrens' PDF service switches to print media before it prints, where the listener does it.
+ */
+const MEDIA_WIDTH =
+  /\(\s*(min-width|max-width|width)\s*(:|<=|>=|<|>)\s*(\d+(?:\.\d+)?)px\s*\)/g;
+
+/* What a media query says in print, on a page `width` px wide; undefined leaves it alone. */
+export const printMediaText = (
+  query: string,
+  width: number
+): string | undefined => {
+  if (/\bprint\b/.test(query)) {
+    return /\bnot\s+print\b/.test(query)
+      ? "not all"
+      : query.replace(/\bprint\b/g, "all");
+  }
+  if (/\bscreen\b/.test(query)) return "not all";
+  const conditions = [...query.matchAll(MEDIA_WIDTH)];
+  if (!conditions.length || /,|\bor\b|\bnot\b/.test(query)) return undefined;
+  const holds = conditions.every(([, feature, op, value]) => {
+    const px = Number(value);
+    if (feature === "min-width" || op === ">=") return width >= px;
+    if (feature === "max-width" || op === "<=") return width <= px;
+    if (op === "<") return width < px;
+    return width > px;
+  });
+  return holds ? "all" : "not all";
+};
+
+export const withPrintRules = <T>(width: number, measure: () => T): T => {
+  const changed: Array<[MediaList, string]> = [];
+  const flip = (media: MediaList) => {
+    const before = media.mediaText;
+    const next = printMediaText(before, width);
+    if (next === undefined || next === before) return;
+    changed.push([media, before]);
+    // eslint-disable-next-line no-param-reassign
+    media.mediaText = next;
+  };
+  const visit = (rules: CSSRuleList) =>
+    Array.from(rules).forEach((rule) => {
+      // A media rule (or an @import with media): by its media list, which jsdom's rules carry
+      // without being CSSMediaRule instances.
+      const { media } = rule as CSSMediaRule;
+      if (media && typeof media.mediaText === "string") flip(media);
+      if ("cssRules" in rule) visit((rule as CSSGroupingRule).cssRules);
+    });
+  Array.from(document.styleSheets).forEach((sheet) => {
+    try {
+      if (sheet.media?.mediaText) flip(sheet.media);
+      visit(sheet.cssRules);
+    } catch {
+      // Another origin's stylesheet (a font): it holds no print rules of ours.
+    }
+  });
+  try {
+    return measure();
+  } finally {
+    changed.reverse().forEach(([media, before]) => {
+      // eslint-disable-next-line no-param-reassign
+      media.mediaText = before;
+    });
+  }
+};
+
+/*
+ * For the same measurement, the template's own checks of `matchMedia("print")` answer yes, so
+ * the print steps that need no pages (the table fit, the totals split) run as print runs them.
+ */
+export const withPrintMedia = <T>(measure: () => T): T => {
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) =>
+    /\bprint\b/.test(query) && !/\bnot\b/.test(query)
+      ? ({
+          matches: true,
+          media: query,
+          onchange: null,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          addListener: () => undefined,
+          removeListener: () => undefined,
+          dispatchEvent: () => false,
+        } as MediaQueryList)
+      : original.call(window, query)) as typeof window.matchMedia;
+  try {
+    return measure();
+  } finally {
+    window.matchMedia = original;
+  }
+};
+
+/*
+ * `layout` is the print media listener's own work (the totals split and all), so the page
+ * count is taken from the layout that prints: splitting the totals off after the count left a
+ * blank page at the end of an A5 printout. Only the steps that need the pages themselves (the
+ * footer on the last page's edge) wait for the listener.
+ */
+export const prepareBrowserPrint = (
+  layout?: () => void,
+  root: ParentNode = document
+): void => {
+  const doc = root.querySelector<HTMLElement>(".vt-doc");
+  if (!doc) return;
+  const style = getComputedStyle(doc);
+  // The document's printable width, or the browser's own (1 cm margins) where narrower.
+  const width = Math.min(
+    parseFloat(style.getPropertyValue("--vt-print-width")) ||
+      doc.getBoundingClientRect().width,
+    parseFloat(style.getPropertyValue("--vt-browser-print-width")) || Infinity
+  );
+  // The phone and tablet layouts are screen only.
+  const fitted = Array.from(
+    root.querySelectorAll<HTMLElement>(".vt-items:is(.is-cards, .is-grid)")
+  ).map((table) => [table, table.className] as const);
+  fitted.forEach(([table]) => table.classList.remove("is-cards", "is-grid"));
+  const docWidth = doc.style.width;
+  withPrintRules(width, () => {
+    doc.style.width = `${width}px`;
+    withPrintMedia(() => (layout ? layout() : fitPrintTable(root, true)));
+  });
+  doc.style.width = docWidth;
+  fitted.forEach(([table, className]) => {
+    // eslint-disable-next-line no-param-reassign
+    table.className = `${className}${
+      table.classList.contains("is-print-fit") ? " is-print-fit" : ""
+    }`;
   });
 };
 
@@ -4916,6 +5419,38 @@ export const equalizeSummaries = (root: ParentNode = document): void => {
         cell.style.width = share;
       });
     });
+};
+
+/*
+ * The item table on a phone or tablet screen (styles.css, "phones and tablets"): on a screen
+ * up to PHONE_WIDTH every item reads as a card (is-cards); on one narrower than an A4 page
+ * (PAPER_WIDTH, 794 px) the table stays as on paper while it fits its box, and one that would
+ * scroll sideways keeps its headings in a row over the items (is-grid), or reads as cards with
+ * more figure columns than a tablet row holds (has-many-figures). A screen as wide as the
+ * page, and print, keep the table as it is, so the preview at A4 width matches the PDF.
+ */
+const PHONE_WIDTH = 640;
+const PAPER_WIDTH = 794;
+
+export const fitItemsToScreen = (root: ParentNode = document): void => {
+  const printing =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("print").matches;
+  root.querySelectorAll<HTMLElement>(".vt-items").forEach((table) => {
+    table.classList.remove("is-cards", "is-grid");
+    const doc = table.closest<HTMLElement>(".vt-doc");
+    const box = table.parentElement;
+    if (printing || !doc || !box) return;
+    const width = document.documentElement.clientWidth;
+    if (width >= PAPER_WIDTH) return;
+    const phone = width <= PHONE_WIDTH;
+    if (!phone && box.scrollWidth <= box.clientWidth + 1) return;
+    table.classList.add(
+      phone || table.classList.contains("has-many-figures")
+        ? "is-cards"
+        : "is-grid"
+    );
+  });
 };
 
 /* Registers the browser-side fits: the summaries' equal columns and the print table. */
@@ -4961,10 +5496,15 @@ export const registerVirajTableFit = (): void => {
   // The table first (its columns set the totals' room), then the totals.
   run = () => {
     observer?.disconnect();
+    joinTotals();
     equalizeSummaries();
     fitPrintTable();
     markTallRows();
+    fitTotals();
+    splitTotals();
     stretchItemTable();
+    fitItemsToScreen();
+    labelSummaryCells();
     observer?.takeRecords();
     watch();
   };
@@ -4974,6 +5514,8 @@ export const registerVirajTableFit = (): void => {
   document.addEventListener("load", schedule, true);
   if (typeof window.matchMedia === "function") {
     window.matchMedia("print").addEventListener("change", run);
+    // The fits as print runs them (run), so the page count is taken from the printed layout.
+    window.addEventListener("beforeprint", () => prepareBrowserPrint(run));
   }
   /*
    * Fonts: a face (Inter Bold for the grand total) can start loading after fonts.ready has
@@ -5032,19 +5574,6 @@ const LAST_PAGE_FOOTER =
 
 const pageTop = (element: Element): number =>
   element.getBoundingClientRect().top + window.scrollY;
-
-/*
- * Laid-out pixels per CSS pixel at an element (the renderer zooms <html> for the print size):
- * read off a 1000 px probe, as offsetHeight rounds to whole pixels.
- */
-const layoutScale = (parent: HTMLElement, before: Element): number => {
-  const probe = document.createElement("div");
-  probe.style.cssText = "height: 1000px; margin: 0; break-inside: avoid;";
-  parent.insertBefore(probe, before);
-  const scale = probe.getBoundingClientRect().height / 1000;
-  probe.remove();
-  return scale > 0 ? scale : 1;
-};
 
 export const resetFootersOnPageEdge = (root: ParentNode = document): void => {
   root.querySelectorAll<HTMLElement>(LAST_PAGE_FOOTER).forEach((footer) => {

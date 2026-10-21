@@ -17,7 +17,7 @@
   update targets.
 --}}
 {{#with (vtView @root) as |view|}}
-<div class="vt-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.hideFooter}} is-footer-hidden{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--vt-text-scale: {{view.print.textScale}};{{#if view.theme}} --vt-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --vt-script-font: '{{view.script.font}}';{{/if}}">
+<div class="vt-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.hideFooter}} is-footer-hidden{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--vt-text-scale: {{view.print.textScale}}; --vt-print-width: {{view.print.printWidth}}px; --vt-browser-print-width: {{view.print.browserPrintWidth}}px;{{#if view.theme}} --vt-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --vt-script-font: '{{view.script.font}}';{{/if}}">
   {{!-- The Language/Script setting's font, for the glyphs Inter lacks. --}}
   {{#if view.script.fontUrl}}<link rel="stylesheet" href="{{view.script.fontUrl}}" />{{/if}}
   {{!--
@@ -129,7 +129,7 @@
                       <div class="vt-cell vt-cell-value"><span class="{{#if isNum}}vt-num{{else if isEmail}}vt-email{{/if}}">{{#if isDate}}{{vtDate value @root.invoice.ownerOffset}}{{else if isPhone}}{{formatPhoneNumber value}}{{else}}{{value}}{{/if}}</span></div>
                     </div>
                   {{/each}}
-                  {{!-- The e-invoice QR while the IRN is active, closing the details; no document QR. --}}
+                  {{!-- No QR here: the e-invoice QR prints in the IRN details (helpers.ts mapCompliance). --}}
                   {{#if view.compliance.qr.document}}
                   <div class="vt-qr vt-doc-qr" data-ceres-field-container="documentQr"><img data-ceres-field="documentQr"{{#if view.compliance.qr.document}} src="{{view.compliance.qr.document}}"{{/if}} alt="{{view.compliance.qr.documentAlt}}" /></div>
                   {{/if}}
@@ -211,7 +211,7 @@
 
           <section class="vt-items-section" data-testid="section" data-section="items">
             <div class="vt-items-scroll" data-testid="items-scroll">
-              <table class="vt-items{{#if view.print.compactTable}} is-print-compact{{/if}}{{#if view.table.showThumbnail}} has-thumbnails{{/if}}{{#if view.table.roomy}} is-roomy{{/if}}" data-testid="items-table"{{#if view.print.tableFit}} style="--vt-table-fit: {{view.print.tableFit}};"{{/if}}>
+              <table class="vt-items{{#if view.print.compactTable}} is-print-compact{{/if}}{{#if view.table.showThumbnail}} has-thumbnails{{/if}}{{#if view.table.roomy}} is-roomy{{/if}}{{#if view.table.manyFigures}} has-many-figures{{/if}}" data-testid="items-table" style="--vt-figures: {{view.table.figureCount}}; --vt-serial-width: {{view.table.serialWidth}}px;{{#if view.print.tableFit}} --vt-table-fit: {{view.print.tableFit}};{{/if}}">
                 <thead>
                   <tr data-testid="items-header">
                     <th class="vt-col-serial" data-col="sr" style="width: {{view.table.serialWidth}}px">{{view.table.serialLabel}}</th>
@@ -272,7 +272,7 @@
                               {{/if}}
                             </td>
                           {{else}}
-                            <td class="{{className}}" data-col="{{col}}">{{#if isNum}}<span class="vt-num" data-testid="num">{{value}}</span>{{else}}{{value}}{{/if}}</td>
+                            <td class="{{className}}" data-col="{{col}}" data-label="{{label}}">{{#if isNum}}<span class="vt-num" data-testid="num">{{value}}</span>{{else}}{{value}}{{/if}}</td>
                           {{/if}}
                         {{/each}}
                       </tr>
@@ -319,7 +319,7 @@
                         <th class="vt-total-label" scope="row"><span class="vt-text">{{view.table.footer.label}}</span></th>
                       {{/if}}
                       {{#each view.table.footer.gridCells}}
-                        <td class="vt-total-value {{className}}" data-col="{{col}}">{{#if isNum}}<span class="vt-num" data-testid="num">{{value}}</span>{{/if}}</td>
+                        <td class="vt-total-value {{className}}" data-col="{{col}}" data-label="{{label}}">{{#if isNum}}<span class="vt-num" data-testid="num">{{value}}</span>{{/if}}</td>
                       {{/each}}
                     </tr>
                   </tbody>
@@ -327,7 +327,7 @@
                 {{!--
                   The totals as the design rows them ("Total Basics", "GST", "Grand Total"): the
                   label across every column but the last, set on the end edge, the figure in the
-                  last column. The rows are the shared Subtotal widget's (computeSubtotalRows) and
+                  last column (more columns when it needs them: helpers.ts fitTotals). The rows are the shared Subtotal widget's (computeSubtotalRows) and
                   keep its classes and data-ceres-* hooks, so the live hideTotals / hideTaxes
                   toggles still apply. The amount in words closes the table.
                 --}}
@@ -344,10 +344,12 @@
                         {{#if note}}<div class="ceres-subtotal-note">{{note}}</div>{{/if}}
                       </th>
                       <td class="ceres-subtotal-value">
-                        <span class="vt-num"{{#if isNum}} data-testid="num"{{/if}}{{#if isGrand}} data-role="grand-total-row"{{/if}}>{{value}}</span>
-                        {{#if converted}}<span class="ceres-subtotal-converted">{{converted}}</span>{{/if}}
-                        {{#if extra}}<span class="ceres-subtotal-extra">{{extra.value}}</span>{{/if}}
-                        {{#if extra.converted}}<span class="ceres-subtotal-converted">{{extra.converted}}</span>{{/if}}
+                        <div class="vt-fig">
+                          <span class="vt-num"{{#if isNum}} data-testid="num"{{/if}}{{#if isGrand}} data-role="grand-total-row"{{/if}}>{{value}}</span>
+                          {{#if converted}}<span class="ceres-subtotal-converted">{{converted}}</span>{{/if}}
+                          {{#if extra}}<span class="ceres-subtotal-extra">{{extra.value}}</span>{{/if}}
+                          {{#if extra.converted}}<span class="ceres-subtotal-converted">{{extra.converted}}</span>{{/if}}
+                        </div>
                       </td>
                     </tr>
                   {{/each}}
@@ -355,8 +357,10 @@
                     <tr class="ceres-subtotal-row vt-extra-row{{#if view.totals.hidden}} is-hidden-by-totals{{/if}}" data-ceres-subtotal-row="{{key}}">
                       <th class="ceres-subtotal-label" colspan="{{view.table.labelColspan}}" scope="row"><span class="vt-text">{{label}}</span></th>
                       <td class="ceres-subtotal-value">
-                        <span class="vt-num">{{value}}</span>
-                        {{#if converted}}<span class="ceres-subtotal-converted">{{converted}}</span>{{/if}}
+                        <div class="vt-fig">
+                          <span class="vt-num">{{value}}</span>
+                          {{#if converted}}<span class="ceres-subtotal-converted">{{converted}}</span>{{/if}}
+                        </div>
                       </td>
                     </tr>
                   {{/each}}
@@ -364,8 +368,10 @@
                     <tr class="ceres-subtotal-row ceres-subtotal-row-{{emphasis}}{{#if view.totals.hidden}} is-hidden-by-totals{{/if}}" data-ceres-subtotal-row="{{key}}">
                       <th class="ceres-subtotal-label" colspan="{{view.table.labelColspan}}" scope="row"><span class="vt-text">{{label}}</span></th>
                       <td class="ceres-subtotal-value">
-                        <span class="vt-num"{{#if isNum}} data-testid="num"{{/if}}>{{value}}</span>
-                        {{#if converted}}<span class="ceres-subtotal-converted">{{converted}}</span>{{/if}}
+                        <div class="vt-fig">
+                          <span class="vt-num"{{#if isNum}} data-testid="num"{{/if}}>{{value}}</span>
+                          {{#if converted}}<span class="ceres-subtotal-converted">{{converted}}</span>{{/if}}
+                        </div>
                       </td>
                     </tr>
                   {{/each}}
@@ -375,6 +381,9 @@
                     </tr>
                   {{/if}}
                 </tbody>
+                {{!-- Print only: repeated at the foot of each page's piece of the table, so a piece cut
+                      by a page break (an item taller than the page's room) closes with a rule. --}}
+                <tfoot class="vt-page-close" aria-hidden="true"><tr><td colspan="{{view.table.colspan}}"></td></tr></tfoot>
               </table>
             </div>
           </section>
