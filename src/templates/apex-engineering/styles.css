@@ -20,13 +20,27 @@
      document's colour as rendered, so a change shows without a re-render. */
   --ax-accent: var(--primary-color, var(--ax-theme, #000));
   --ax-on-accent: #fff;
-  --ax-ink: #22272f; /* neutral-900 */
-  --ax-strong: #282828; /* neutral-800 */
-  --ax-body: #1d1d1d;
-  --ax-black: #000;
+
+  /*
+   * Change Color & Font's other colours, as the renderer sets them on <html>: Secondary Color
+   * the text, Primary Background the page and its white cards, Secondary Background the grey
+   * panels and rows. Unset, the design's own colours apply.
+   */
+  --ax-ink: var(--secondary-color, #22272f); /* neutral-900 */
+  --ax-strong: var(--secondary-color, #282828); /* neutral-800 */
+  --ax-body: var(--secondary-color, #1d1d1d);
+  --ax-black: var(--secondary-color, #000);
+  --ax-paper: var(--primary-background, #fff);
   --ax-line: #e0e0e2; /* neutral-200: boxes, dividers */
   --ax-rule: #ceced2; /* neutral-300: table rules */
-  --ax-fill: #f9f9f9; /* neutral-50: panels, group and grand-total rows */
+  --ax-fill: var(--secondary-background, #f9f9f9); /* neutral-50: panels, group and grand-total rows */
+  --ax-muted: var(--secondary-color, #5c6370); /* captions and party headings; prints clearly */
+
+  /*
+   * Type roles (one system across the document): headings 700, labels 600, values and running
+   * text 400, captions 400 in --ax-muted. One text rhythm: 13 px on 20 px lines.
+   */
+  --ax-lh: 1.5385;
 
   /*
    * --ax-script-font is the Noto face for the document's Language/Script setting (set inline
@@ -34,16 +48,14 @@
    */
   --ax-font: var(--subtitle-font, "Inter"), var(--ax-script-font, "Inter"), sans-serif;
   --ax-title-font: var(--title-font, "Inter"), var(--ax-script-font, "Inter"), sans-serif;
-  --ax-table-font:
-    var(--subtitle-font, Arial), var(--ax-script-font, Arial), helvetica, sans-serif;
-  --ax-label-font:
-    var(--title-font, Arial), var(--ax-script-font, Arial), helvetica, sans-serif;
+  --ax-table-font: var(--ax-font);
+  --ax-label-font: var(--ax-title-font);
 
   /*
    * Type scale (design-to-template §4a): six steps, 13 px base pinned on screen and in print,
    * nothing below the 10 px floor. 11 small print; 13 body, table, terms and bank (the
    * design's 12 raised to 13, user request); 14 subtitle and client name; 18 cost figure (the
-   * design's 16, user request); 20 title. Print compresses only the top step.
+   * design's 16, user request); 20 title. Print uses the same sizes (user, 2026-10-21).
    */
   --ax-font-size-xs: 11px;
   --ax-font-size-s: 13px;
@@ -57,12 +69,12 @@
 
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px; /* one rhythm between sections */
   width: min(100vw, 1000px);
   max-width: 100%;
   margin: 0 auto;
   padding: 0 var(--ax-gutter);
-  background: #fff;
+  background: var(--ax-paper);
   color: var(--ax-ink);
   font-family: var(--ax-font);
   font-size: calc(var(--ax-font-size-base) * var(--ax-text-scale, 1));
@@ -111,7 +123,10 @@
   margin: 0;
 }
 
-/* Figures, codes, dates, IDs and phone numbers never wrap. */
+/*
+ * Figures, codes, dates, IDs and phone numbers never wrap (user request): the box holding
+ * one widens to fit it instead — columns, cards and table cells alike.
+ */
 .ax-num {
   white-space: nowrap;
 }
@@ -161,16 +176,27 @@
 /* ------------------------------------------------------------ header */
 
 /*
- * Apex mark (233 × 142) | rule | title block | rule | business logo + document details
- * (330 wide), spread across the page; the rules run the header's full height.
- * The design's header frame closes 20 px under its content (40 px to the client panel).
+ * Apex mark | rule | title block | rule | business logo + document details: three equal
+ * columns, 16 px either side of each rule (user request), a column widening only for a
+ * document number that will not fit on one line; the rules run the header's full height. The design's header frame closes 20 px under its content (40 px to the client panel).
+ */
+
+/*
+ * The rules sit close to the mark and to the logo + details, 16 px from each (user request,
+ * 2026-10-21): those two columns take their content's width (the details at most 40% of the
+ * header, wrapping a long value), and the title is centred in the space between the rules.
+ * The text inside a block stays aligned to its start.
  */
 .ax-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1px minmax(min-content, 1fr) 1px fit-content(40%);
   gap: 16px;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding-bottom: 20px;
+  place-items: start center;
+  padding-bottom: 0; /* the sections' 16 px gap follows */
+}
+
+.ax-header > .ax-header-end {
+  justify-self: stretch;
 }
 
 /*
@@ -180,21 +206,16 @@
  * reaches past the frame. Same size on screen and paper.
  */
 .ax-mark {
-  flex: none;
   width: 198px;
+  max-width: 100%;
   height: 120px;
   background-repeat: no-repeat;
   background-position: 49.21% 50%;
   background-size: 191.3% 150%;
 }
 
-/*
- * Both rules stand at auto gaps (the header's space-between, user request): mark | rule |
- * title | rule | details share the spare width equally, 16 px at the least. They run the
- * header's full height.
- */
+/* Both rules run the header's full height, 16 px from the columns on either side. */
 .ax-header-rule {
-  flex: none;
   align-self: stretch;
   width: 1px;
   background: var(--ax-line);
@@ -202,7 +223,6 @@
 
 .ax-header-title {
   display: flex;
-  flex: 0 1 auto;
   flex-direction: column;
   gap: 8px;
   align-self: flex-start; /* top-aligned with the mark and the details (user request) */
@@ -211,34 +231,34 @@
   overflow-wrap: break-word;
 }
 
+/* The document title at 28 px, screen and print alike (user request, 2026-10-21). */
 .ax-title {
   font-family: var(--ax-title-font);
-  font-size: calc(var(--ax-font-size-xl) * var(--ax-text-scale, 1));
+  font-size: calc(28px * var(--ax-text-scale, 1));
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: 0.01em;
 }
 
+/* The subtitle's first line at 16 px, the rest at 14 px (user request, 2026-10-21). */
 .ax-subtitle {
-  font-size: calc(var(--ax-font-size-m) * var(--ax-text-scale, 1));
+  font-size: calc(16px * var(--ax-text-scale, 1));
   font-weight: 600;
   line-height: 1.2;
 }
 
 .ax-tagline {
-  font-size: calc(var(--ax-font-size-base) * var(--ax-text-scale, 1));
+  font-size: calc(14px * var(--ax-text-scale, 1));
   line-height: 1.2;
 }
 
+/* "Original for Recipient": plain text under the title, no frame or padding (user request). */
 .ax-copy {
   align-self: flex-start;
-  padding: 0 8px;
-  border: 1px solid var(--ax-line);
-  border-radius: 4px;
   color: var(--ax-ink);
   font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
   font-weight: 600;
-  line-height: 1.6;
+  line-height: var(--ax-lh);
 }
 
 .ax-status {
@@ -251,18 +271,13 @@
 }
 
 /*
- * The logo and details hug their content (user request): as wide as the widest line, up to
- * the design's 330 px, so no empty strip is left at the header's end. They never shrink below
- * that, so their values stay on one line (the title block wraps instead); on a narrow page
- * they take a row of their own.
+ * The logo and details fill the header's last third, wider for a long document number (it
+ * never wraps). On a narrow page they take a row of their own.
  */
 .ax-header-end {
   display: flex;
-  flex: 0 0 auto;
   flex-direction: column;
   gap: 8px;
-  min-width: 0;
-  max-width: 330px;
 }
 
 /*
@@ -299,14 +314,29 @@
   max-height: 100px;
 }
 
+/* The logo and, right beside it, the document QR, 8 px apart (user request). */
+.ax-brand-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.ax-brand-row .ax-logo {
+  min-width: 0;
+}
+
+.ax-doc-qr {
+  flex: none;
+}
+
 .ax-meta {
   display: flex;
   flex-direction: column;
   gap: 4px;
   color: var(--ax-ink);
   font-size: calc(var(--ax-font-size-base) * var(--ax-text-scale, 1));
-  font-weight: 600;
-  line-height: 1.2;
+  font-weight: 400;
+  line-height: var(--ax-lh);
 }
 
 .ax-meta-row {
@@ -317,6 +347,7 @@
 
 .ax-meta-label {
   flex: none;
+  font-weight: 600;
   width: 100px;
   overflow-wrap: break-word;
 }
@@ -339,11 +370,6 @@
   flex: none;
 }
 
-/* A long document number breaks across lines rather than run out of the header. */
-.ax-meta-value.ax-num {
-  white-space: normal;
-}
-
 /* ------------------------------------------------------------ client panel */
 
 /*
@@ -354,7 +380,6 @@
   display: flex;
   gap: 16px;
   align-items: stretch;
-  justify-content: space-between;
   padding: 12px;
   border: 1px solid var(--ax-line);
   border-inline-end: 0;
@@ -366,23 +391,24 @@
 }
 
 /*
- * As the design spaces it (user request): each column keeps its own width — party 231 px,
- * its fields 182 px, the cost card 231 px — and the space left over is shared equally
- * between them (space-between, 16 px at the least), so the dividers fall where Figma has them.
+ * Bill To | its fields | the cost card divide the panel equally (user request), 16 px either
+ * side of each divider. Every column starts from 34 px, the cost card's padding and border
+ * (a column never starts narrower than those), and the rest is shared out equally.
  */
 .ax-party {
   display: flex;
-  flex: 0 1 231px;
+  flex: 1 1 34px;
   flex-direction: column;
-  gap: 8px;
-  min-width: 0;
+  gap: 4px; /* caption, name and address read as one block */
+  min-width: min-content; /* a party's figures (dispatch fields) stay on one line */
   overflow-wrap: break-word;
 }
 
+/* A column after a divider starts 12 px past it (user request, 2026-10-23). */
 .ax-party + .ax-party,
 .ax-party-fields + .ax-party,
 .ax-panel-slot {
-  padding-inline-start: 16px;
+  padding-inline-start: 12px;
   border-inline-start: 1px solid var(--ax-line);
 }
 
@@ -393,10 +419,30 @@
   padding-inline-start: 0;
 }
 
+/* The client: the design's 48 px profile icon, 12 px, then the label, name and address. */
+.ax-party.has-icon {
+  flex-direction: row;
+  gap: 12px;
+}
+
+.ax-party-icon {
+  flex: none;
+  width: 48px;
+  height: 48px;
+}
+
+.ax-party-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
 .ax-party-label {
-  color: var(--ax-strong);
+  color: var(--ax-muted);
   font-size: calc(var(--ax-font-size-base) * var(--ax-text-scale, 1));
-  line-height: 1.5;
+  line-height: var(--ax-lh);
 }
 
 .ax-party-name {
@@ -406,26 +452,28 @@
   line-height: 1.2;
 }
 
+/* An address: the street, then "City, State, Country - PIN" on a line of its own. */
+.ax-address-line {
+  display: block;
+}
+
 .ax-party-address {
   color: var(--ax-strong);
   font-size: calc(var(--ax-font-size-base) * var(--ax-text-scale, 1));
-  line-height: 1.5;
+  line-height: var(--ax-lh);
 }
 
 /*
- * The fields column hugs its content (user request): the design's 198 px at the least (182 px
- * of fields after the divider and its 16 px), wider for a long GSTIN or phone line, up to 40%
- * of the panel; beyond that a value wraps rather than leave the frame.
+ * The fields column takes an equal share of the panel (user request); a value longer than
+ * the column wraps rather than leave the frame.
  */
 .ax-party-fields {
   display: flex;
-  flex: 0 1 auto;
+  flex: 1 1 34px;
   flex-direction: column;
-  gap: 8px;
-  width: max-content;
-  min-width: min(198px, 100%);
-  max-width: 40%;
-  padding-inline-start: 16px;
+  gap: 4px;
+  min-width: min-content; /* never narrower than a GSTIN or phone number on one line */
+  padding-inline-start: 12px;
   border-inline-start: 1px solid var(--ax-line);
 }
 
@@ -438,7 +486,7 @@
   display: block;
   color: var(--ax-strong);
   font-size: calc(var(--ax-font-size-base) * var(--ax-text-scale, 1));
-  line-height: 1.2;
+  line-height: var(--ax-lh);
 }
 
 .ax-field-label {
@@ -449,45 +497,41 @@
   overflow-wrap: anywhere;
 }
 
-/* A figure in the client panel's fields wraps only when even the widest column cannot hold it. */
-.ax-party-fields .ax-field-value.ax-num {
-  white-space: normal;
-}
-
 /*
- * An unbroken value (email, GSTIN, code) carries on from its label's line and breaks only
- * where it meets the column's edge (user request); worded values wrap between words.
+ * An unbroken word that is not a figure (an email) carries on from its label's line and
+ * breaks only where it meets the column's edge (user request); worded values wrap between
+ * words. A GSTIN, ID or phone number stays whole and widens its column.
  */
-.ax-field .ax-field-value.ax-break {
+.ax-field .ax-field-value.ax-break:not(.ax-num) {
   white-space: normal;
   word-break: break-all;
 }
 
-/* The cost card: white, 8 px corners, the grand total under its label and tax note. */
+/* The cost card: white, 8 px corners, the grand total under its label and tax note, all three
+   starting on one line after the icon. */
 .ax-cost-card {
   display: flex;
-  flex: none;
+  flex: 1 1 34px;
   flex-direction: column;
   gap: 8px;
   align-items: center;
   align-self: flex-start;
 
-  /* Hugs its content (user request): the design's 231 px at the least, as wide as the amount
-     needs, never wider than the panel. */
-  width: max-content;
-  min-width: 231px;
-  max-width: 100%;
-  padding: 16px;
+  /* Fills the panel's last share (user request), and never narrower than its amount on one
+     line: a long amount widens the card and the other columns give way. */
+  min-width: min-content;
+  padding: 12px;
   border: 1px solid var(--ax-line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--ax-paper);
   box-shadow: 0 1px 2px rgb(0 0 0 / 7%);
   color: var(--ax-black);
 }
 
+/* The currency icon 16 px from the total's text (user request, 2026-10-23). */
 .ax-cost-head {
   display: flex;
-  gap: 8px;
+  gap: 16px;
   align-items: flex-start;
   width: 100%;
 }
@@ -498,35 +542,32 @@
 
 .ax-cost-text {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 8px;
-  min-width: 0;
   line-height: 1.2;
 }
 
+/* "Total (INR)" at 14 px (user request, 2026-10-23). */
 .ax-cost-label {
-  font-size: calc(var(--ax-font-size-base) * var(--ax-text-scale, 1));
+  font-size: calc(14px * var(--ax-text-scale, 1));
   font-weight: 700;
   letter-spacing: 0.01em;
 }
 
 .ax-cost-note {
+  color: var(--ax-muted);
   font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
   letter-spacing: 0.01em;
 }
 
 .ax-cost-value {
   width: 100%;
-
-  /* One line while the panel has room; an amount wider than the whole panel breaks rather
-     than run out of the card. */
-  overflow-wrap: anywhere;
-  white-space: normal;
   font-size: calc(var(--ax-font-size-lg) * var(--ax-text-scale, 1));
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: 0.01em;
-  text-align: center;
+  text-align: start; /* lined up with the label above it (user request) */
 }
 
 .ax-cost-converted {
@@ -547,35 +588,36 @@
   flex: 1 1 0;
 }
 
-/* A long transport figure (a transporter ID, a vehicle number) wraps inside its column. */
-.ax-transport .ax-kv-value.ax-num {
-  white-space: normal;
-}
-
 .ax-dispatch .ax-party-fields {
   flex: none;
   width: auto;
-  min-width: 0;
+  min-width: min-content;
   max-width: none;
   margin-top: 4px;
   padding-inline-start: 0;
   border-inline-start: 0;
 }
 
+/* Country / Place of Supply carry on 4 px under the rows above, no extra margin (user request). */
+.ax-dispatch .ax-party-supply {
+  margin-top: 0;
+}
+
 /* ------------------------------------------------------------ key / value grids */
 
 .ax-kv {
   display: grid;
-  grid-template-columns: fit-content(50%) minmax(0, 1fr);
-  gap: 4px 8px;
+  grid-template-columns: fit-content(50%) minmax(min-content, 1fr); /* a figure stays whole */
+  gap: 4px 12px;
   color: var(--ax-ink);
   font-family: var(--ax-table-font);
   font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
-  line-height: 1.2;
+  line-height: var(--ax-lh);
 }
 
 .ax-kv-label {
-  font-weight: 700;
+  color: var(--ax-strong);
+  font-weight: 600;
   overflow-wrap: break-word;
 }
 
@@ -605,18 +647,29 @@
   margin-top: 4px;
 }
 
+/* Terms and Conditions: the design's icon box, 8 px, then the heading. */
+
+/* The heading text centred on its icon box (user request). */
+.ax-card-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .ax-card-title {
-  color: var(--ax-ink);
+  color: var(--ax-black);
   font-family: var(--ax-label-font);
   font-size: calc(var(--ax-font-size-base) * var(--ax-text-scale, 1));
   font-weight: 700;
-  line-height: 1.5;
+  line-height: var(--ax-lh);
 }
 
+/* Cards in a row each hug their own content: a short bank card is not stretched to the height
+   of long terms beside it (less empty box, less ink on paper). */
 .ax-row {
   display: flex;
   gap: 16px;
-  align-items: stretch;
+  align-items: flex-start;
 }
 
 .ax-row > .ax-card {
@@ -624,14 +677,40 @@
 }
 
 /*
- * Bank Details: 335 px of content, labels and values in two equal columns — and the card hugs
- * its content (user request): a label or value too long for its half (a 28-digit account
- * number, a long UPI ID) widens its column and the card, so every row stays on one line
- * inside the frame. Narrow pages wrap instead (container queries).
+ * Bank Details: the design's 24 px bank icon, 8 px, then 335 px of content, labels and values
+ * in two equal columns — and the card hugs its content (user request): a label or value too
+ * long for its half (a 28-digit account number, a long UPI ID) widens its column and the card,
+ * so every row stays on one line inside the frame. Narrow pages wrap instead (container queries).
  */
+.ax-bank-card {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.ax-card-icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+}
+
+/* The bank icon inline with the title; the rows below start under the icon (user request). */
+.ax-bank-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ax-bank-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
 .ax-row > .ax-bank-card {
   flex: 0 0 auto;
-  width: 359px;
+  width: 391px;
   min-width: min-content;
   max-width: 100%;
 }
@@ -667,29 +746,26 @@
   border-top: 1px solid var(--ax-line);
 }
 
+/* Every QR is 100 px square: the UPI QR, the document QR and the e-invoice QR (user request). */
 .ax-upi-qr {
   display: block;
-  width: 96px;
-  height: 96px;
-}
-
-.ax-upi.is-small .ax-upi-qr {
-  width: 72px;
-  height: 72px;
+  width: 100px;
+  height: 100px;
 }
 
 .ax-upi-caption,
 .ax-upi-note {
-  color: var(--ax-ink);
+  color: var(--ax-muted);
   font-size: calc(var(--ax-font-size-xs) * var(--ax-text-scale, 1));
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.4;
 }
 
 /* "Scan to Pay" heads the QR, at the body size and the bank labels' weight (user request). */
 .ax-upi-caption {
+  color: var(--ax-strong);
   font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
-  font-weight: 700;
+  font-weight: 600; /* like the bank labels beside it */
 }
 
 /* Terms: "•" then the text, 4 px apart, points 4 px apart (Inter 13 / 1.4). */
@@ -700,7 +776,7 @@
   padding: 0;
   color: var(--ax-body);
   font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
-  line-height: 1.4;
+  line-height: var(--ax-lh);
   list-style: none;
 }
 
@@ -720,7 +796,7 @@
 .ax-note-body {
   color: var(--ax-body);
   font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
-  line-height: 1.4;
+  line-height: var(--ax-lh);
   overflow-wrap: break-word;
 }
 
@@ -730,7 +806,7 @@
   list-style: none;
   color: var(--ax-body);
   font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
-  line-height: 1.4;
+  line-height: var(--ax-lh);
 }
 
 .ax-attachments > li + li {
@@ -769,8 +845,8 @@
 .ax-compliance-fields {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: 0;
+  gap: 4px;
+  min-width: min-content; /* e-way bill numbers and dates stay on one line */
 }
 
 .ax-irn-value {
@@ -785,11 +861,22 @@
 
 .ax-qr img {
   display: block;
-  width: 96px;
-  height: 96px;
+  width: 100px;
+  height: 100px;
 }
 
 .ax-qr.is-empty {
+  display: none;
+}
+
+/* A payment in another currency: its business-currency amount under it, in brackets. */
+.ax-payment-converted {
+  display: block;
+  color: var(--ax-body);
+}
+
+/* The stretch row (print only): empty, the column rules running through it. */
+.ax-items .ax-filler {
   display: none;
 }
 
@@ -801,7 +888,7 @@
   gap: 4px 24px;
   color: var(--ax-strong);
   font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
-  line-height: 1.6;
+  line-height: var(--ax-lh);
 }
 
 .ax-supply-label {
@@ -828,7 +915,7 @@
   color: var(--ax-ink);
   font-family: var(--ax-table-font);
   font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
-  line-height: 1.6;
+  line-height: var(--ax-lh);
   table-layout: auto;
 }
 
@@ -845,7 +932,7 @@
   background: var(--ax-accent);
   color: var(--ax-on-accent);
   font-family: var(--ax-label-font);
-  font-weight: 700;
+  font-weight: 600; /* semi-bold column headings (user request, 2026-10-21) */
   line-height: 1.2;
   word-break: normal;
   overflow-wrap: normal;
@@ -906,9 +993,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0 12px;
-  color: var(--ax-strong);
+  color: var(--ax-muted);
   font-size: calc(var(--ax-font-size-xs) * var(--ax-text-scale, 1));
-  line-height: 1.4;
+  line-height: 1.4545; /* 11 px on 16 px */
 }
 
 .ax-item-thumbnail {
@@ -934,7 +1021,7 @@
 .ax-item-desc {
   padding-top: 4px;
   color: var(--ax-body);
-  line-height: 1.4;
+  line-height: var(--ax-lh);
 }
 
 .ax-items .ceres-image-gallery {
@@ -996,9 +1083,10 @@
   border: 1px solid var(--ax-rule);
 }
 
+/* alignTotals (helpers.ts) sets the figure cell's width so its rule sits on an item column's edge. */
 .ax-totals-table .ceres-subtotal-value {
-  width: 1%;
-  min-width: 93px;
+  width: var(--ax-totals-value, 1%);
+  min-width: var(--ax-totals-value-min, 93px);
 }
 
 .ax-totals-table .ax-totals th,
@@ -1006,8 +1094,8 @@
   padding: 6px;
   color: var(--ax-ink);
   font-family: var(--ax-font);
-  font-weight: 500;
-  line-height: 1.6;
+  font-weight: 400;
+  line-height: var(--ax-lh);
   text-align: end;
   vertical-align: top;
 }
@@ -1015,16 +1103,18 @@
 .ax-totals-table .ax-totals .ceres-subtotal-row-grand > * {
   border-top: 1px solid var(--ax-rule);
   background: var(--ax-fill);
-  color: var(--ax-strong);
-  font-weight: 600;
+  color: var(--ax-black);
+  font-weight: 700;
 }
 
 .ax-totals-table .ax-totals .ceres-subtotal-row-due > * {
   font-weight: 600;
 }
 
+/* The figures centred in their column (user request, 2026-10-23); the labels stay at the rule. */
 .ax-totals-table .ax-totals .ceres-subtotal-value {
   white-space: nowrap;
+  text-align: center;
 }
 
 .ax-totals-table .ax-totals .ceres-subtotal-note,
@@ -1074,9 +1164,21 @@
 
 .ax-widget-table .ceres-table th,
 .ax-widget-table .ceres-table td {
-  padding: 4px 8px;
+  padding: 6px 8px;
   border: 1px solid var(--ax-rule);
   white-space: nowrap;
+}
+
+/*
+ * A summary wider than the page (a Batch Summary with many columns or a long item name) was
+ * cut at the page edge in print: its headings and text cells wrap when the table would not
+ * fit, figures and dates still never do (user rule). A table that fits keeps every cell on
+ * one line, as the columns take their natural widths first.
+ */
+.ax-widget-table .ceres-table thead th,
+.ax-widget-table .ax-stock-table td:not(.ax-num) {
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .ax-widget-table .ceres-table thead th {
@@ -1099,10 +1201,10 @@
 }
 
 .ax-widget-table .ceres-table .ceres-table-words {
-  background: #fff;
+  background: var(--ax-paper);
   color: var(--ax-ink);
   font-size: inherit;
-  font-weight: 500;
+  font-weight: 400;
   white-space: normal;
 }
 
@@ -1143,11 +1245,14 @@
   align-items: flex-start;
 }
 
+/* The design's 385 px, growing with longer text up to 400 px, then the text wraps (user request). */
 .ax-pay-card {
   display: flex;
-  flex: 0 1 385px;
+  flex: 0 1 auto;
   flex-direction: column;
-  min-width: 0;
+  width: fit-content;
+  min-width: min(385px, 100%);
+  max-width: 400px;
   border: 1px solid var(--ax-line);
   border-radius: 12px;
   overflow: hidden;
@@ -1210,17 +1315,19 @@
   grid-column: 1 / -1;
 }
 
-/* The share in the design's 28 px figure: 1.4 × the 20 px top step. */
+/* The payment-terms share ("100%") at 24 px (user request, 2026-10-23). */
 .ax-pay-figure {
-  font-size: calc(var(--ax-font-size-xl) * 1.4 * var(--ax-text-scale, 1));
+  font-size: calc(24px * var(--ax-text-scale, 1));
   font-weight: 700;
   line-height: 1.2;
 }
 
 /* The captions are 12 px (user request), between the xs and s steps. */
+
+/* The payment-term description at 13 px (user request, 2026-10-23). */
 .ax-pay-caption {
   width: 100%;
-  font-size: calc(12px * var(--ax-text-scale, 1));
+  font-size: calc(13px * var(--ax-text-scale, 1));
   font-weight: 500;
   line-height: 1.4;
   opacity: 0.8;
@@ -1231,13 +1338,30 @@
   display: flex;
   flex: 0 1 auto;
   flex-direction: column;
-  gap: 12px;
-  justify-content: center;
-  min-width: 0;
+  gap: 12px; /* between address, phone, email and fields (user request, 2026-10-23) */
+  justify-content: flex-start;
+  min-width: min-content; /* a phone number stays on one line */
   color: var(--ax-ink);
   font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
-  font-weight: 600;
-  line-height: 1.5385;
+  font-weight: 500; /* address, phone and email at medium weight (user request) */
+  line-height: var(--ax-lh);
+}
+
+/* On a purchase order, the vendor's heading and name open the strip. */
+.ax-contact-party {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ax-contact-title {
+  color: var(--ax-muted);
+  font-weight: 400;
+}
+
+.ax-contact-name {
+  color: var(--ax-black);
+  font-weight: 700;
 }
 
 /* Icons level with the first line of their text, even when it wraps (user request). */
@@ -1254,22 +1378,26 @@
   height: 1lh;
 }
 
+/* The address, phone and email icons at 24 px (user request, 2026-10-23), centred on the
+   first line of their text. */
+.ax-contact-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
 .ax-contact-text {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-/* Phone numbers keep to one line while they fit; several numbers wrap at their spaces. */
+/* A phone number stays on one line and widens its block. */
 .ax-contact-text.ax-num {
-  white-space: normal;
+  min-width: min-content;
 }
 
-/*
- * The seller's tax numbers line up with the text above, past the 18 px icon and its 12 px,
- * label and value at the strip's own weight like the address, phone and email (user request).
- */
+/* The business's own fields line up with the text above, past the 24 px icon and its 12 px gap. */
 .ax-contact-field {
-  padding-inline-start: 32px;
+  padding-inline-start: 36px;
 }
 
 /* At the right end of the footer row, level with its top (user request). */
@@ -1283,7 +1411,7 @@
   margin-inline-start: auto;
   color: var(--ax-ink);
   font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
-  line-height: 1.6;
+  line-height: var(--ax-lh);
   text-align: center;
 }
 
@@ -1328,6 +1456,11 @@
   font-weight: 600;
 }
 
+/* "Authorised Signatory": a caption under the name. */
+.ax-signature-label {
+  color: var(--ax-muted);
+}
+
 /* ------------------------------------------------------------ markdown (notes, descriptions) */
 
 /*
@@ -1364,7 +1497,7 @@
   .ax-note-body
   .toastui-editor-contents
   > * + :is(p, ul, ol, h1, h2, h3, h4, h5, h6, blockquote, pre, table, div) {
-  margin-top: 8px;
+  margin-top: 4px; /* paragraphs close, like list points */
 }
 
 .ax-doc .ax-item-desc .toastui-editor-contents li + li,
@@ -1423,7 +1556,8 @@
    their cells rather than run off the page. */
 @container ax-doc (width < 680px) {
   .ax-header {
-    flex-wrap: wrap;
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-items: start;
   }
 
   .ax-header-rule {
@@ -1431,7 +1565,7 @@
   }
 
   .ax-header-end {
-    flex-basis: 100%;
+    grid-column: 1 / -1;
   }
 
   .ax-panel,
@@ -1463,23 +1597,23 @@
     margin-inline-start: 0;
   }
 
-  .ax-widget-table .ceres-table :is(th, td) {
+  .ax-pay-card {
+    max-width: none;
+  }
+
+  /* Headings wrap; a summary's first column is a date, a code or a rate, and never does. */
+  .ax-widget-table .ceres-table th {
     white-space: normal;
   }
 
-  /* The bank card and the fields column fill their row; long figures wrap inside them. */
+  /* The bank card and the fields column fill their row; a figure still keeps to one line. */
   .ax-row > .ax-bank-card,
   .ax-party-fields {
-    min-width: 0;
     max-width: none;
   }
 
   .ax-bank-rows {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .ax-bank-rows .ax-kv-value.ax-num {
-    white-space: normal;
+    grid-template-columns: repeat(2, minmax(min-content, 1fr));
   }
 }
 
@@ -1509,23 +1643,24 @@
 
 /*
  * Print at true size (design-to-template §4a, the preset the other templates use): 13 px body
- * text prints at 13 px, nothing below the floor, density from the steps above base only. The
+ * text prints at 13 px and every other size as on screen, nothing below the floor. The
  * page fills the printable width with no gutter of its own (margins belong to Lydia, the
  * browser or the PDF service); the renderer's print size setting (zoomSize) scales a printout.
  */
 @media print {
   .ax-doc {
-    --ax-font-size-xs: 11px;
-    --ax-font-size-s: 13px;
-    --ax-font-size-base: 13px;
-    --ax-font-size-m: 14px;
-    --ax-font-size-lg: 16px; /* the repo preset (as Modern Manufacturing): density above base */
-    --ax-font-size-xl: 18px;
+    /* Every text size prints as on screen, headings too (user, 2026-10-21: print 1:1). */
     --ax-gutter: 0px;
 
     width: 100%;
-    max-width: none;
-    margin: 0;
+
+    /* Never wider than the paper's printable width (helpers.ts mapPrint): Refrens' PDF
+       service lays the page out in a window wider than the paper before it prints. */
+    max-width: var(--ax-print-width, none);
+
+    /* Centred: a browser's own print keeps 1 cm margins, so a document set to wider ones
+       (xMargins 2) sits in the middle of the page rather than against its left edge. */
+    margin: 0 auto;
   }
 
   /* Shadows print as grey smudges. */
@@ -1556,10 +1691,10 @@
     padding-inline: 4px;
   }
 
-  /* On a page too narrow for the table, a long code (a model number) wraps rather than clip. */
+  /* On a page too narrow for the table, a short text value wraps between its words; a code
+     or figure (a model number) never breaks. */
   .ax-items.is-print-compact td.is-word {
     white-space: normal;
-    overflow-wrap: anywhere;
   }
 
   .ax-items.is-print-compact td.is-word .ax-num {
@@ -1593,9 +1728,83 @@
     display: table-row-group;
   }
 
-  .ax-items tr,
-  .ax-widget-table .ceres-table tr {
+  /* Summary-table rows stay whole. Each line item prints whole: its name, description and
+     image rows move to the next page together (user rule, 2026-10-19). */
+  .ax-widget-table .ceres-table tr,
+  .ax-items > tbody > tr {
     break-inside: avoid;
+  }
+
+  .ax-items .ax-item-row.has-name-row,
+  .ax-items .ax-detail-row,
+  .ax-items .ax-image-row {
+    break-before: avoid;
+  }
+
+  /* An item's original images never taller than 55 % of a page, in proportion, so an item
+     and its images print together on one page (user, 2026-10-19; as the Viraj template). */
+  .ax-large-image {
+    max-height: min(55vh, 600px); /* px cap: on a Pageless PDF's one tall page vh is the whole document */
+    object-fit: contain;
+  }
+
+  /* A row cut by a page break (an item taller than what is left of the page) closes with a
+     rule at the page's foot, and every page's piece of the table with it (user rule,
+     2026-10-20): the cells' own borders end open there. The items wrapper draws that rule on
+     each page's piece (box-decoration-break: clone); on the last piece the table's own
+     bottom rule lies over it. */
+  .ax-items-scroll {
+    border-bottom: 1px solid var(--ax-rule);
+    /* stylelint-disable-next-line property-no-vendor-prefix -- Chrome before 130 needs it */
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .ax-items-scroll > :last-child {
+    margin-bottom: calc(-1 * 1px);
+  }
+
+  /* Stretch on, a document longer than a page (user, 2026-10-19): where a whole item moves to
+     the next page, the column rules run on to the page's foot and a rule closes each page's
+     piece of the table (helpers.ts columnRules), drawn by the items wrapper; on the last
+     piece the table's own bottom rule lies over it. The row groups are opaque, so the rules
+     show only below the page's last row. */
+  .ax-doc.is-stretch .ax-items-scroll {
+    --ax-column-rule-width: 1px;
+
+    border-bottom: var(--ax-column-rule-width) solid
+      var(--ax-column-rule-color, var(--ax-rule));
+    background: var(--ax-column-rules, none);
+    box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .ax-doc.is-stretch .ax-items-scroll > :last-child {
+    margin-bottom: calc(-1 * var(--ax-column-rule-width));
+  }
+
+  :where(.ax-doc.is-stretch :is(.ax-items, .ax-totals-table)) > :where(thead, tbody, tfoot) {
+    background-color: var(--ax-paper);
+  }
+
+
+  /* A table in a description or note breaks between its rows, its headings repeated at the top
+     of every page it spans (user, 2026-10-19). */
+  .ax-doc :is(.ax-item-desc, .ax-note-body) .toastui-editor-contents thead {
+    display: table-header-group;
+  }
+
+  .ax-doc :is(.ax-item-desc, .ax-note-body) .toastui-editor-contents tr {
+    break-inside: avoid;
+  }
+
+  .ax-doc.is-stretch .ax-items .ax-filler {
+    display: table-row;
+  }
+
+  .ax-doc.is-stretch .ax-items .ax-filler > td {
+    height: var(--ax-filler-height, 0);
+    padding-block: 0;
   }
 
   /* The totals stay together. */
@@ -1628,6 +1837,24 @@
   }
 
   /*
+   * Terms and Conditions, Notes and Attachments carry on line by line across a page break
+   * (user rule), and so does the row that holds them; a list item still keeps its lines.
+   */
+  .ax-card:is(
+      [data-section="terms"],
+      [data-section="notes"],
+      [data-section="attachments"]
+    ),
+  .ax-row:has(
+      :is([data-section="terms"], [data-section="notes"], [data-section="attachments"])
+    ),
+  .ax-card-group:has(
+      :is([data-section="terms"], [data-section="notes"], [data-section="attachments"])
+    ) {
+    break-inside: auto;
+  }
+
+  /*
    * Footer on every page (pdfOptions.footerOnLastPage off): the real footer is fixed to the
    * foot of each printed page and the frame's repeating <tfoot> holds an invisible copy of it.
    * Last page only: it follows the content, and helpers.ts sets it on the page's bottom edge.
@@ -1649,7 +1876,21 @@
 
   /* The repeated letterhead keeps the 20 px section gap above each page's content. */
   .ax-page-frame-header .ax-letterhead:not(.is-empty) {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
+  }
+
+  /*
+   * Chrome stops repeating a page header (and the footer's spacer) taller than about a quarter
+   * of the page: a full-width letterhead on a landscape page lost its copies after page 1
+   * (measured 2026-10-23, A4 / A5 / Letter landscape). The every-page copies keep within a
+   * fifth of the page height, scaled whole; portrait pages keep them at full width.
+   */
+  .ax-page-frame-header .ax-letterhead img,
+  .ax-letterhead-footer.ax-footer-fixed img,
+  .ax-footer-spacer img {
+    width: auto;
+    max-width: 100%;
+    max-height: 20vh;
   }
 
   .ax-page-frame-footer {
@@ -1674,12 +1915,12 @@
   .ax-page-body {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
     container: ax-doc / inline-size;
   }
 
   .ax-footer-spacer {
-    padding-top: 20px;
+    padding-top: 16px;
     visibility: hidden;
   }
 
@@ -1703,5 +1944,246 @@
     .ax-doc
     .no-dibella:is(.invoice-letterhead, .invoice-letterhead-footer) {
     display: none;
+  }
+}
+
+/* Refrens' closing line from the document's contact details: "For any enquiry, reach out via…". */
+.ax-enquiry {
+  margin: 16px 0 0;
+  color: var(--ax-ink);
+  font-size: calc(var(--ax-font-size-s) * var(--ax-text-scale, 1));
+  line-height: 1.5385;
+}
+
+/*
+ * A box split by a page break closes at the foot of the page and opens again at the top of the
+ * next: its border, corners and padding are drawn on each piece (user, 2026-10-19).
+ */
+@media print {
+  :is(.ax-panel, .ax-card, .ax-party, .ax-party-fields, .ax-cost-card) {
+    box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  /* A card that can split (terms, notes, additional info, attachments) lays out as a block:
+     Chrome split a column flex card at its very start, leaving an empty box at the page's
+     foot. The 8 px between its parts moves from the gap to margins. */
+  .ax-card:not(.ax-bank-card, .ax-compliance, .ax-widget-table) {
+    display: block;
+  }
+
+  .ax-card:not(.ax-bank-card, .ax-compliance, .ax-widget-table) > * + * {
+    margin-top: 8px;
+  }
+
+  /* Cards side by side end at their own content: stretched to a partner that runs onto the
+     next page, a card left an empty box there. */
+  .ax-row {
+    align-items: flex-start;
+  }
+}
+
+/*
+ * In print the totals sit in a table of their own under the items (helpers.ts splitTotals), so a
+ * page holding only them repeats no item headings. It overlaps the item table by one rule, so
+ * the two meet on a single line.
+ */
+@media print {
+  .ax-items[data-ax-totals-split] {
+    margin-top: calc(-1 * 1px);
+  }
+
+  /* One solid ground under the totals: painted cell by cell, the hairline seams between their
+     empty cells let the stretch column rules (columnRules) show through. */
+  .ax-items[data-ax-totals-split],
+  .ax-totals-table {
+    background-color: var(--ax-paper);
+  }
+}
+
+/* ------------------------------------------------------------ phones and tablets */
+
+/*
+ * On a phone or tablet screen the item table no longer scrolls sideways (user request,
+ * 2026-10-20, after Refrens' own invoice pages). fitItemsToScreen (helpers.ts) chooses: on a
+ * screen up to 640 px each item reads as a card (is-cards): its number and name across the top,
+ * its codes and description under them, then each column's figure on a line of its own beside
+ * the column's heading, the last one (the amount) bold. Narrower than an A4 page (794 px) the
+ * table stays as on paper while it fits; one that would scroll keeps its headings in a row with
+ * each item's name and description across the full width above its figures (is-grid), or reads
+ * as cards when it has more than eight figure columns. Print keeps the table as it is.
+ */
+@media screen {
+  .ax-doc .ax-items-scroll:has(> .ax-items:is(.is-cards, .is-grid)) {
+    overflow-x: visible;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid),
+  .ax-doc .ax-items:is(.is-cards, .is-grid) > :is(thead, tbody),
+  .ax-doc .ax-items:is(.is-cards, .is-grid) > :is(thead, tbody) > tr,
+  .ax-doc .ax-items:is(.is-cards, .is-grid) > :is(thead, tbody) > tr > :is(th, td) {
+    display: block;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) > :is(thead, tbody) > tr > :is(th, td) {
+    border: 0;
+    text-align: start;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) > :is(thead, tbody) > tr + tr,
+  .ax-doc .ax-items:is(.is-cards, .is-grid) > tbody + tbody > tr:first-child,
+  .ax-doc .ax-items:is(.is-cards, .is-grid) > thead + tbody > tr:first-child {
+    border-top: 1px solid var(--ax-rule);
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) .ax-desc-min,
+  .ax-doc .ax-items:is(.is-cards, .is-grid) .ax-filler {
+    display: none;
+  }
+
+  /* An item card: number and name, codes and description, then a line per figure. */
+  .ax-doc .ax-items:is(.is-cards, .is-grid) > thead {
+    display: none;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) > tbody > tr {
+    padding: 8px 12px;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) :is(.ax-item-row, .ax-name-row, .ax-total-row) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 4px 8px;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) :is(.ax-item-row, .ax-name-row, .ax-total-row) > td {
+    grid-column: 1 / -1;
+    padding: 0;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) :is(.ax-item-row, .ax-name-row) > .ax-col-serial {
+    grid-column: 1;
+    font-weight: 600;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) :is(.ax-item-row, .ax-name-row) > .ax-col-serial .ax-num::after {
+    content: ".";
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) :is(.ax-item-row, .ax-name-row) > :is(.ax-col-name, .ax-col-serial + td) {
+    grid-column: 2;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) :is(.ax-item-row, .ax-total-row) > td[data-label] {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    text-align: end;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) :is(.ax-item-row, .ax-total-row) > td[data-label]::before {
+    content: attr(data-label);
+    color: var(--ax-muted);
+    text-align: start;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) :is(.ax-item-row, .ax-total-row) > td[data-label]:empty {
+    display: none;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) :is(.ax-item-row, .ax-total-row) > td[data-label]:last-child {
+    font-weight: 600;
+  }
+
+  /* The name on a line of its own above the figures (Item Name Full Width), the
+     description and the large images under them: the same card, no rule between. */
+  .ax-doc .ax-items:is(.is-cards, .is-grid) .ax-name-row + .ax-item-row,
+  .ax-doc .ax-items:is(.is-cards, .is-grid) :is(.ax-item-row, .ax-detail-row) + :is(.ax-detail-row, .ax-image-row) {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) .ax-detail-row > .ax-col-serial,
+  .ax-doc .ax-items:is(.is-cards, .is-grid) .ax-total-row > .ax-col-serial:empty {
+    display: none;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) .ax-group-row {
+    background: var(--ax-fill);
+    font-weight: 600;
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) .ax-total-row {
+    background: var(--ax-fill);
+  }
+
+  .ax-doc .ax-items:is(.is-cards, .is-grid) .ax-total-row > .ax-col-name {
+    font-weight: 600;
+  }
+
+  /* is-grid: the headings in a row, each item's name and description across the full width
+     above its figures. */
+  .ax-doc .ax-items.is-grid > thead {
+    display: block;
+  }
+
+  .ax-doc .ax-items.is-grid > thead > tr,
+  .ax-doc .ax-items.is-grid :is(.ax-item-row, .ax-name-row, .ax-total-row) {
+    display: grid;
+    grid-template-columns: var(--ax-serial-width, 32px) repeat(var(--ax-figures, 1), minmax(0, 1fr));
+    gap: 4px 0;
+    padding: 0;
+  }
+
+  .ax-doc .ax-items.is-grid > :is(thead, tbody) > tr > :is(th, td) {
+    grid-column: auto;
+    padding: 6px;
+    text-align: center;
+  }
+
+  /* The headings' widths are set on each heading for the table's own layout; in the row of
+     equal tracks each heading takes its track instead. */
+  .ax-doc .ax-items.is-grid > thead > tr > th {
+    width: auto !important;
+  }
+
+  .ax-doc .ax-items.is-grid > thead > tr > .ax-col-name {
+    display: none;
+  }
+
+  .ax-doc .ax-items.is-grid tr > .ax-col-serial {
+    grid-column: 1;
+  }
+
+  .ax-doc .ax-items.is-grid :is(.ax-item-row, .ax-name-row, .ax-total-row) > :is(.ax-col-name, .ax-col-serial + td) {
+    grid-column: 2 / -1;
+    text-align: start;
+  }
+
+  /* The first figure under the first heading; the rest follow in order. */
+  .ax-doc .ax-items.is-grid tr > :nth-child(1 of :not(.ax-col-serial, .ax-col-name)) {
+    grid-column-start: 2;
+  }
+
+  .ax-doc .ax-items.is-grid :is(.ax-item-row, .ax-total-row) > td[data-label] {
+    display: block;
+    text-align: center;
+  }
+
+  .ax-doc .ax-items.is-grid :is(.ax-item-row, .ax-total-row) > td[data-label]::before {
+    content: none;
+  }
+
+  .ax-doc .ax-items.is-grid :is(.ax-item-row, .ax-total-row) > td[data-label]:empty,
+  .ax-doc .ax-items.is-grid .ax-total-row > .ax-col-serial:empty {
+    display: block;
+  }
+
+  .ax-doc .ax-items.is-grid :is(.ax-detail-row, .ax-image-row, .ax-group-row) > td {
+    padding: 6px 6px 6px calc(var(--ax-serial-width, 32px) + 6px);
+  }
+
+  .ax-doc .ax-items.is-grid > tbody > tr:is(.ax-detail-row, .ax-image-row, .ax-group-row) {
+    padding: 0;
   }
 }

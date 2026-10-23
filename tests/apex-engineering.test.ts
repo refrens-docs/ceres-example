@@ -9,8 +9,11 @@ import {
   formatContext,
   formatDocumentDate,
   formatFigure,
+  foreignAmountInWords,
+  withRefrensDefaults,
   mapCompliance,
   mapContact,
+  mapParty,
   mapCostCard,
   mapItemTable,
   mapPaymentTerms,
@@ -166,8 +169,9 @@ describe("Apex Engineering — render", () => {
     // Client panel.
     expect(html).toContain('<p class="ax-party-label">Client Name</p>');
     expect(html).toContain("SAMPLE CLIENT PVT LTD");
+    // Street on its own line, then city, state, country and PIN below (user request).
     expect(html).toContain(
-      "Sample House, 1/1 Sample Street, Kolkata – 700001, West Bengal, India"
+      '<span class="ax-address-line">Sample House, 1/1 Sample Street</span><span class="ax-address-line">Kolkata, West Bengal, India - 700001</span>'
     );
     expect(html).toMatch(
       /ax-field-label">GSTIN<\/span> <span class="ax-field-value ax-num ax-break">19AAAAA0000A1Z5/
@@ -199,15 +203,34 @@ describe("Apex Engineering — render", () => {
     );
     expect(html).toContain('<p class="ax-pay-figure ax-num">10%</p>');
     expect(html).toMatch(
-      /ax-kv-label ax-bank-bankName">Bank Name<[\s\S]*?Sample Bank/
+      /ax-kv-label ax-bank-bankName">Bank<[\s\S]*?Sample Bank/
     );
     expect(html).toMatch(/ax-kv-label ax-bank-ifsc">IFSC<[\s\S]*?SMPL0000123/);
     expect(html).toContain(
-      "12 Sample Road, Kolkata – 700001, West Bengal, India"
+      '<span class="ax-address-line">12 Sample Road</span><span class="ax-address-line">Kolkata, West Bengal, India - 700001</span>'
     );
     expect(html).toContain("tel(033-0000-0000)");
     expect(html).toContain("info@example.com");
-    expect(html).toMatch(/GSTIN:<\/span> 19ABCDE1234F1Z5/);
+    // The seller's own tax numbers are hidden from the contact strip (user request).
+    expect(html).not.toMatch(/GSTIN<\/span> 19ABCDE1234F1Z5/);
+    expect(html).not.toContain('class="ax-contact-party"');
+    // Its own custom fields still print under the strip (user request, 2026-10-21).
+    const custom = render((invoice) => {
+      invoice.billedBy.customFields = [
+        { label: "Udyam No", value: "UDYAM-XX-00-0000000" },
+      ];
+    });
+    expect(custom).toMatch(
+      /ax-contact-field[\s\S]*?Udyam No<\/span> UDYAM-XX-00-0000000/
+    );
+    expect(custom).not.toMatch(/GSTIN<\/span> 19ABCDE1234F1Z5/);
+    // On a purchase order the strip is the vendor ("Order To"): its heading, name and tax
+    // numbers print there (user request).
+    const order = render((invoice) => {
+      invoice.billType = "PURCHASEORDER";
+    });
+    expect(order).toContain('class="ax-contact-party"');
+    expect(order).toMatch(/GSTIN<\/span> 19ABCDE1234F1Z5/);
     // Words line under the totals.
     expect(html).toContain("TEN LAKH TWENTY ONE THOUSAND");
   });
@@ -239,10 +262,11 @@ describe("Apex Engineering — render", () => {
       "Unit Price (₹)",
       "Amount (₹)",
     ]);
-    const body = items.slice(
-      items.indexOf("</thead>"),
-      items.indexOf('class="ax-totals')
-    );
+    // The figures as printed: each cell's data-label repeats its heading ("Unit Price (₹)")
+    // for the phone layout, so it is left out here.
+    const body = items
+      .slice(items.indexOf("</thead>"), items.indexOf('class="ax-totals'))
+      .replace(/ data-label="[^"]*"/g, "");
     expect(body).toContain("7,60,698.00");
     expect(body).not.toContain("₹");
     expect(body).toContain("BLOCK - 1");
@@ -379,7 +403,11 @@ describe("Apex Engineering — boolean settings", () => {
         ];
         if (show !== undefined) invoice.advanceOptions.showPaymentsTable = show;
       });
-    expect(tagWith(payments(), "data-ceres-payment-table")).not.toContain(
+    // refrens.com prints payments only with "Show payments table" on; unset or off, hidden.
+    expect(tagWith(payments(true), "data-ceres-payment-table")).not.toContain(
+      "display: none"
+    );
+    expect(tagWith(payments(), "data-ceres-payment-table")).toContain(
       "display: none"
     );
     expect(tagWith(payments(false), "data-ceres-payment-table")).toContain(
@@ -453,13 +481,27 @@ describe("Apex Engineering — boolean settings", () => {
     expect(html).toContain('<span class="ax-item-code">HSN/SAC: 8415</span>');
   });
 
-  it("hideCountryOfSupply hides the supply row (kept for the live toggle)", () => {
-    expect(tagWith(render(), "data-ceres-country-of-supply")).not.toContain(
+  it("Place / Country of Supply close Shipped To only; hideCountryOfSupply hides them (kept for the live toggle)", () => {
+    const shipTo = (invoice: Json) => {
+      invoice.shippedTo = {
+        name: "Site Office",
+        city: "Howrah",
+        country: "IN",
+      };
+    };
+    // No Shipped To: no supply lines anywhere (standing decision).
+    expect(render()).not.toContain("data-ceres-country-of-supply");
+    const shown = render(shipTo);
+    expect(shown).toMatch(
+      /data-role="shipped-to"[\s\S]*?data-ceres-country-of-supply/
+    );
+    expect(tagWith(shown, "data-ceres-country-of-supply")).not.toContain(
       "display:none"
     );
     expect(
       tagWith(
         render((invoice) => {
+          shipTo(invoice);
           invoice.advanceOptions.hideCountryOfSupply = true;
         }),
         "data-ceres-country-of-supply"
@@ -540,6 +582,24 @@ describe("Apex Engineering — boolean settings", () => {
     expect(at({ format: "a4", landscape: true })).toBe(false);
     expect(at({ format: "a3" })).toBe(false);
     expect(at({ format: "a5", landscape: true })).toBe(true);
+  });
+
+  it("caps the printed page at the width between the margins, at any print size", () => {
+    const width = (pdfOptions: Json) =>
+      mapPrint(
+        state((invoice) => {
+          invoice.template = { pdfOptions };
+        })
+      ).printWidth;
+    // A4 is 793.7 px wide; 1 cm is 37.8 px; 4 px kept back for rounding.
+    expect(width({ format: "a4" })).toBe(714);
+    expect(width({ format: "a4", xMargins: 1 })).toBe(714);
+    // Margin 0 is a real setting (edge to edge), not "unset".
+    expect(width({ format: "a4", xMargins: 0 })).toBe(789);
+    expect(width({ format: "a4", xMargins: 2 })).toBe(638);
+    // The print size divides the space between the margins, which keep their size.
+    expect(width({ format: "a4", zoomSize: 0.9 })).toBe(793);
+    expect(width({ format: "a4", zoomSize: 1.2 })).toBe(594);
   });
 
   it("merges a wrapped payload's template settings onto the document", () => {
@@ -638,7 +698,9 @@ describe("Apex Engineering — boolean settings", () => {
       invoice.transportDetails = { vehicleNumber: "WB01AB1234" };
     });
     expect(noParties).not.toContain('data-section="dispatch"');
-    expect(noParties).toMatch(/ax-meta-label">Vehicle No\.<[\s\S]*?WB01AB1234/);
+    expect(noParties).toMatch(
+      /ax-meta-label">Vehicle Number<[\s\S]*?WB01AB1234/
+    );
   });
 
   it("notes on a row of their own, attachments and additional info", () => {
@@ -668,7 +730,7 @@ describe("Apex Engineering — boolean settings", () => {
     expect(hiddenNotes.notesRow).toBeNull();
   });
 
-  it("bank transfer and UPI follow the payment options; upiShrink makes the QR small", () => {
+  it("bank transfer and UPI follow the payment options; the UPI QR stays 100 px", () => {
     expect(
       render((invoice) => {
         invoice.paymentOptions.accountTransfer = false;
@@ -680,7 +742,9 @@ describe("Apex Engineering — boolean settings", () => {
       invoice.template = { upiShrink: true };
     });
     expect(upi).toContain("apex@upi");
-    expect(upi).toContain('class="ax-upi is-small"');
+    // Every QR is 100 px (user request): upiShrink no longer makes the UPI QR small.
+    expect(upi).toContain('class="ax-upi"');
+    expect(upi).not.toContain("is-small");
   });
 
   it("party field visibility switches hide email and phone", () => {
@@ -690,17 +754,38 @@ describe("Apex Engineering — boolean settings", () => {
     expect(html).not.toContain("client@example.com");
   });
 
-  it("shows the status tag on invoices, on paper only once paid", () => {
-    expect(render()).not.toContain("ax-status");
+  it("shows the status tag as refrens.com does for each document type", () => {
+    // A quotation reads "Created"; an unpaid invoice has no tag; a paid one "Paid".
+    expect(render()).toContain('<span class="invoice-tag info">Created</span>');
     const unpaid = render((invoice) => {
       invoice.billType = "INVOICE";
+      invoice.status = "UNPAID";
     });
-    expect(unpaid).toContain('class="ax-status no-print"');
+    expect(unpaid).not.toContain("ax-status");
     const paid = render((invoice) => {
       invoice.billType = "INVOICE";
       invoice.status = "PAID";
     });
-    expect(paid).toContain('class="ax-status"');
+    expect(paid).toContain('<span class="invoice-tag success">Paid</span>');
+    const part = render((invoice) => {
+      invoice.billType = "INVOICE";
+      invoice.status = "PARTIAL";
+    });
+    expect(part).toContain("Part Paid");
+    // A purchase order sent to its vendor reads "Purchase Order Sent" (as refrens.com shows it);
+    // one never sent stays "Created".
+    const order = (vendorReminder?: Json) =>
+      render((invoice) => {
+        invoice.billType = "PURCHASEORDER";
+        invoice.status = "UNPAID";
+        invoice.vendorReminder = vendorReminder;
+      });
+    expect(order({ recipients: [{ email: "vendor@example.com" }] })).toContain(
+      '<span class="invoice-tag info">Purchase Order Sent</span>'
+    );
+    expect(order({ recipients: [] })).toContain(
+      '<span class="invoice-tag info">Created</span>'
+    );
   });
 
   it("Change Script: right-to-left and the Language/Script font", () => {
@@ -972,7 +1057,11 @@ describe("Apex Engineering — view model", () => {
 
   it("fills the contact strip from Billed By alone", () => {
     expect(mapContact(state())).toEqual({
-      address: "12 Sample Road, Kolkata – 700001, West Bengal, India",
+      title: "Billed By",
+      name: expect.any(String),
+      address: "12 Sample Road, Kolkata, West Bengal, India - 700001",
+      street: "12 Sample Road",
+      region: "Kolkata, West Bengal, India - 700001",
       phone: "033-0000-0000",
       email: "info@example.com",
     });
@@ -991,7 +1080,68 @@ describe("Apex Engineering — view model", () => {
         invoice.billedBy = { name: "Apex Engineering" };
       })
     );
-    expect(bare).toBeNull();
+    expect(bare).toEqual({
+      title: "Billed By",
+      name: "Apex Engineering",
+      address: "",
+      street: "",
+      region: "",
+      phone: "",
+      email: "",
+    });
+    expect(
+      mapContact(
+        state((invoice) => {
+          invoice.billedBy = {};
+        })
+      )
+    ).toBeNull();
+  });
+
+  it("closes with Refrens' enquiry line from the document's contact details", () => {
+    const html = render((invoice) => {
+      invoice.contact = {
+        email: "enquiry@example.com",
+        phone: "+919800000000",
+      };
+    });
+    expect(html).toMatch(
+      /ax-enquiry[\s\S]*?For any enquiry, reach out via email at <strong class="ax-email">enquiry@example.com<\/strong>, call on/
+    );
+    expect(
+      render((invoice) => {
+        delete invoice.contact;
+      })
+    ).not.toContain("ax-enquiry");
+  });
+
+  it("adds Linked Document and Reason to the document details, with no details title", () => {
+    const html = render((invoice) => {
+      invoice.billType = "CREDITNOTE";
+      invoice.invoiceTitle = "Credit Note";
+      invoice.documentReason = "Product Return";
+      invoice.linkedInvoices = [{ _id: "x", invoiceNumber: "INV-7" }];
+    });
+    // No "Credit Note Details" title over the rows (user request, 2026-10-21).
+    expect(html).not.toContain("ax-meta-title");
+    expect(html).not.toContain("Credit Note Details");
+    expect(html).toMatch(/ax-meta-label">Linked Document<[\s\S]*?INV-7/);
+    expect(html).toMatch(/ax-meta-label">Reason<[\s\S]*?Product Return/);
+  });
+
+  it("puts the document QR right beside the logo, and only one QR: the e-invoice QR while the IRN is active", () => {
+    const withQr = render((invoice) => {
+      invoice.documentQr = "doc-qr-payload";
+    });
+    expect(withQr).toMatch(
+      /ax-brand-row[\s\S]*?ax-logo[\s\S]*?ax-doc-qr"[^>]*><img[^>]*src="data:image\/[\s\S]*?data-section="details"/
+    );
+    const active = render((invoice) => {
+      invoice.documentQr = "doc-qr-payload";
+      invoice.qrCode = "irn-qr-payload";
+      invoice.irn = { Irn: "abc", qrCode: "irn-qr-payload" };
+    });
+    expect(active).toContain("ax-doc-qr is-empty");
   });
 
   it("sizes the table from the Figma widths with a 32 px serial column", () => {
@@ -1051,7 +1201,7 @@ describe("Apex Engineering — files and CSS", () => {
     ].forEach((sample) => expect(code).not.toContain(sample));
   });
 
-  it("follows the repo type preset: six steps, 13 px base in print, nothing below 10 px", () => {
+  it("follows the repo type preset: six steps, printed as on screen, nothing below 10 px", () => {
     const steps = (block: string) =>
       Object.fromEntries(
         Array.from(block.matchAll(/--ax-font-size-(\w+): (\d+)px;/g), (m) => [
@@ -1067,14 +1217,8 @@ describe("Apex Engineering — files and CSS", () => {
       lg: 18,
       xl: 20,
     });
-    expect(steps(source.slice(source.indexOf("@media print")))).toEqual({
-      xs: 11,
-      s: 13,
-      base: 13,
-      m: 14,
-      lg: 16,
-      xl: 18,
-    });
+    // Print keeps every size, headings too (user, 2026-10-21: print 1:1).
+    expect(steps(source.slice(source.indexOf("@media print")))).toEqual({});
     // Shrinking table text (crowded figures, a narrow page) stops at the 10 px floor.
     expect(source).toMatch(
       /has-small-numbers td\.is-num \{\s*font-size: max\(10px, 0\.9em\)/
@@ -1094,7 +1238,7 @@ describe("Apex Engineering — files and CSS", () => {
       source.matchAll(/(?:font-size|--ax-font-size-\w+):\s*(\d+(?:\.\d+)?)px/g),
       (m) => Number(m[1])
     );
-    expect(all.length).toBeGreaterThanOrEqual(12);
+    expect(all.length).toBeGreaterThanOrEqual(6);
     all.forEach((size) => expect(size).toBeGreaterThanOrEqual(10));
   });
 
@@ -1160,14 +1304,20 @@ describe("Apex Engineering — files and CSS", () => {
     expect(source).toMatch(/\.ax-header-title \{[^}]*align-self: flex-start;/);
   });
 
-  it("spaces the client panel as the design does", () => {
-    expect(source).toMatch(/\.ax-panel \{[^}]*justify-content: space-between;/);
-    expect(source).toMatch(/\.ax-party \{[^}]*flex: 0 1 231px;/);
-    // The fields column: 198 px at the least, hugging a longer GSTIN / phone up to 40%.
-    expect(source).toMatch(
-      /\.ax-party-fields \{[^}]*width: max-content;[^}]*min-width: min\(198px, 100%\);[^}]*max-width: 40%;/
+  it("divides the client panel into equal columns", () => {
+    expect(source).not.toMatch(
+      /\.ax-panel \{[^}]*justify-content: space-between;/
     );
+    expect(source).toMatch(/\.ax-party \{[^}]*flex: 1 1 34px;/);
+    expect(source).toMatch(/\.ax-party-fields \{[^}]*flex: 1 1 34px;/);
+    expect(source).toMatch(/\.ax-cost-card \{[^}]*flex: 1 1 34px;/);
     expect(source).toMatch(/\.ax-panel-slot \{[^}]*flex: none;/);
+  });
+
+  it("keeps the header rules close to the mark and the details", () => {
+    expect(source).toMatch(
+      /\.ax-header \{[^}]*display: grid;[^}]*grid-template-columns: auto 1px minmax\(min-content, 1fr\) 1px fit-content\(40%\);/
+    );
   });
 
   it("top-aligns the contact icons with their first line", () => {
@@ -1191,7 +1341,7 @@ describe("Apex Engineering — files and CSS", () => {
     );
     expect(source).toMatch(/\.ax-pay-cell:nth-child\(n \+ 3\) \{\s*border-top/);
     expect(source).toMatch(
-      /\.ax-pay-caption \{[^}]*font-size: calc\(12px \* var\(--ax-text-scale, 1\)\);/
+      /\.ax-pay-caption \{[^}]*font-size: calc\(13px \* var\(--ax-text-scale, 1\)\);/
     );
     expect(source).toMatch(
       /\.ax-pay-cell:last-child:nth-child\(odd\) \{\s*grid-column: 1 \/ -1;/
@@ -1333,11 +1483,12 @@ describe("Apex Engineering — the platform's other settings, under every alias"
     expect(tagWith(html, "data-ceres-batch-summary")).not.toContain(
       "display: none"
     );
-    expect(html).toContain("Stock Summary");
+    // Refrens calls it "Batch Summary" (it has no Stock Summary).
+    expect(html).toContain("Batch Summary");
     expect(html).toContain("B-12");
     expect(html).toContain("31st Mar, 2027");
-    // A column no batch fills (Mfg. Date) is left out.
-    expect(html).not.toContain("Mfg. Date");
+    // A column no batch fills (Mfg Date) is left out.
+    expect(html).not.toContain("Mfg Date");
 
     const off = render((invoice) => {
       batches(invoice);
@@ -1475,17 +1626,17 @@ describe("Apex Engineering — cost card currency mark", () => {
     expect(currencyMark({ currency: "INR" })).toBeNull();
     expect(currencyMark({ currency: "USD" })).toEqual({
       symbol: "$",
-      size: 16,
+      size: 20,
     });
     expect(currencyMark({ currency: "EUR" })?.symbol).toBe("€");
     expect(currencyMark({ currency: "GBP" })?.symbol).toBe("£");
     expect(currencyMark({ currency: "BRL" })).toEqual({
       symbol: "R$",
-      size: 13,
+      size: 14,
     });
     expect(currencyMark({ currency: "AED" })).toEqual({
       symbol: "AED",
-      size: 10,
+      size: 9,
     });
     expect(
       currencyMark({ currency: "USD", customCurrencySymbol: "US$" })?.symbol
@@ -1494,7 +1645,10 @@ describe("Apex Engineering — cost card currency mark", () => {
       invoice.currency = "USD";
     });
     expect(usd).toContain('data-testid="currency-mark"');
-    expect(usd).toMatch(/font-size="16">\$<\/text>/);
+    // A white outline (a stroked white copy) under the black glyph, like the rupee artwork.
+    expect(usd).toMatch(
+      /font-size="20" fill="white" stroke="white" stroke-width="2"[^>]*>\$<\/text><text[^>]*fill="black">\$<\/text>/
+    );
     expect(render()).not.toContain('data-testid="currency-mark"');
   });
 });
@@ -1538,7 +1692,7 @@ describe("Apex Engineering — frames hug long values", () => {
   const source = fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8");
   it("widens the bank card for a long account number or UPI ID instead of overflowing", () => {
     expect(source).toMatch(
-      /\.ax-row > \.ax-bank-card \{[^}]*width: 359px;[^}]*min-width: min-content;[^}]*max-width: 100%;/
+      /\.ax-row > \.ax-bank-card \{[^}]*width: 391px;[^}]*min-width: min-content;[^}]*max-width: 100%;/
     );
     expect(source).toMatch(
       /\.ax-bank-rows \{[^}]*grid-template-columns: repeat\(2, minmax\(max-content, 1fr\)\);/
@@ -1547,8 +1701,11 @@ describe("Apex Engineering — frames hug long values", () => {
 });
 
 describe("Apex Engineering — party tax numbers only when on the document", () => {
-  const ids = (edit: (invoice: Json) => void) =>
-    view(edit).brand.fields.map((row: Json) => row.label);
+  const ids = (edit: (invoice: Json) => void) => {
+    const invoice = state(edit).invoice as Json;
+    const party = mapParty(invoice, invoice.billedBy, "");
+    return party ? [...party.ids, ...party.extras].map((row) => row.label) : [];
+  };
   it("does not print a stored VAT / TRN number on an Indian GST document", () => {
     expect(
       ids((invoice) => {
@@ -1561,18 +1718,28 @@ describe("Apex Engineering — party tax numbers only when on the document", () 
     expect(
       ids((invoice) => {
         invoice.taxType = "UAE";
+        invoice.billedBy.country = "AE";
         invoice.billedBy.vatNumber = "VAT000000000";
       })
     ).toContain("VAT Number");
+    // A party abroad prints its own number on an Indian GST document too (refrens.com)…
+    expect(
+      ids((invoice) => {
+        invoice.billedBy.country = "AE";
+        invoice.billedBy.vatNumber = "VAT000000000";
+      })
+    ).toContain("VAT Number");
+    // …and a party in India never does, even switched on.
     expect(
       ids((invoice) => {
         invoice.billedBy.vatNumber = "VAT000000000";
         invoice.billedBy.fieldVisibility = { vat: true };
       })
-    ).toContain("VAT Number");
+    ).not.toContain("VAT Number");
     expect(
       ids((invoice) => {
         invoice.taxType = "UAE";
+        invoice.billedBy.country = "AE";
         invoice.billedBy.vatNumber = "VAT000000000";
         invoice.billedBy.fieldVisibility = { vatNumber: false };
       })
@@ -1581,7 +1748,7 @@ describe("Apex Engineering — party tax numbers only when on the document", () 
 });
 
 describe("Apex Engineering — unbroken field values", () => {
-  it("lets an email or GSTIN carry on from its label and break only at the edge", () => {
+  it("lets an email carry on from its label and break only at the edge; figures never break", () => {
     const html = render((invoice) => {
       invoice.billedTo.email = "sample.client@example.com";
     });
@@ -1590,8 +1757,22 @@ describe("Apex Engineering — unbroken field values", () => {
     );
     const css = fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8");
     expect(css).toMatch(
-      /\.ax-field \.ax-field-value\.ax-break \{[^}]*word-break: break-all;/
+      /\.ax-field \.ax-field-value\.ax-break:not\(\.ax-num\) \{[^}]*word-break: break-all;/
     );
+    // A document number, GSTIN, phone, transport or bank figure, or amount is never wrapped.
+    [
+      "\\.ax-meta-value",
+      "\\.ax-party-fields \\.ax-field-value",
+      "\\.ax-transport \\.ax-kv-value",
+      "\\.ax-contact-text",
+      "\\.ax-bank-rows \\.ax-kv-value",
+    ].forEach((box) => {
+      expect(css).not.toMatch(
+        new RegExp(`${box}\\.ax-num \\{[^}]*white-space: normal;`)
+      );
+    });
+    expect(css).not.toMatch(/\.ax-cost-value \{[^}]*overflow-wrap: anywhere;/);
+    expect(css).toMatch(/\.ax-cost-card \{[^}]*min-width: min-content;/);
   });
 });
 
@@ -1642,5 +1823,191 @@ describe("Apex Engineering — rates on the tax and discount rows", () => {
       })
     ).toBe("10.55");
     expect(discountRate({ finalTotal: {} })).toBe("");
+  });
+});
+
+describe("Apex Engineering — design icons", () => {
+  it("puts the profile icon by the client, the icon box by the terms, the bank icon by the bank details", () => {
+    const html = render();
+    expect(html.match(/class="ax-party-icon"/g)).toHaveLength(1);
+    expect(html).toContain('id="Icon / Profile"');
+    expect(html).toMatch(/class="ax-card-head">\s*<span class="ax-icon-box"/);
+    // The landmark icon beside the bank title (user request, 2026-10-23).
+    expect(html).toMatch(
+      /class="ax-bank-head">\s*<span class="ax-card-icon"[^>]*><svg[^>]*><path d="M10 18v-7"\/>/
+    );
+  });
+
+  it("lines the grand total up under the cost label", () => {
+    expect(render()).toMatch(
+      /<div class="ax-cost-text">[\s\S]*?ax-cost-label[\s\S]*?ax-cost-value[\s\S]*?<\/div>/
+    );
+    const css = fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8");
+    expect(css).toMatch(/\.ax-cost-value \{[^}]*text-align: start;/);
+  });
+});
+
+describe("Apex Engineering — editor settings (accordions)", () => {
+  const css = fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8");
+  const metaKeys = (edit?: (invoice: Json, root: Json) => void) =>
+    view(edit).meta.map((row: Json) => row.key);
+
+  it("Change Color & Font: theme, secondary colour, both backgrounds and both fonts", () => {
+    expect(css).toMatch(/--ax-accent: var\(--primary-color,/);
+    expect(css).toMatch(/--ax-ink: var\(--secondary-color, #22272f\)/);
+    expect(css).toMatch(/--ax-paper: var\(--primary-background, #fff\)/);
+    expect(css).toMatch(/--ax-fill: var\(--secondary-background, #f9f9f9\)/);
+    expect(css).toMatch(/--ax-title-font: var\(--title-font,/);
+    expect(css).toMatch(/--ax-font: var\(--subtitle-font,/);
+    // No white is hard-coded outside the token, so Primary Background reaches every card.
+    expect(css.replace(/--ax-(?:paper|on-accent):[^;]*;/g, "")).not.toMatch(
+      /#fff\b/
+    );
+  });
+
+  it("Other Configurations: Hide Totals on the document hides the totals, total row and words", () => {
+    const shown = render();
+    expect(shown).toContain("ax-words-row");
+    const hidden = render((invoice) => {
+      invoice.hideTotals = true;
+    });
+    expect(hidden).not.toContain("ax-words-row");
+    expect(hidden).not.toContain('data-testid="cost-card"');
+    expect(
+      resolveSettings(
+        state((invoice) => {
+          invoice.hideTotals = true;
+        })
+      ).totalsRow
+    ).toBe(false);
+  });
+
+  it("Other Configurations: Show Refrens branding", () => {
+    expect(render()).not.toContain("refrens-branding-widget");
+    expect(
+      render((invoice) => {
+        invoice.showBranding = true;
+      })
+    ).toContain("refrens-branding-widget");
+  });
+
+  it("document details follow the business's saved order", () => {
+    expect(metaKeys()).toEqual([
+      "invoiceNumber",
+      "invoiceDate",
+      "customHeader",
+    ]);
+    expect(
+      metaKeys((invoice) => {
+        invoice.documentFieldOrder = ["DWG. NO", { key: "invoiceDate" }];
+      })
+    ).toEqual(["customHeader", "invoiceDate", "invoiceNumber"]);
+    expect(
+      metaKeys((invoice) => {
+        invoice.template = {
+          ...invoice.template,
+          documentDetailsOrder: ["invoice_date"],
+        };
+      })
+    ).toEqual(["invoiceDate", "invoiceNumber", "customHeader"]);
+  });
+
+  it("Watermark: drawn by the shared widget the template loads", () => {
+    const index = fs.readFileSync(path.join(TEMPLATE_DIR, "index.ts"), "utf8");
+    expect(index).toContain('import "../../widgets/watermark"');
+  });
+});
+
+describe("Apex Engineering — Refrens match (2026-10-19)", () => {
+  const unitRow = (unitColumn?: string) =>
+    template(
+      normalizeInvoiceTemplateState(
+        withRefrensDefaults(
+          (() => {
+            const root = JSON.parse(JSON.stringify(fixture));
+            const invoice = root.invoice || root;
+            invoice.advanceOptions = { ...invoice.advanceOptions };
+            delete invoice.advanceOptions.unitColumn;
+            if (unitColumn) invoice.advanceOptions.unitColumn = unitColumn;
+            invoice.items.forEach((item: Json) => {
+              if (!item.group) item.unit = "PCS";
+            });
+            return root;
+          })()
+        )
+      )
+    );
+
+  it("prints the unit where the unit setting puts it, as refrens.com does", () => {
+    // Unset (Refrens' default) and SEPARATE_COLUMN: a Unit column of its own.
+    expect(unitRow()).toMatch(/<th[^>]*data-col="unit"/);
+    expect(unitRow("SEPARATE_COLUMN")).toMatch(/<th[^>]*data-col="unit"/);
+    // Merged into Quantity: "1 (PCS)", no Unit column.
+    const merged = unitRow("MERGE_QUANTITY");
+    expect(merged).not.toMatch(/<th[^>]*data-col="unit"/);
+    expect(merged).toMatch(/\d \(PCS\)/);
+    // With the item name: "Unit: PCS" under it, no Unit column.
+    const named = unitRow("MERGE_NAME");
+    expect(named).not.toMatch(/<th[^>]*data-col="unit"/);
+    expect(named).toContain("Unit: PCS");
+  });
+
+  it("adds a Notes column to the payments when a payment has notes", () => {
+    const html = render((invoice) => {
+      invoice.advanceOptions.showPaymentsTable = true;
+      invoice.allPayments = [
+        {
+          amount: 1000,
+          paymentDate: "2026-06-01",
+          paymentMethod: "CASH",
+          notes: "Hi sweet",
+        },
+      ];
+    });
+    expect(html).toMatch(/<th>Notes<\/th>[\s\S]*?Hi sweet/);
+    expect(html).toContain(
+      '<h3 class="ax-card-title" data-role="title">Payments</h3>'
+    );
+  });
+
+  it("spells foreign amounts in their own units, as refrens.com", () => {
+    expect(foreignAmountInWords(5400.18, "USD").toUpperCase()).toBe(
+      "FIVE THOUSAND FOUR HUNDRED DOLLARS AND EIGHTEEN CENTS ONLY"
+    );
+    expect(foreignAmountInWords(1800, "SAR").toUpperCase()).toBe(
+      "ONE THOUSAND EIGHT HUNDRED RIYALS ONLY"
+    );
+  });
+});
+
+describe("Apex Engineering — description and note tables in print", () => {
+  it("repeats a description or note table's headings on every page, breaking between its rows", () => {
+    const source = fs.readFileSync(
+      path.join(TEMPLATE_DIR, "styles.css"),
+      "utf8"
+    );
+    const print = source.slice(source.indexOf("@media print"));
+    expect(print).toMatch(
+      /\.ax-doc :is\(\.ax-item-desc, \.ax-note-body\) \.toastui-editor-contents thead \{\s*display: table-header-group;/
+    );
+    expect(print).toMatch(
+      /\.ax-doc :is\(\.ax-item-desc, \.ax-note-body\) \.toastui-editor-contents tr \{\s*break-inside: avoid;/
+    );
+  });
+});
+
+describe("Apex Engineering — boxes split by a page break", () => {
+  it("draws a split box's border on each page's piece", () => {
+    const source = fs.readFileSync(
+      path.join(TEMPLATE_DIR, "styles.css"),
+      "utf8"
+    );
+    const print = source.slice(
+      source.indexOf("A box split by a page break closes")
+    );
+    expect(print).toContain(
+      ":is(.ax-panel, .ax-card, .ax-party, .ax-party-fields, .ax-cost-card)"
+    );
+    expect(print).toMatch(/box-decoration-break: clone;/);
   });
 });
