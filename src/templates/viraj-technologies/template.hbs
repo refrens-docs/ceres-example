@@ -48,10 +48,7 @@
       <thead class="vt-page-frame-header">
         <tr>
           <td>
-            {{!-- The PDF service draws this one in its page header from page 2 on (except-first):
-                  on page 1 the copy under the title stands in, as in the preview (user,
-                  2026-10-23); a browser's own print repeats this header itself. --}}
-            <div class="no-dibella invoice-letterhead vt-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}" data-ceres-page-header data-ceres-page-policy="except-first">
+            <div class="no-dibella invoice-letterhead vt-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}" data-ceres-page-header data-ceres-page-policy="all">
               {{#if @root.invoice.letterHead}}
                 <img src="{{@root.invoice.letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
               {{else}}
@@ -81,7 +78,7 @@
             The letterhead (header image) just below the title and subtitle, in place of a logo
             and rules (user request; Billed By is not printed in this template). When it repeats
             on every printed page it comes from the print frame's <thead> instead, at the top of
-            each page, and this copy stays on screen and in the PDF service's page 1 only.
+            each page, and this copy stays on screen only.
           --}}
           <div class="invoice-letterhead vt-letterhead{{#if view.letterheadEveryPage}} is-print-repeated{{/if}}{{#unless @root.invoice.letterHead}} is-empty{{/unless}}"{{#unless view.letterheadEveryPage}} data-ceres-page-header data-ceres-page-policy="first"{{/unless}} data-testid="section" data-section="letterhead">
             {{#if @root.invoice.letterHead}}

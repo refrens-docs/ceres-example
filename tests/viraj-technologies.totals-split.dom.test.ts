@@ -5,6 +5,7 @@ import {
   fitTotals,
   joinTotals,
   markTallRows,
+  placeFootersOnPageEdge,
   splitTotals,
 } from "../src/templates/viraj-technologies/helpers";
 
@@ -159,5 +160,40 @@ describe("Viraj Technologies — rows taller than a page's room", () => {
       "is-loose",
       "",
     ]);
+  });
+});
+
+describe("Viraj footer on the last page — PDF service", () => {
+  it("leaves the footer after the content while the print layout is not paginated", () => {
+    // The PDF service switches to print media before it prints: forced breaks collapse, so a
+    // page edge cannot be measured and the footer must not be pushed onto a page of its own.
+    document.body.innerHTML =
+      '<div class="vt-doc"><p>Content</p><div class="vt-letterhead-footer">Footer</div></div>';
+    const footer = document.querySelector(
+      ".vt-letterhead-footer"
+    ) as HTMLElement;
+    footer.getClientRects = () => [{}] as unknown as DOMRectList;
+    footer.getBoundingClientRect = () =>
+      ({
+        top: 500,
+        bottom: 560,
+        height: 60,
+        left: 0,
+        right: 700,
+        width: 700,
+      } as DOMRect);
+    let marker = 0;
+    const realCreate = document.createElement.bind(document);
+    jest.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      const element = realCreate(tag);
+      const top = 480 + 12 * marker;
+      marker += 1;
+      element.getBoundingClientRect = () => ({ top } as DOMRect);
+      return element;
+    });
+    placeFootersOnPageEdge();
+    jest.restoreAllMocks();
+    expect(footer.style.breakBefore).toBe("");
+    expect(footer.style.marginTop).toBe("");
   });
 });

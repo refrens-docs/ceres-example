@@ -893,4 +893,14 @@ describe("Viraj Technologies — boxes split by a page break", () => {
       /\.vt-bank-rows \+ \.vt-upi::before \{\s*position: absolute;\s*top: calc\(-1 \* var\(--vt-pad\)\);/
     );
   });
+
+  it("never starts a printed page with the contact line alone", () => {
+    expect(css()).toMatch(/\.vt-doc \.vt-contact \{\s*break-before: avoid;/);
+  });
+
+  it("lets a grid cell cut by a page break leave one line alone, so it never overruns the row below", () => {
+    expect(css()).toMatch(
+      /\.vt-doc :is\(\.vt-grid-row, \.vt-billing-fields\) > \.vt-cell \{\s*orphans: 1;\s*widows: 1;/
+    );
+  });
 });

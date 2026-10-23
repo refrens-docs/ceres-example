@@ -1323,6 +1323,14 @@
   .vt-doc .vt-note-body .toastui-editor-contents > table:only-child {
     height: auto;
   }
+
+  /* A grid row cut by a page break: Chrome sizes the subgrid row before it keeps a cell's
+     last lines together, so a cell pushed by orphans/widows ran over the row below (browser
+     print, wide margins). One line may stand alone at a page edge instead. */
+  .vt-doc :is(.vt-grid-row, .vt-billing-fields) > .vt-cell {
+    orphans: 1;
+    widows: 1;
+  }
 }
 
 /* The buyer grid's row height: 20 px lines, no paragraph margins inside a cell. */
@@ -1539,15 +1547,9 @@
   }
 
   /* A letterhead repeating on every page prints from the frame's <thead>; the copy under the
-     title stays on screen only. In the PDF service, which draws the repeating letterhead in
-     its page header from page 2 on (except-first), this copy is page 1's, under the title as
-     in the preview (user, 2026-10-23). */
+     title stays on screen only. */
   .vt-doc .vt-letterhead.is-print-repeated {
     display: none;
-  }
-
-  body[class~="isDibella"] .vt-doc .vt-letterhead.is-print-repeated:not(.is-empty) {
-    display: block;
   }
 
   .vt-doc {
@@ -1708,7 +1710,6 @@
       var(--vt-column-rule-color, var(--vt-rule));
     background: var(--vt-column-rules, none);
     box-decoration-break: clone;
-    box-decoration-break: clone;
   }
 
   .vt-doc.is-stretch .vt-items-scroll > :last-child {
@@ -1765,10 +1766,14 @@
     break-inside: avoid;
   }
 
+  /* The contact line never starts a page alone: it goes over with the signature before it. */
+  .vt-doc .vt-contact {
+    break-before: avoid;
+  }
+
   .vt-panel,
   .vt-billing,
   .vt-details {
-    box-decoration-break: clone;
     box-decoration-break: clone;
   }
 
@@ -1937,7 +1942,6 @@
   }
 
   :is(.vt-panel, .vt-panel-body, .vt-billing, .vt-billing-fields, .vt-details) {
-    box-decoration-break: clone;
     box-decoration-break: clone;
   }
 
