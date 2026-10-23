@@ -4,7 +4,9 @@ import {
   registerApexHelpers,
   registerApexLogo,
   registerApexPrint,
+  registerApexWords,
   withMoneyDefaults,
+  withRefrensDefaults,
   withTemplateSettings,
 } from "./helpers";
 import "./styles.css";
@@ -25,6 +27,7 @@ import "../../widgets/watermark";
 registerApexHelpers(window.Handlebars);
 registerApexPrint();
 registerApexLogo();
+registerApexWords();
 
 // Export template to global for main renderer to consume
 // Host template settings onto the document, the shared normalizer, then the document's
@@ -33,6 +36,8 @@ window.CeresTemplateDataMapper = ((
   payload: Parameters<typeof normalizeInvoiceTemplateState>[0]
 ) =>
   withMoneyDefaults(
-    normalizeInvoiceTemplateState(withTemplateSettings(payload))
+    normalizeInvoiceTemplateState(
+      withRefrensDefaults(withTemplateSettings(payload))
+    )
   )) as any;
 window.CeresTemplate = template;
