@@ -17,7 +17,7 @@
   update targets.
 --}}
 {{#with (vtView @root) as |view|}}
-<div class="vt-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.hideFooter}} is-footer-hidden{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--vt-text-scale: {{view.print.textScale}}; --vt-print-width: {{view.print.printWidth}}px; --vt-browser-print-width: {{view.print.browserPrintWidth}}px;{{#if view.theme}} --vt-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --vt-script-font: '{{view.script.font}}';{{/if}}">
+<div class="vt-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.hideFooter}} is-footer-hidden{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--vt-text-scale: {{view.print.textScale}}; --vt-print-width: {{view.print.printWidth}}px; --vt-browser-print-width: {{view.print.browserPrintWidth}}px; --vt-print-height: {{view.print.printHeight}}px;{{#if view.theme}} --vt-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --vt-script-font: '{{view.script.font}}';{{/if}}">
   {{!-- The Language/Script setting's font, for the glyphs Inter lacks. --}}
   {{#if view.script.fontUrl}}<link rel="stylesheet" href="{{view.script.fontUrl}}" />{{/if}}
   {{!--
@@ -211,7 +211,7 @@
 
           <section class="vt-items-section" data-testid="section" data-section="items">
             <div class="vt-items-scroll" data-testid="items-scroll">
-              <table class="vt-items{{#if view.print.compactTable}} is-print-compact{{/if}}{{#if view.table.showThumbnail}} has-thumbnails{{/if}}{{#if view.table.roomy}} is-roomy{{/if}}{{#if view.table.manyFigures}} has-many-figures{{/if}}" data-testid="items-table" style="--vt-figures: {{view.table.figureCount}}; --vt-serial-width: {{view.table.serialWidth}}px;{{#if view.print.tableFit}} --vt-table-fit: {{view.print.tableFit}};{{/if}}">
+              <table class="vt-items{{#if view.print.compactTable}} is-print-compact{{/if}}{{#if view.table.showThumbnail}} has-thumbnails{{/if}}{{#if view.table.roomy}} is-roomy{{/if}}{{#if view.table.manyFigures}} has-many-figures{{/if}}" data-testid="items-table" style="--vt-figures: {{view.table.figureCount}}; --vt-serial-width: {{view.table.serialWidth}}px;">
                 <thead>
                   <tr data-testid="items-header">
                     <th class="vt-col-serial" data-col="sr" style="width: {{view.table.serialWidth}}px">{{view.table.serialLabel}}</th>

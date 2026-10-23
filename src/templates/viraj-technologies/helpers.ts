@@ -642,6 +642,20 @@ const regionName = (code: string): string => {
 const ownerConfiguration = (invoice: UnknownRecord): UnknownRecord =>
   asRecord(asRecord(invoice.owner).configuration);
 
+/* An e-invoice setting of the business (showSignedIrnQr, irnPosition), at the configuration's
+   top level or in its tax / einvoice groups: test-janvi has never saved either, so where
+   Refrens keeps them is not confirmed. */
+const einvoiceSetting = (invoice: UnknownRecord, key: string): unknown => {
+  const configuration = ownerConfiguration(invoice);
+  return [
+    configuration,
+    asRecord(configuration.tax),
+    asRecord(configuration.einvoice),
+  ]
+    .map((source) => source[key])
+    .find((value) => value !== undefined && value !== null && value !== "");
+};
+
 /* `fieldVisibility.<key>.showInDocument` on the business, and the party's own map. */
 const fieldShown = (
   invoice: UnknownRecord,
@@ -2027,7 +2041,7 @@ export const mapCompliance = (state: UnknownRecord) => {
     firstText(
       invoice.qrCode,
       irn.qrCode,
-      ownerConfiguration(invoice).showSignedIrnQr === true
+      einvoiceSetting(invoice, "showSignedIrnQr") === true
         ? firstText(irn.SignedQRCode, irn.qr)
         : firstText(irn.qr, irn.SignedQRCode)
     )
@@ -2063,7 +2077,7 @@ export const mapCompliance = (state: UnknownRecord) => {
   return {
     // Above the item table unless the business places it below (irnPosition).
     isBelowItems:
-      firstText(invoice.irnPosition, ownerConfiguration(invoice).irnPosition)
+      firstText(invoice.irnPosition, einvoiceSetting(invoice, "irnPosition"))
         .toUpperCase()
         .replace(/[^A-Z]/g, "") === "BELOWLINEITEMS",
     showIrn: !isOff(einvoice.irnNumber),
@@ -3768,6 +3782,13 @@ export const mapTotals = (
       ...invoice,
       subUnitLength: moneyDigits(invoice),
       advanceOptions,
+      /*
+       * A live switch from Lydia arrives in advanceOptions (the renderer re-renders with it);
+       * the widget reads the document's own hideTotals / hideTaxes first, so it would keep the
+       * saved value. Stored documents never carry these in advanceOptions.
+       */
+      hideTotals: pickFirst(advanceOptions.hideTotals, invoice.hideTotals),
+      hideTaxes: pickFirst(advanceOptions.hideTaxes, invoice.hideTaxes),
     },
     {
       columns: asRecord(state.mapped).columns,
@@ -3973,8 +3994,11 @@ export const statusTag = (
  * <html> by it (except at 0.8), which narrows the page in CSS px. textScale scales text only.
  *
  * compactTable: when the items table's other columns, shrunk to content, would leave
- * Description less than its 22% share of that page, the table prints at the small step
- * with tight padding (styles.css, .is-print-compact), as Solvin's compact print table does.
+ * Description less than its 22% share of that page, the table prints with tight padding
+ * (styles.css, .is-print-compact), as Solvin's compact print table does. Its text keeps its
+ * size: only the table measured in print (fitPrintTable) shrinks text, and only when it
+ * really is wider than the page (print 1:1, user 2026-10-21; this estimate had shrunk ten-
+ * and eleven-column tables that fit at full size).
  */
 const PRINT_MARGINS_PX = (2 * 96) / 2.54;
 const PAPER_WIDTH_MM: Record<string, number> = {
@@ -3999,20 +4023,7 @@ const PAPER_HEIGHT_MM: Record<string, number> = {
   legal: 355.6,
 };
 
-/*
- * The Description cell's floor on a page too narrow for the table (A5, a large print size):
- * a readable column of about 12 characters with its padding.
- */
-const PRINT_DESCRIPTION_FLOOR = 120;
-/* 13 px × 0.77 = 10 px: the repo preset's floor (design-to-template §4a); below it, wrap. */
-const MIN_TABLE_FIT = 0.77;
-const COMPACT_PADDING_SAVING = 4; // 6 → 4 px each side
-
-export const mapPrint = (
-  state: UnknownRecord,
-  tableFixedWidth = 0,
-  fixedColumns = 0
-) => {
+export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
   const pdfOptions = asRecord(state.pdfOptions);
   const invoice = asRecord(state.invoice);
   const template = asRecord(invoice.template);
@@ -4039,6 +4050,14 @@ export const mapPrint = (
   const browserPrintWidth = Math.floor(
     ((paperMm / 25.4) * 96) / rendererZoom - (2 * 96) / 2.54 - 4
   );
+  // The printable height in the document's own pixels (1 cm top and bottom), for the rows'
+  // page room (markTallRows).
+  const paperHeightMm = landscape
+    ? PAPER_WIDTH_MM[format] ?? PAPER_WIDTH_MM.a4
+    : PAPER_HEIGHT_MM[format] ?? PAPER_HEIGHT_MM.a4;
+  const printHeight = Math.floor(
+    ((paperHeightMm / 25.4) * 96) / rendererZoom - (2 * 96) / 2.54
+  );
   const rawScale =
     positiveNumber(pdfOptions.textScale) ?? positiveNumber(pdfOptions.scale);
   // A percentage (110) or a ratio (1.1); kept readable either way.
@@ -4047,28 +4066,12 @@ export const mapPrint = (
   const textScale = Math.min(2, Math.max(0.3, ratio ?? 1));
   const compactTable =
     tableFixedWidth * textScale > pageWidth * (1 - MIN_DESCRIPTION_SHARE);
-  // Last resort, only when even compact padding leaves Description under its floor: the
-  // table's text shrinks just enough to fit the page (never below MIN_TABLE_FIT), rather than
-  // the page clipping its last columns. A4 at the normal print size never gets here.
-  const compactWidth =
-    (tableFixedWidth - fixedColumns * COMPACT_PADDING_SAVING) * textScale;
-  const tableFit =
-    compactTable && compactWidth > 0
-      ? Math.min(
-          1,
-          Math.max(
-            MIN_TABLE_FIT,
-            (pageWidth - PRINT_DESCRIPTION_FLOOR) / compactWidth
-          )
-        )
-      : 1;
   return {
     textScale: compactDecimal(textScale),
     printWidth,
     browserPrintWidth,
+    printHeight,
     compactTable,
-    tableFit:
-      tableFit < 1 ? compactDecimal(Math.floor(tableFit * 100) / 100) : "",
     /*
      * "Stretch invoice & quotation tables to fill the page" (Settings > Experimental,
      * owner.configuration.experimental.stretchInvoiceTable) with the document's own toggle
@@ -4662,11 +4665,7 @@ export const buildVirajView = (root: unknown) => {
     eway: bareRows(rawCompliance.eway),
   };
   const status = statusTag(invoice);
-  const print = mapPrint(
-    state,
-    table.printFixedWidth,
-    table.columns.filter((column) => column.kind !== "name").length
-  );
+  const print = mapPrint(state, table.printFixedWidth);
   const bank = mapBank(state);
   const additional = mapAdditionalInfo(state, formatContext(invoice));
   const words = mapWords(state, options);
@@ -4860,24 +4859,82 @@ const MIN_PRINT_FIT = 0.6;
 const PRINT_SLACK = 0.5;
 // The share of the page's width a fitted table may take (see fitPrintTable).
 const PRINT_ROOM = 0.99;
+/*
+ * The Item column's floor in print: a readable column of about 12 characters with its padding.
+ * On a narrow page (A5, a large print size) the other columns at full size leave it a sliver,
+ * every description runs down as a column of single words and an item no longer fits a page.
+ */
+const PRINT_DESCRIPTION_FLOOR = 120;
 
 /*
  * An item row prints whole (break-inside: avoid; user rule 2026-10-19: a line item never
- * splits), moving to the next page when it does not fit. Only a row taller than most of a
- * page's room between the letterhead and the footer (TALL_ROW) may break, as it could not
- * fit on any page; 320 px split ordinary items with a long description.
+ * splits), moving to the next page when it does not fit. Only a row taller than a page's room
+ * between the letterhead, the footer and the table's headings may break, as it could not fit
+ * on any page (at most TALL_ROW, A4 portrait's; 320 px split ordinary items with a long
+ * description). In print the room is the paper's (--vt-print-height, helpers.ts mapPrint): on
+ * A5 or a landscape page an item taller than it was held whole, and Chrome counted pages for
+ * it that it then did not fill, ending a browser's own print with blank pages. An item whose
+ * name, description and image rows together outgrow the room may break between them too.
  */
 const TALL_ROW = 640;
 
+const printRoom = (root: ParentNode): number => {
+  const doc = root.querySelector<HTMLElement>(".vt-doc");
+  const printing =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("print").matches;
+  const pageHeight = doc
+    ? parseFloat(getComputedStyle(doc).getPropertyValue("--vt-print-height"))
+    : NaN;
+  if (!doc || !printing || !(pageHeight > 0)) return TALL_ROW;
+  // Laid-out pixels per CSS pixel of the document (the print size zooms the page).
+  const scale = doc.getBoundingClientRect().width / (doc.offsetWidth || 1) || 1;
+  const height = (selector: string) => {
+    const element = root.querySelector<HTMLElement>(selector);
+    return element && element.getClientRects().length
+      ? element.getBoundingClientRect().height / scale
+      : 0;
+  };
+  const room =
+    pageHeight -
+    height(".vt-page-frame-header") -
+    height(".vt-page-frame-footer") -
+    height(".vt-items > thead");
+  return room > 100 ? Math.min(TALL_ROW, room) : TALL_ROW;
+};
+
 export const markTallRows = (root: ParentNode = document): void => {
-  root
-    .querySelectorAll<HTMLElement>(".vt-items tbody tr")
-    .forEach((row) =>
-      row.classList.toggle(
-        "is-tall",
-        row.getBoundingClientRect().height > TALL_ROW
-      )
+  const limit = printRoom(root);
+  const rows = Array.from(
+    root.querySelectorAll<HTMLElement>(".vt-items tbody tr")
+  );
+  rows.forEach((row) => {
+    row.classList.toggle("is-tall", row.getBoundingClientRect().height > limit);
+    row.classList.remove("is-loose");
+  });
+  // An item's rows, from its name (or item) row to its last description or image row.
+  const PARTS = ["vt-detail-row", "vt-image-row"];
+  rows.forEach((row, index) => {
+    if (!row.classList.contains("vt-item-row")) return;
+    const group = [row];
+    const before = rows[index - 1];
+    if (before?.classList.contains("vt-name-row")) group.unshift(before);
+    for (
+      let next = index + 1;
+      next < rows.length &&
+      PARTS.some((part) => rows[next].classList.contains(part));
+      next += 1
+    ) {
+      group.push(rows[next]);
+    }
+    const total = group.reduce(
+      (sum, part) => sum + part.getBoundingClientRect().height,
+      0
     );
+    if (group.length > 1 && total > limit) {
+      group.forEach((part) => part.classList.add("is-loose"));
+    }
+  });
 };
 
 /*
@@ -5231,13 +5288,28 @@ export const fitPrintTable = (
       return narrowest;
     };
     const overflow = () => need() - room();
-    if (overflow() <= PRINT_SLACK) return;
+    // The Item column as laid out, against its floor in the same (zoomed) pixels.
+    const name = table.querySelector<HTMLElement>(
+      ":scope > thead .vt-col-name"
+    );
+    const pxScale = () =>
+      box.getBoundingClientRect().width / (box.offsetWidth || 1) || 1;
+    const narrow = () =>
+      !!name &&
+      name.getBoundingClientRect().width <
+        PRINT_DESCRIPTION_FLOOR * pxScale() - PRINT_SLACK;
+    if (overflow() <= PRINT_SLACK && !narrow()) return;
     table.classList.add("is-print-fit");
     let fit = 1;
     // Shrinks by the measured ratio, and by at least a step each time, so the last pixel or
-    // two of overflow (the floors, padding and rules do not scale exactly) still goes.
-    for (let step = 0; step < 20 && overflow() > PRINT_SLACK; step += 1) {
-      const ratio = room() / need();
+    // two of overflow (the floors, padding and rules do not scale exactly) still goes; a table
+    // that fits but leaves the Item column under its floor shrinks a step at a time.
+    for (
+      let step = 0;
+      step < 20 && (overflow() > PRINT_SLACK || narrow());
+      step += 1
+    ) {
+      const ratio = overflow() > PRINT_SLACK ? room() / need() : 1;
       fit = Math.max(
         MIN_PRINT_FIT,
         Math.min(fit - 0.01, Math.floor(fit * ratio * 100) / 100)
@@ -5384,7 +5456,13 @@ export const prepareBrowserPrint = (
   const docWidth = doc.style.width;
   withPrintRules(width, () => {
     doc.style.width = `${width}px`;
-    withPrintMedia(() => (layout ? layout() : fitPrintTable(root, true)));
+    withPrintMedia(() => {
+      if (layout) layout();
+      else {
+        fitPrintTable(root, true);
+        markTallRows(root);
+      }
+    });
   });
   doc.style.width = docWidth;
   fitted.forEach(([table, className]) => {
@@ -5553,6 +5631,8 @@ export interface FooterPlacement {
 
 // 2 px to spare, so rounding never pushes the footer onto a page of its own.
 const PAGE_EDGE_SLACK = 2;
+// Shorter than any printed page (A5 landscape at the smallest print size is about 400 px).
+const MIN_PAGE_HEIGHT = 200;
 
 /* The space to add above the footer so it ends on the page's bottom edge. */
 export const footerEdgeGap = ({
@@ -5598,6 +5678,10 @@ export const placeFootersOnPageEdge = (root: ParentNode = document): void => {
     const [pageEnd, nextPageEnd] = breaks.map(pageTop);
     breaks.forEach((marker) => marker.remove());
     const pageHeight = nextPageEnd - pageEnd;
+    // Not paginated yet (the PDF service switches to print media before it prints, so the
+    // forced breaks collapse): the page edge cannot be measured, and the footer stays after
+    // the content rather than be forced onto a page of its own.
+    if (pageHeight < MIN_PAGE_HEIGHT) return;
 
     let box = footer.getBoundingClientRect();
     const fits =
