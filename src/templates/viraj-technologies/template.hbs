@@ -17,7 +17,7 @@
   update targets.
 --}}
 {{#with (vtView @root) as |view|}}
-<div class="vt-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.hideFooter}} is-footer-hidden{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--vt-text-scale: {{view.print.textScale}}; --vt-print-width: {{view.print.printWidth}}px; --vt-browser-print-width: {{view.print.browserPrintWidth}}px;{{#if view.theme}} --vt-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --vt-script-font: '{{view.script.font}}';{{/if}}">
+<div class="vt-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.hideFooter}} is-footer-hidden{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--vt-text-scale: {{view.print.textScale}}; --vt-print-width: {{view.print.printWidth}}px; --vt-browser-print-width: {{view.print.browserPrintWidth}}px; --vt-print-height: {{view.print.printHeight}}px;{{#if view.theme}} --vt-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --vt-script-font: '{{view.script.font}}';{{/if}}">
   {{!-- The Language/Script setting's font, for the glyphs Inter lacks. --}}
   {{#if view.script.fontUrl}}<link rel="stylesheet" href="{{view.script.fontUrl}}" />{{/if}}
   {{!--
@@ -48,7 +48,10 @@
       <thead class="vt-page-frame-header">
         <tr>
           <td>
-            <div class="no-dibella invoice-letterhead vt-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}" data-ceres-page-header data-ceres-page-policy="all">
+            {{!-- The PDF service draws this one in its page header from page 2 on (except-first):
+                  on page 1 the copy under the title stands in, as in the preview (user,
+                  2026-10-23); a browser's own print repeats this header itself. --}}
+            <div class="no-dibella invoice-letterhead vt-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}" data-ceres-page-header data-ceres-page-policy="except-first">
               {{#if @root.invoice.letterHead}}
                 <img src="{{@root.invoice.letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
               {{else}}
@@ -78,7 +81,7 @@
             The letterhead (header image) just below the title and subtitle, in place of a logo
             and rules (user request; Billed By is not printed in this template). When it repeats
             on every printed page it comes from the print frame's <thead> instead, at the top of
-            each page, and this copy stays on screen only.
+            each page, and this copy stays on screen and in the PDF service's page 1 only.
           --}}
           <div class="invoice-letterhead vt-letterhead{{#if view.letterheadEveryPage}} is-print-repeated{{/if}}{{#unless @root.invoice.letterHead}} is-empty{{/unless}}"{{#unless view.letterheadEveryPage}} data-ceres-page-header data-ceres-page-policy="first"{{/unless}} data-testid="section" data-section="letterhead">
             {{#if @root.invoice.letterHead}}
@@ -211,7 +214,7 @@
 
           <section class="vt-items-section" data-testid="section" data-section="items">
             <div class="vt-items-scroll" data-testid="items-scroll">
-              <table class="vt-items{{#if view.print.compactTable}} is-print-compact{{/if}}{{#if view.table.showThumbnail}} has-thumbnails{{/if}}{{#if view.table.roomy}} is-roomy{{/if}}{{#if view.table.manyFigures}} has-many-figures{{/if}}" data-testid="items-table" style="--vt-figures: {{view.table.figureCount}}; --vt-serial-width: {{view.table.serialWidth}}px;{{#if view.print.tableFit}} --vt-table-fit: {{view.print.tableFit}};{{/if}}">
+              <table class="vt-items{{#if view.print.compactTable}} is-print-compact{{/if}}{{#if view.table.showThumbnail}} has-thumbnails{{/if}}{{#if view.table.roomy}} is-roomy{{/if}}{{#if view.table.manyFigures}} has-many-figures{{/if}}" data-testid="items-table" style="--vt-figures: {{view.table.figureCount}}; --vt-serial-width: {{view.table.serialWidth}}px;">
                 <thead>
                   <tr data-testid="items-header">
                     <th class="vt-col-serial" data-col="sr" style="width: {{view.table.serialWidth}}px">{{view.table.serialLabel}}</th>

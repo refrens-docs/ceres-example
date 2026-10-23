@@ -4,6 +4,7 @@
 import {
   fitTotals,
   joinTotals,
+  markTallRows,
   splitTotals,
 } from "../src/templates/viraj-technologies/helpers";
 
@@ -98,6 +99,65 @@ describe("Viraj Technologies — totals figures never widen a column", () => {
     expect(totals(90)).toEqual([
       [2, 2],
       [2, 2],
+    ]);
+  });
+});
+
+describe("Viraj Technologies — rows taller than a page's room", () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  const rows = (heights: number[], pageHeight: number) => {
+    printing(true);
+    document.body.innerHTML = `<div class="vt-doc" style="--vt-print-height: ${pageHeight}px"><table class="vt-items"><thead data-h="40"><tr><th>Item</th></tr></thead><tbody><tr class="vt-item-row" data-h="${heights[0]}"><td>A</td></tr><tr class="vt-image-row" data-h="${heights[1]}"><td>img</td></tr><tr class="vt-item-row" data-h="${heights[2]}"><td>B</td></tr></tbody></table></div>`;
+    jest
+      .spyOn(Element.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: Element) {
+        const height = Number((this as HTMLElement).dataset.h || 0);
+        return {
+          width: 500,
+          height,
+          top: 0,
+          left: 0,
+          right: 500,
+          bottom: height,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      });
+    jest
+      .spyOn(Element.prototype, "getClientRects")
+      .mockImplementation(() => [{}] as unknown as DOMRectList);
+    // Laid out at the print size 1 (jsdom lays nothing out).
+    jest
+      .spyOn(HTMLElement.prototype, "offsetWidth", "get")
+      .mockReturnValue(500);
+    markTallRows();
+    return Array.from(document.querySelectorAll("tbody tr")).map((row) =>
+      ["is-tall", "is-loose"].filter((c) => row.classList.contains(c)).join(" ")
+    );
+  };
+
+  it("lets a row taller than an A5 page's room break, and an item outgrowing it break between its rows", () => {
+    // A5: 718 px page, 40 px of headings: room 678 (under the 640 cap), so 640 is the limit.
+    expect(rows([700, 100, 300], 718)).toEqual([
+      "is-tall is-loose",
+      "is-loose",
+      "",
+    ]);
+    expect(rows([600, 100, 300], 718)).toEqual(["is-loose", "is-loose", ""]);
+  });
+
+  it("keeps items whole while they fit the page's room", () => {
+    expect(rows([400, 100, 300], 1046)).toEqual(["", "", ""]);
+  });
+
+  it("uses the smaller room of a short page", () => {
+    // A5 landscape: 483 px page less 40 px of headings.
+    expect(rows([450, 0, 300], 483)).toEqual([
+      "is-tall is-loose",
+      "is-loose",
+      "",
     ]);
   });
 });

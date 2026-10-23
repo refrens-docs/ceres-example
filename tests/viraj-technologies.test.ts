@@ -820,6 +820,30 @@ describe("Viraj Technologies — stretch to the page", () => {
     expect(print).toMatch(/max-width: var\(--vt-print-width, none\);/);
     expect(render()).toContain("--vt-print-width: 714px;");
   });
+
+  it("gives the page's printable height for the rows' page room, and never pre-shrinks text", () => {
+    const print = (pdfOptions: Record<string, unknown>) =>
+      mapPrint({ pdfOptions });
+    // A4 portrait: 1123 - 76 px of 1 cm margins; A5 portrait 794 - 76; A4 landscape 794 - 76.
+    expect(print({}).printHeight).toBe(1046);
+    expect(print({ format: "a5" }).printHeight).toBe(718);
+    expect(print({ landscape: true }).printHeight).toBe(718);
+    expect(print({})).not.toHaveProperty("tableFit");
+    expect(render()).toContain("--vt-print-height: 1046px;");
+    expect(render()).not.toContain("--vt-table-fit");
+    expect(css()).toMatch(
+      /\.vt-items tr\.is-loose \{\s*break-before: auto !important;/
+    );
+  });
+
+  it("prints bold at 600, never 700", () => {
+    const source = css();
+    expect(source).toContain("--vt-weight-strong: 600;");
+    expect(source).toMatch(
+      /\.vt-doc :is\(strong, b\),\s*\.vt-doc \.toastui-editor-contents :is\(strong, b\) \{\s*font-weight: var\(--vt-weight-heading\);/
+    );
+    expect(source).not.toMatch(/font-weight:\s*(700|bold)/);
+  });
 });
 
 describe("Viraj Technologies — boxes split by a page break", () => {

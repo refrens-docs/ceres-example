@@ -9,7 +9,7 @@
  * Arabic, loaded for that one character (text=⃁), draws it instead.
  */
 @font-face {
-  font-family: "vt-saudi-riyal";
+  font-family: vt-saudi-riyal;
   src: url("https://lstatic.refrens.com/public/fonts/regular/saudi_riyal.woff2")
       format("woff2"),
     url("https://lstatic.refrens.com/public/fonts/regular/saudi_riyal.woff")
@@ -41,6 +41,7 @@
     var(--primary-color, var(--vt-theme, #1e3a8a)) 4%,
     #f8f9fa
   ); /* ≈ #f5f7fa on the default */
+
   --vt-muted: color-mix(in srgb, var(--vt-ink) 68%, #fff); /* item codes, notes, secondary lines */
   --vt-rule-width: 1px;
   --vt-pad: 6px; /* above and below the text in every cell and panel (user request) */
@@ -48,11 +49,11 @@
   --vt-section-gap: 12px; /* between sections, on screen and on paper (user, 2026-10-21) */
 
   /*
-   * Weights, one step per level of the hierarchy: the title and the grand total 700; section
-   * and table headings, party names and the totals rows of tables 600; labels and item names
-   * 500; values and running text 400.
+   * Weights, one step per level of the hierarchy: the title, the grand total, section and table
+   * headings, party names and the totals rows of tables 600 (no 700 anywhere, user 2026-10-21);
+   * labels and item names 500; values and running text 400.
    */
-  --vt-weight-strong: 700;
+  --vt-weight-strong: 600;
   --vt-weight-heading: 600;
   --vt-weight-label: 500;
 
@@ -298,6 +299,13 @@
 .vt-billing-label {
   font-weight: var(--vt-weight-label);
   white-space: nowrap;
+}
+
+/* Bold text, the summaries' Total rows and bold in descriptions and notes alike, at 600 rather
+   than the browser's 700 (user 2026-10-21). */
+.vt-doc :is(strong, b),
+.vt-doc .toastui-editor-contents :is(strong, b) {
+  font-weight: var(--vt-weight-heading);
 }
 
 .vt-billing-name strong {
@@ -1013,7 +1021,7 @@
   width: 1%;
 }
 
-.vt-summary .vt-batch-table :is(th, td):not(:first-child):not(.vt-num) {
+.vt-summary .vt-batch-table :is(th, td):not(:first-child, .vt-num) {
   overflow-wrap: normal;
 }
 
@@ -1411,6 +1419,7 @@
  * A buyer's box squeezed by long document details: under 380 px its fields fold to
  * label | value, a field to a row.
  */
+
 /* In a narrow buyer's box an email breaks where it must rather than run past the box. */
 @container vt-billing (width < 460px) {
   .vt-billing-fields .vt-cell-value:has(.vt-email),
@@ -1515,6 +1524,7 @@
     /* Never wider than the paper's printable width (helpers.ts mapPrint): Refrens' PDF
        service lays the page out in a window wider than the paper before it prints. */
     max-width: var(--vt-print-width, none);
+
     /* Centred: a browser's own print keeps 1 cm margins, so a document set to wider ones
        (xMargins 2) sits in the middle of the page rather than against its left edge. */
     margin: 0 auto;
@@ -1529,9 +1539,15 @@
   }
 
   /* A letterhead repeating on every page prints from the frame's <thead>; the copy under the
-     title stays on screen only. */
+     title stays on screen only. In the PDF service, which draws the repeating letterhead in
+     its page header from page 2 on (except-first), this copy is page 1's, under the title as
+     in the preview (user, 2026-10-23). */
   .vt-doc .vt-letterhead.is-print-repeated {
     display: none;
+  }
+
+  body[class~="isDibella"] .vt-doc .vt-letterhead.is-print-repeated:not(.is-empty) {
+    display: block;
   }
 
   .vt-doc {
@@ -1572,17 +1588,6 @@
     white-space: normal;
   }
 
-  /* A page too narrow even then shrinks the table's text, never under 10 px. */
-  .vt-items.is-print-compact {
-    font-size: max(
-      10px,
-      calc(
-        var(--vt-font-size-base) * var(--vt-text-scale, 1) *
-          var(--vt-table-fit, 1)
-      )
-    );
-  }
-
   /*
    * Measured in print (helpers.ts fitPrintTable): a table still wider than its page takes the
    * tight padding and scales its text by --vt-print-fit, never under 10 px.
@@ -1602,13 +1607,9 @@
   }
 
   .vt-items.is-print-fit {
-    font-size: max(
-      10px,
-      calc(
-        var(--vt-font-size-base) * var(--vt-text-scale, 1) *
-          var(--vt-print-fit, 1)
-      )
-    );
+    --vt-print-text: calc(var(--vt-font-size-base) * var(--vt-text-scale, 1));
+
+    font-size: max(10px, calc(var(--vt-print-text) * var(--vt-print-fit, 1)));
   }
 
   .vt-items.is-print-fit thead th,
@@ -1654,6 +1655,7 @@
 
   /* A row taller than a third of a page breaks rather than leaving its page blank (helpers.ts
      markTallRows). */
+
   /* An item and its full-width description stay on one page. */
   .vt-items .vt-item-row:has(+ .vt-detail-row:not([style*="none"])) {
     break-after: avoid;
@@ -1661,6 +1663,13 @@
 
   .vt-items tr.is-tall {
     break-inside: auto;
+  }
+
+  /* An item taller than a page's room as a whole may break between its rows (markTallRows);
+     !important over the item's keep-together rules, whatever their selectors' weight. */
+  .vt-items tr.is-loose {
+    break-before: auto !important;
+    break-after: auto !important;
   }
 
   /* Each line item prints whole: its name, description and image rows move to the next page
@@ -1698,7 +1707,7 @@
     border-bottom: var(--vt-column-rule-width) solid
       var(--vt-column-rule-color, var(--vt-rule));
     background: var(--vt-column-rules, none);
-    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
     box-decoration-break: clone;
   }
 
@@ -1715,7 +1724,7 @@
   }
 
   .vt-doc.is-stretch .vt-items .vt-filler > td {
-    height: var(--vt-filler-height, 0px);
+    height: var(--vt-filler-height, 0);
     padding-block: 0;
     border-top: 0;
   }
@@ -1759,7 +1768,7 @@
   .vt-panel,
   .vt-billing,
   .vt-details {
-    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
     box-decoration-break: clone;
   }
 
@@ -1787,6 +1796,7 @@
     padding-bottom: calc(var(--vt-pad) + var(--vt-keep));
     margin-bottom: calc(-1 * var(--vt-keep));
     border-bottom: 0;
+
     /* Two layers of exact size, not colour stops (a 1 px stop vanished at some print scales):
        the rule, 1 px tall, on the title's own foot; the fill above it, under the panel's top
        rule (an inset shadow, see .vt-panel). */
@@ -1927,7 +1937,7 @@
   }
 
   :is(.vt-panel, .vt-panel-body, .vt-billing, .vt-billing-fields, .vt-details) {
-    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
     box-decoration-break: clone;
   }
 
@@ -2272,7 +2282,7 @@
       text-align: start;
     }
 
-    .vt-doc .vt-summary .ceres-table tfoot td:not([data-label]):not(.ceres-table-words) {
+    .vt-doc .vt-summary .ceres-table tfoot td:not([data-label], .ceres-table-words) {
       font-weight: var(--vt-weight-heading);
     }
 
