@@ -4578,6 +4578,50 @@ export const placeFootersOnPageEdge = (root: ParentNode = document): void => {
  * page edge. Rules and rounding keep a pixel or two, so it settles in steps.
  */
 const PRINT_SLACK = 0.5;
+
+/*
+ * Chrome before 128 (Refrens' PDF service runs 122) reports the size and place of anything inside
+ * a CSS-zoomed element divided by that zoom; later Chrome reports what is drawn. The print fit zooms
+ * the item table, so the fit, the totals' rule and the stretch rules measure the table through this
+ * (2026-10-23: in real PDFs the table was shrunk to 0.689 where 0.957 fits, and the totals' rule
+ * landed off the column). Elsewhere it returns the rect unchanged.
+ */
+const legacyZoom = (): boolean =>
+  typeof Element !== "undefined" && !("currentCSSZoom" in Element.prototype);
+
+const zoomWithin = (element: Element): number => {
+  let zoom = 1;
+  for (
+    let node: Element | null = element;
+    node && node !== document.documentElement;
+    node = node.parentElement
+  ) {
+    zoom *= parseFloat(getComputedStyle(node).zoom) || 1;
+  }
+  return zoom;
+};
+
+type Box = Pick<
+  DOMRect,
+  "x" | "y" | "width" | "height" | "left" | "right" | "top" | "bottom"
+>;
+
+export const drawnRect = (element: Element): Box => {
+  const rect = element.getBoundingClientRect();
+  const zoom = legacyZoom() ? zoomWithin(element) : 1;
+  if (zoom === 1) return rect;
+  const scaled = (value: number) => value * zoom;
+  return {
+    x: scaled(rect.x),
+    y: scaled(rect.y),
+    width: scaled(rect.width),
+    height: scaled(rect.height),
+    left: scaled(rect.left),
+    right: scaled(rect.right),
+    top: scaled(rect.top),
+    bottom: scaled(rect.bottom),
+  };
+};
 // The share of the page's width a fitted table may take (see fitPrintTable).
 const PRINT_ROOM = 0.99;
 
@@ -4680,7 +4724,7 @@ export const fitPrintTable = (
       const need = () => {
         const { width } = table.style;
         table.style.width = "0px";
-        const narrowest = table.getBoundingClientRect().width;
+        const narrowest = drawnRect(table).width;
         table.style.width = width;
         return narrowest;
       };
@@ -4746,7 +4790,7 @@ export const alignTotals = (root: ParentNode = document): void => {
     const reaches = Array.from(row.cells)
       .slice(1)
       .map((cell) => {
-        const rect = cell.getBoundingClientRect();
+        const rect = drawnRect(cell);
         return rtl ? rect.right - box.left : box.right - rect.left;
       })
       // Only the column edges inside the totals' box, leaving the labels most of the row: an
@@ -4971,9 +5015,7 @@ const columnRules = (
     ) || 1;
   const scale = box.width / (wrap.offsetWidth || box.width);
   const room = box.width - width * scale;
-  const cells = Array.from(row.cells).map((cell) =>
-    cell.getBoundingClientRect()
-  );
+  const cells = Array.from(row.cells).map((cell) => drawnRect(cell));
   const edges = [
     ...cells.map((cell) => cell.left - box.left),
     cells[cells.length - 1].right - box.left,

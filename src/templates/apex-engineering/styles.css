@@ -528,10 +528,10 @@
   color: var(--ax-black);
 }
 
-/* The currency icon 16 px from the total's text (user request, 2026-10-23). */
+/* The currency icon 12 px from the total's text (user request, 2026-10-23). */
 .ax-cost-head {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: flex-start;
   width: 100%;
 }
@@ -593,14 +593,10 @@
   width: auto;
   min-width: min-content;
   max-width: none;
-  margin-top: 4px;
   padding-inline-start: 0;
   border-inline-start: 0;
-}
 
-/* Country / Place of Supply carry on 4 px under the rows above, no extra margin (user request). */
-.ax-dispatch .ax-party-supply {
-  margin-top: 0;
+  /* No margin of its own: GSTIN, custom fields and supply carry on 4 px under the address (user request). */
 }
 
 /* ------------------------------------------------------------ key / value grids */
@@ -1111,10 +1107,10 @@
   font-weight: 600;
 }
 
-/* The figures centred in their column (user request, 2026-10-23); the labels stay at the rule. */
+/* The figures at the right edge of their column (user request, 2026-10-23, after centring). */
 .ax-totals-table .ax-totals .ceres-subtotal-value {
   white-space: nowrap;
-  text-align: center;
+  text-align: end;
 }
 
 .ax-totals-table .ax-totals .ceres-subtotal-note,
@@ -1375,14 +1371,27 @@
   display: flex;
   flex: none;
   align-items: center;
-  height: 1lh;
+  height: max(1lh, 24px);
 }
 
-/* The address, phone and email icons at 24 px (user request, 2026-10-23), centred on the
-   first line of their text. */
+/* The address, phone and email icons at 24 px (user request, 2026-10-23). */
 .ax-contact-icon svg {
   width: 24px;
   height: 24px;
+}
+
+/* The first line of text centred on its 24 px icon. */
+.ax-contact-icon + .ax-contact-text {
+  padding-top: max(0px, calc((24px - 1lh) / 2));
+}
+
+/*
+ * Beside the payment terms card, the address row lines up with the card's title row (user
+ * request): the title row's middle is the card's 1 px border + 12 px padding + half its 24 px
+ * icon box down, the address row's middle half its 24 px icon.
+ */
+.ax-pay-card ~ .ax-contact {
+  padding-top: calc(12px + 1px); /* the card's padding and border */
 }
 
 .ax-contact-text {
@@ -1601,6 +1610,11 @@
     max-width: none;
   }
 
+  /* Under the card, on a row of its own, the strip starts at the top again. */
+  .ax-pay-card ~ .ax-contact {
+    padding-top: 0;
+  }
+
   /* Headings wrap; a summary's first column is a date, a code or a rate, and never does. */
   .ax-widget-table .ceres-table th {
     white-space: normal;
@@ -1775,7 +1789,6 @@
     border-bottom: var(--ax-column-rule-width) solid
       var(--ax-column-rule-color, var(--ax-rule));
     background: var(--ax-column-rules, none);
-    box-decoration-break: clone;
     box-decoration-break: clone;
   }
 
@@ -1961,7 +1974,6 @@
  */
 @media print {
   :is(.ax-panel, .ax-card, .ax-party, .ax-party-fields, .ax-cost-card) {
-    box-decoration-break: clone;
     box-decoration-break: clone;
   }
 

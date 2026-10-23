@@ -252,7 +252,8 @@
               <table class="ax-items{{#if view.print.compactTable}} is-print-compact{{/if}}{{#if view.table.showThumbnail}} has-thumbnails{{/if}}{{#if view.table.smallNumbers}} has-small-numbers{{/if}}{{#if view.table.manyFigures}} has-many-figures{{/if}}" data-testid="items-table" style="--ax-figures: {{view.table.figureCount}}; --ax-serial-width: {{view.table.serialWidth}}px;{{#if view.print.tableFit}} --ax-table-fit: {{view.print.tableFit}};{{/if}}">
                 <thead>
                   <tr data-testid="items-header">
-                    <th class="ax-col-serial" data-col="sr" style="width: {{view.table.serialWidth}}px">{{view.table.serialLabel}}</th>
+                    {{!-- No "Sr." text over the serial numbers (user request, 2026-10-23); kept for screen readers. --}}
+                    <th class="ax-col-serial" data-col="sr" style="width: {{view.table.serialWidth}}px" aria-label="{{view.table.serialLabel}}"></th>
                     {{#each view.table.header}}
                       <th class="{{className}}" data-col="{{col}}"{{#if width}} style="width: {{width}}px"{{/if}}>
                         {{#if isName}}<span class="ax-desc-min" aria-hidden="true" style="width: {{view.table.descriptionMin}}px"></span>{{/if}}

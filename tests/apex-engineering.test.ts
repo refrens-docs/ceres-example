@@ -250,8 +250,10 @@ describe("Apex Engineering — render", () => {
           .replace(/\s+/g, " ")
           .trim()
     );
+    // The serial heading carries no text (user request); its name is kept for screen readers.
+    expect(header).toContain('aria-label="Sr."></th>');
     expect(labels).toEqual([
-      "Sr.",
+      "",
       "Product Description",
       "Location",
       "Remote Type",
@@ -1322,7 +1324,9 @@ describe("Apex Engineering — files and CSS", () => {
 
   it("top-aligns the contact icons with their first line", () => {
     expect(source).toMatch(/\.ax-contact-row \{[^}]*align-items: flex-start;/);
-    expect(source).toMatch(/\.ax-contact-icon \{[^}]*height: 1lh;/);
+    expect(source).toMatch(
+      /\.ax-contact-icon \{[^}]*height: max\(1lh, 24px\);/
+    );
   });
 
   it("puts the UPI QR below the bank details", () => {
