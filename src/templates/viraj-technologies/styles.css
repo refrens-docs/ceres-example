@@ -1251,10 +1251,10 @@
  * dropped. Screen only: paper keeps the table as written.
  */
 
-/* Pageless PDF on Refrens' PDF service: the screen layout's height sets the page (helpers
- * fitPagelessReport), so the page frame is cut there; print shows the whole document. */
-@media screen {
-  .vt-doc.is-pageless > .vt-page-frame[style*="--vt-pageless-frame"] {
+/* Pageless PDF on Refrens' PDF service: the page frame is cut while the service measures the
+ * page (helpers fitPagelessReport), and whole again from beforeprint. */
+@media print {
+  html[style*="--vt-pageless-frame"] .vt-doc.is-pageless > .vt-page-frame {
     display: block;
     height: var(--vt-pageless-frame);
     overflow: hidden;
@@ -1765,7 +1765,7 @@
   .vt-large-image {
     width: 100%;
     height: auto;
-    max-height: min(calc(var(--vt-vh, 1vh) * 55), 600px); /* px cap: on a Pageless PDF's one tall page vh is the whole document; --vt-vh: helpers printedHeight */
+    max-height: min(calc(var(--vt-vh, 1vh) * 55), 600px); /* px cap: on a Pageless PDF's one tall page vh is the whole document; --vt-vh: helpers inPrintLayout */
     object-fit: contain;
   }
 

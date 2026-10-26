@@ -5556,17 +5556,17 @@ export const fitItemsToScreen = (root: ParentNode = document): void => {
 /* ------------------------------------------------------------------ print: Pageless PDF height */
 
 /*
- * Refrens' PDF service (isDibellaMode) sizes a Pageless PDF's one page from the template
- * root's screen height in its 800 px window, read as points rather than CSS px, so the page
- * came out a third taller than the printed content, blank below it (user report, TTTT0009:
- * root 1666 px → 1686 pt page, printed content 1175 pt). The page frame is cut so the root
- * measures the printed height in points; print keeps the whole document. The printed height
- * is the root laid out at its print width times the print size; 3% and 48 px spare cover the page margins and
- * print/screen style differences.
+ * Refrens' PDF service (isDibellaMode) sizes a Pageless PDF's one page from the document's
+ * height once it has switched to print (734 × 1064 window), but reads that CSS px number as
+ * points, so the page came out a third taller than the content, blank below it (user report;
+ * probe in the real PDF, TTTT0009: 1566 px printed → 1686 pt page, content 1175 pt). From
+ * the switch to print until the printout starts (beforeprint), the page frame is cut so the
+ * document measures its printed height in points; beforeprint gives the whole document back
+ * before a page is drawn. 2% and 24 px spare.
  */
 const PT_PER_PX = 3 / 4;
-const PAGELESS_SPARE = 1.03;
-const PAGELESS_SPARE_PX = 48;
+const PAGELESS_SPARE = 1.02;
+const PAGELESS_SPARE_PX = 24;
 
 export const pagelessReportHeight = (printHeight: number): number =>
   Math.ceil(printHeight * PAGELESS_SPARE * PT_PER_PX) + PAGELESS_SPARE_PX;
@@ -5574,6 +5574,17 @@ export const pagelessReportHeight = (printHeight: number): number =>
 const isDibellaMode = (): boolean =>
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).has("isDibellaMode");
+
+// Set from beforeprint to afterprint: the printout is under way and must be whole.
+let pagelessPrinting = false;
+
+/*
+ * The cut is set on <html>, outside the document the fits watch, so it never re-runs them;
+ * the fits lay out the whole document (run takes the cut off first).
+ */
+export const resetPagelessReport = (): void => {
+  document.documentElement.style.removeProperty("--vt-pageless-frame");
+};
 
 /*
  * The template's stylesheet comes from another origin than the renderer (GitHub Pages under
@@ -5626,28 +5637,29 @@ export const inlineTemplateStylesheet = (): Promise<void> =>
   ).then(() => undefined);
 
 /*
- * The printed height: the root laid out as print lays it out (print rules on, at its print
- * width, without the screen-only table views), times the renderer's print zoom.
+ * `measure` with the document laid out as print lays it out: print rules on (the template's
+ * own @media print, the cut among them), at its print width, without the screen-only table
+ * views, with print's vh (the printed page's). Returns the print zoom with the result.
  */
-const printedHeight = (doc: HTMLElement): number => {
+const inPrintLayout = <T>(doc: HTMLElement, measure: () => T): [T, number] => {
   const style = getComputedStyle(doc);
   const width =
     parseFloat(style.getPropertyValue("--vt-print-width")) ||
     doc.getBoundingClientRect().width;
   const zoom = parseFloat(style.getPropertyValue("--vt-page-zoom")) || 1;
-  // Print's vh is the printed page's, not this window's.
   const pageHeight = parseFloat(style.getPropertyValue("--vt-print-height"));
   const fitted = Array.from(
     doc.querySelectorAll<HTMLElement>(".vt-items:is(.is-cards, .is-grid)")
   ).map((table) => [table, table.className] as const);
   fitted.forEach(([table]) => table.classList.remove("is-cards", "is-grid"));
   const { width: docWidth, maxWidth } = doc.style;
-  const height = withPrintRules(width, () => {
+  const result = withPrintRules(width, () => {
     doc.style.width = `${width}px`;
     doc.style.maxWidth = "none";
-    if (pageHeight > 0)
+    if (pageHeight > 0) {
       doc.style.setProperty("--vt-vh", `${pageHeight / 100}px`);
-    return doc.scrollHeight;
+    }
+    return measure();
   });
   doc.style.width = docWidth;
   doc.style.maxWidth = maxWidth;
@@ -5656,30 +5668,46 @@ const printedHeight = (doc: HTMLElement): number => {
     // eslint-disable-next-line no-param-reassign
     table.className = className;
   });
-  return height * zoom;
+  return [result, zoom];
+};
+
+/*
+ * Sets the cut (on <html>) so the printed document measures `target`: an empty frame shows
+ * what the rest of the document takes, and the frame gets the remainder.
+ */
+const cutPagelessFrame = (doc: HTMLElement, zoom = 1): void => {
+  const height = doc.scrollHeight * zoom;
+  const target = pagelessReportHeight(height);
+  if (height <= target) return;
+  const html = document.documentElement.style;
+  html.setProperty("--vt-pageless-frame", "0px");
+  const rest = doc.scrollHeight * zoom;
+  html.setProperty(
+    "--vt-pageless-frame",
+    `${Math.max(0, (target - rest) / zoom)}px`
+  );
 };
 
 export const fitPagelessReport = (root: ParentNode = document): void => {
   if (!isDibellaMode()) return;
+  resetPagelessReport();
+  if (pagelessPrinting) return;
+  const doc = root.querySelector<HTMLElement>(".vt-doc.is-pageless");
+  if (!doc?.querySelector(":scope > .vt-page-frame")) return;
   const print =
     typeof window.matchMedia === "function" &&
     window.matchMedia("print").matches;
-  root.querySelectorAll<HTMLElement>(".vt-doc.is-pageless").forEach((doc) => {
-    const frame = doc.querySelector<HTMLElement>(":scope > .vt-page-frame");
-    if (!frame) return;
-    frame.style.removeProperty("--vt-pageless-frame");
-    if (print) return;
-    const target = pagelessReportHeight(printedHeight(doc));
-    // On screen the frame has no box of its own (display: contents): an empty frame shows
-    // what the rest of the document takes, and the frame gets the remainder — less than its
-    // content (cut), or more where the printout is the taller one.
-    frame.style.setProperty("--vt-pageless-frame", "0px");
-    const rest = doc.scrollHeight;
-    frame.style.setProperty(
-      "--vt-pageless-frame",
-      `${Math.max(0, target - rest)}px`
-    );
-  });
+  // The service reads the height the moment it switches to print, before any listener runs:
+  // on screen the cut is worked out from the print layout ahead of time, and print refines it.
+  if (print) cutPagelessFrame(doc);
+  else {
+    inPrintLayout(doc, () => {
+      const zoom =
+        parseFloat(getComputedStyle(doc).getPropertyValue("--vt-page-zoom")) ||
+        1;
+      cutPagelessFrame(doc, zoom);
+    });
+  }
 };
 
 /* Registers the browser-side fits: the summaries' equal columns and the print table. */
@@ -5725,6 +5753,7 @@ export const registerVirajTableFit = (): void => {
   // The table first (its columns set the totals' room), then the totals.
   run = () => {
     observer?.disconnect();
+    resetPagelessReport();
     joinTotals();
     equalizeSummaries();
     fitPrintTable();
@@ -5886,9 +5915,32 @@ export const registerVirajPrint = (): void => {
   state.vtPrintRegistered = true;
   if (new URLSearchParams(window.location.search).has("isLydiaMode")) return;
 
+  /*
+   * Pageless PDF on Refrens' PDF service: the cut follows the print layout as it settles
+   * (images, fits) until the printout starts, then the whole document prints. Registered
+   * before the fits (registerVirajTableFit), so they see the flag.
+   */
+  let pagelessTimer = 0;
+  const stopPageless = () => {
+    window.clearInterval(pagelessTimer);
+    pagelessTimer = 0;
+  };
+  window.addEventListener("beforeprint", () => {
+    pagelessPrinting = true;
+    stopPageless();
+    resetPagelessReport();
+  });
   window.matchMedia("print").addEventListener("change", (event) => {
     if (event.matches) placeFootersOnPageEdge();
     else resetFootersOnPageEdge();
+    stopPageless();
+    if (event.matches && isDibellaMode() && !pagelessPrinting) {
+      fitPagelessReport();
+      pagelessTimer = window.setInterval(() => fitPagelessReport(), 50);
+    }
   });
-  window.addEventListener("afterprint", () => resetFootersOnPageEdge());
+  window.addEventListener("afterprint", () => {
+    pagelessPrinting = false;
+    resetFootersOnPageEdge();
+  });
 };
