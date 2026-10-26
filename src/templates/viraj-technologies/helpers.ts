@@ -4080,8 +4080,6 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
     tableFixedWidth * textScale > pageWidth * (1 - MIN_DESCRIPTION_SHARE);
   return {
     textScale: compactDecimal(textScale),
-    // The renderer's zoom of the printout (none at 0.8), for the Pageless PDF height.
-    pageZoom: compactDecimal(rendererZoom),
     printWidth,
     browserPrintWidth,
     printHeight,
@@ -5556,108 +5554,23 @@ export const fitItemsToScreen = (root: ParentNode = document): void => {
 /* ------------------------------------------------------------------ print: Pageless PDF height */
 
 /*
- * Refrens' PDF service (isDibellaMode) sizes a Pageless PDF's one page from the template
- * root's screen height in its 800 px window, read as points rather than CSS px, so the page
- * came out a third taller than the printed content, blank below it (user report, TTTT0009:
- * root 1666 px → 1686 pt page, printed content 1175 pt). The page frame is cut so the root
- * measures the printed height in points; print keeps the whole document. The printed height
- * is the root laid out at its print width times the print size; 3% and 48 px spare cover the page margins and
- * print/screen style differences.
+ * Refrens' PDF service (isDibellaMode) sizes a Pageless PDF's one page from the content
+ * height the renderer reports (screen layout, CSS px) but reads that number as points, so
+ * the page came out a third taller than the content, blank below it (user report, TTTT0009:
+ * 2454 pt page, content ending at 1758 pt). Until the service converts, the screen layout —
+ * which only the service measures — is cut to the height in points; print keeps the whole
+ * document. 3% and 24 px spare cover a printed layout a little taller than the screen one.
  */
-const PT_PER_PX = 3 / 4;
+const PX_PER_PT = 4 / 3;
 const PAGELESS_SPARE = 1.03;
-const PAGELESS_SPARE_PX = 48;
+const PAGELESS_SPARE_PX = 24;
 
-export const pagelessReportHeight = (printHeight: number): number =>
-  Math.ceil(printHeight * PAGELESS_SPARE * PT_PER_PX) + PAGELESS_SPARE_PX;
+export const pagelessReportHeight = (contentHeight: number): number =>
+  Math.ceil((contentHeight * PAGELESS_SPARE) / PX_PER_PT) + PAGELESS_SPARE_PX;
 
 const isDibellaMode = (): boolean =>
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).has("isDibellaMode");
-
-/*
- * The template's stylesheet comes from another origin than the renderer (GitHub Pages under
- * lstatic.refrens.com), so its rules cannot be read and withPrintRules could not switch its
- * print rules on. Once loaded, the same CSS is fetched (both hosts allow it) and put in the
- * page as a <style> right after the link, which is then switched off: the page reads as
- * before, and its rules can be read (as Modern Manufacturing does). A readable stylesheet
- * (served from the renderer's own origin) is left alone.
- */
-const TEMPLATE_STYLESHEET =
-  /\/viraj-technologies\/[^/]+\/bundle\.css(?:[?#]|$)/;
-
-const readable = (sheet: CSSStyleSheet | null): boolean => {
-  try {
-    return Boolean(sheet && sheet.cssRules);
-  } catch {
-    return false;
-  }
-};
-
-export const inlineTemplateStylesheet = (): Promise<void> =>
-  Promise.all(
-    Array.from(
-      document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')
-    )
-      .filter(
-        (link) =>
-          TEMPLATE_STYLESHEET.test(link.href) &&
-          !link.disabled &&
-          !link.hasAttribute("data-vt-inlining") &&
-          link.sheet &&
-          !readable(link.sheet)
-      )
-      .map(async (link) => {
-        link.setAttribute("data-vt-inlining", "");
-        try {
-          const response = await fetch(link.href, { mode: "cors" });
-          if (!response.ok) throw new Error(String(response.status));
-          const style = document.createElement("style");
-          style.setAttribute("data-vt-stylesheet", link.href);
-          style.textContent = await response.text();
-          link.after(style);
-          // eslint-disable-next-line no-param-reassign
-          link.disabled = true;
-        } catch {
-          // Not fetched: the link stays in use.
-          link.removeAttribute("data-vt-inlining");
-        }
-      })
-  ).then(() => undefined);
-
-/*
- * The printed height: the root laid out as print lays it out (print rules on, at its print
- * width, without the screen-only table views), times the renderer's print zoom.
- */
-const printedHeight = (doc: HTMLElement): number => {
-  const style = getComputedStyle(doc);
-  const width =
-    parseFloat(style.getPropertyValue("--vt-print-width")) ||
-    doc.getBoundingClientRect().width;
-  const zoom = parseFloat(style.getPropertyValue("--vt-page-zoom")) || 1;
-  // Print's vh is the printed page's, not this window's.
-  const pageHeight = parseFloat(style.getPropertyValue("--vt-print-height"));
-  const fitted = Array.from(
-    doc.querySelectorAll<HTMLElement>(".vt-items:is(.is-cards, .is-grid)")
-  ).map((table) => [table, table.className] as const);
-  fitted.forEach(([table]) => table.classList.remove("is-cards", "is-grid"));
-  const { width: docWidth, maxWidth } = doc.style;
-  const height = withPrintRules(width, () => {
-    doc.style.width = `${width}px`;
-    doc.style.maxWidth = "none";
-    if (pageHeight > 0)
-      doc.style.setProperty("--vt-vh", `${pageHeight / 100}px`);
-    return doc.scrollHeight;
-  });
-  doc.style.width = docWidth;
-  doc.style.maxWidth = maxWidth;
-  doc.style.removeProperty("--vt-vh");
-  fitted.forEach(([table, className]) => {
-    // eslint-disable-next-line no-param-reassign
-    table.className = className;
-  });
-  return height * zoom;
-};
 
 export const fitPagelessReport = (root: ParentNode = document): void => {
   if (!isDibellaMode()) return;
@@ -5665,21 +5578,62 @@ export const fitPagelessReport = (root: ParentNode = document): void => {
     typeof window.matchMedia === "function" &&
     window.matchMedia("print").matches;
   root.querySelectorAll<HTMLElement>(".vt-doc.is-pageless").forEach((doc) => {
-    const frame = doc.querySelector<HTMLElement>(":scope > .vt-page-frame");
-    if (!frame) return;
-    frame.style.removeProperty("--vt-pageless-frame");
+    doc.style.removeProperty("--vt-pageless-report");
     if (print) return;
-    const target = pagelessReportHeight(printedHeight(doc));
-    // On screen the frame has no box of its own (display: contents): an empty frame shows
-    // what the rest of the document takes, and the frame gets the remainder — less than its
-    // content (cut), or more where the printout is the taller one.
-    frame.style.setProperty("--vt-pageless-frame", "0px");
-    const rest = doc.scrollHeight;
-    frame.style.setProperty(
-      "--vt-pageless-frame",
-      `${Math.max(0, target - rest)}px`
-    );
+    const height = doc.scrollHeight;
+    if (height > 0) {
+      doc.style.setProperty(
+        "--vt-pageless-report",
+        `${pagelessReportHeight(height)}px`
+      );
+    }
   });
+};
+
+// TEMPORARY probe: writes what Refrens' PDF service sees into the Pageless PDF.
+export const registerPagelessProbe = (): void => {
+  if (!isDibellaMode()) return;
+  const lines: string[] = [];
+  let last = "";
+  const take = (tag: string) => {
+    const doc = document.querySelector<HTMLElement>(".vt-doc");
+    const out = document.getElementById("documentOutput");
+    const state = `w${window.innerWidth}x${window.innerHeight} dpr${
+      window.devicePixelRatio
+    } print${window.matchMedia("print").matches ? 1 : 0} html${
+      document.documentElement.scrollHeight
+    }/${document.documentElement.offsetHeight} body${
+      document.body.scrollHeight
+    }/${document.body.offsetHeight} out${out?.scrollHeight} doc${
+      doc?.scrollHeight
+    }/${doc?.offsetHeight} pageless${
+      doc?.classList.contains("is-pageless") ? 1 : 0
+    } rep${doc?.style.getPropertyValue("--vt-pageless-report")}`;
+    if (state !== last || tag !== "t")
+      lines.push(`${tag}@${Math.round(performance.now())} ${state}`);
+    last = state;
+  };
+  const write = (tag: string) => {
+    take(tag);
+    const doc = document.querySelector<HTMLElement>(".vt-doc");
+    if (!doc) return;
+    let pre = doc.querySelector<HTMLElement>(".vt-probe");
+    if (!pre) {
+      pre = document.createElement("pre");
+      pre.className = "vt-probe";
+      pre.style.cssText =
+        "font: 9px/1.3 monospace; white-space: pre-wrap; margin: 4px 0;";
+      doc.appendChild(pre);
+    }
+    pre.textContent = lines.slice(-40).join("\n");
+  };
+  const timer = window.setInterval(() => take("t"), 150);
+  window.setTimeout(() => window.clearInterval(timer), 30000);
+  window
+    .matchMedia("print")
+    .addEventListener("change", (e) => write(e.matches ? "PRINT" : "SCREEN"));
+  window.addEventListener("beforeprint", () => write("BEFOREPRINT"));
+  window.addEventListener("resize", () => take("resize"));
 };
 
 /* Registers the browser-side fits: the summaries' equal columns and the print table. */
@@ -5742,13 +5696,6 @@ export const registerVirajTableFit = (): void => {
   window.addEventListener("resize", schedule);
   // An image or font arriving after the render changes the columns.
   document.addEventListener("load", schedule, true);
-  // The template's stylesheet made readable for print measurements, now or once it loads.
-  inlineTemplateStylesheet().then(schedule);
-  document.addEventListener(
-    "load",
-    () => inlineTemplateStylesheet().then(schedule),
-    true
-  );
   if (typeof window.matchMedia === "function") {
     window.matchMedia("print").addEventListener("change", run);
     // The fits as print runs them (run), so the page count is taken from the printed layout.
