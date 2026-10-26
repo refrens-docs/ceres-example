@@ -11,13 +11,15 @@
   Shipped To / Transport panels; E-Invoice / E-Way Bill (or below the items, irnPosition); the
   items with the totals rows under them; the Additional Info grid (titled "Terms &
   Conditions" in the design); notes ("Declaration") | bank account details and UPI; terms;
-  attachments; the summaries: tax, HSN, batch and payments; the signature; then the
-  document's contact line, last.
+  attachments; the summaries: tax, HSN, batch and payments; the signature; the document's
+  contact line; then the brands strip with the company seal. The company header (under the
+  letterhead) and the brands strip are Viraj's own images (helpers.ts VIRAJ_HEADER_IMAGE / VIRAJ_BRANDS_IMAGE), never the
+  letterhead / footer.
   data-testid / data-section / data-col are test hooks; data-ceres-* are the host's live
   update targets.
 --}}
 {{#with (vtView @root) as |view|}}
-<div class="vt-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.hideFooter}} is-footer-hidden{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--vt-text-scale: {{view.print.textScale}}; --vt-print-width: {{view.print.printWidth}}px; --vt-browser-print-width: {{view.print.browserPrintWidth}}px; --vt-print-height: {{view.print.printHeight}}px;{{#if view.theme}} --vt-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --vt-script-font: '{{view.script.font}}';{{/if}}">
+<div class="vt-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--vt-text-scale: {{view.print.textScale}}; --vt-print-width: {{view.print.printWidth}}px; --vt-browser-print-width: {{view.print.browserPrintWidth}}px; --vt-print-height: {{view.print.printHeight}}px;{{#if view.theme}} --vt-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --vt-script-font: '{{view.script.font}}';{{/if}}">
   {{!-- The Language/Script setting's font, for the glyphs Inter lacks. --}}
   {{#if view.script.fontUrl}}<link rel="stylesheet" href="{{view.script.fontUrl}}" />{{/if}}
   {{!--
@@ -59,7 +61,7 @@
         </tr>
       </thead>
     {{/if}}
-    {{#if view.footerEveryPage}}{{#unless view.hideFooter}}
+    {{#if view.footerEveryPage}}
       <tfoot class="vt-page-frame-footer">
         <tr>
           <td>
@@ -69,7 +71,7 @@
           </td>
         </tr>
       </tfoot>
-    {{/unless}}{{/if}}
+    {{/if}}
     <tbody>
       <tr>
         <td class="vt-page-frame-cell">
@@ -86,6 +88,15 @@
             {{else}}
               <img alt="Letterhead" data-ceres-height="letterhead" />
             {{/if}}
+          </div>
+
+          {{!--
+            The company header (Viraj's own artwork, ruled above and below in the image): part of
+            the template, under the title and the letterhead, on the first page only. Not tied to
+            the letterhead or footer settings.
+          --}}
+          <div class="vt-brand-header" data-testid="section" data-section="brand-header">
+            <img src="{{view.brand.header}}" alt="Viraj Technologies" width="2000" height="272" />
           </div>
 
           {{!-- The buyer's box | the document details, side by side. --}}
@@ -669,6 +680,17 @@
             </section>
           {{/if}}
 
+          {{!--
+            The brands strip with the company seal (Viraj's own artwork) closes the document, with
+            "For Viraj Technologies" over the seal and a rule under it; not the letterhead footer.
+          --}}
+          <section class="vt-brands" data-testid="section" data-section="brands">
+            <p class="vt-brands-for"><span class="vt-text">For Viraj Technologies</span></p>
+            <div class="vt-brands-art">
+              <img src="{{view.brand.brands}}" alt="Viraj Technologies: brands and company seal" width="2000" height="343" />
+            </div>
+          </section>
+
           {{> RefrensBranding @root.invoice}}
           </div>
         </td>
@@ -676,14 +698,12 @@
     </tbody>
   </table>
 
-  {{#unless view.hideFooter}}
-    <div class="{{#if view.footerEveryPage}}no-dibella {{/if}}invoice-letterhead-footer vt-letterhead-footer{{#if view.footerEveryPage}} vt-footer-fixed{{/if}}{{#unless @root.invoice.letterHeadFooter}} is-empty{{/unless}}" data-ceres-page-footer data-ceres-page-policy="{{#if view.footerEveryPage}}all{{else}}last{{/if}}">
-      {{#if @root.invoice.letterHeadFooter}}
-        <img src="{{@root.invoice.letterHeadFooter}}" alt="Letterhead footer" data-ceres-height="letterhead-footer" />
-      {{else}}
-        <img alt="Letterhead footer" data-ceres-height="letterhead-footer" />
-      {{/if}}
-    </div>
-  {{/unless}}
+  <div class="{{#if view.footerEveryPage}}no-dibella {{/if}}invoice-letterhead-footer vt-letterhead-footer{{#if view.footerEveryPage}} vt-footer-fixed{{/if}}{{#unless @root.invoice.letterHeadFooter}} is-empty{{/unless}}" data-ceres-page-footer data-ceres-page-policy="{{#if view.footerEveryPage}}all{{else}}last{{/if}}">
+    {{#if @root.invoice.letterHeadFooter}}
+      <img src="{{@root.invoice.letterHeadFooter}}" alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{else}}
+      <img alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{/if}}
+  </div>
 </div>
 {{/with}}
