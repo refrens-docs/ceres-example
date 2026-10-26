@@ -288,7 +288,7 @@ describe("Modern Manufacturing template — render", () => {
     expect(
       fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8")
     ).toMatch(
-      /\.mm-totals:not\(:has\(\.ceres-subtotal-row:not\(\.is-hidden-by-totals, \.is-hidden-by-taxes\), \.mm-words\)\) \{\s*display: none;/
+      /\.mm-totals:not\(:has\(\.ceres-subtotal-row:not\(\.is-hidden-by-totals, \.is-hidden-by-taxes\), \.mm-words:not\(\.is-hidden-by-totals, \.is-hidden-by-words-setting\)\)\) \{\s*display: none;/
     );
   });
 
@@ -621,7 +621,7 @@ describe("Modern Manufacturing template — render", () => {
       invoice.template = { languageScript: "Arabic", enableRtl: true };
     });
     expect(html).toContain(
-      '<div class="mm-doc" data-testid="invoice-root" data-mm-paper-height="1122" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-width: 714px; --mm-photo-cap: 596px; --mm-script-font: \'Noto Sans Arabic\';'
+      '<div class="mm-doc" data-testid="invoice-root" data-mm-paper-height="1122" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-width: 714px; --mm-browser-print-width: 714px; --mm-photo-cap: 596px; --mm-script-font: \'Noto Sans Arabic\';'
     );
     expect(render()).toContain(
       'data-testid="invoice-root" data-mm-paper-height="1122" dir="ltr" style='
@@ -2240,11 +2240,19 @@ describe("Modern Manufacturing template — view model", () => {
     // The document's own Batch Code column reads the allocation's batch; no Batch column then.
     const ownBatch = mapItemTable(
       state((invoice) => {
-        invoice.columns.splice(1, 0, column("batchCode"));
+        invoice.columns.splice(
+          1,
+          0,
+          column("batchCode"),
+          column("expiryDate", { dataType: "date" })
+        );
         invoice.items[0].allocations = [
           {
             batch: "64b0000000000000000000a3",
-            batchData: { batchCode: "B-0001" },
+            batchData: {
+              batchCode: "B-0001",
+              expiryDate: "2025-12-25T18:30:00.000Z",
+            },
           },
         ];
       }),
@@ -2253,6 +2261,9 @@ describe("Modern Manufacturing template — view model", () => {
     expect(ownBatch.columns.map((col) => col.key)).not.toContain("batch");
     const codeAt = ownBatch.columns.findIndex((col) => col.key === "batchCode");
     expect(JSON.stringify(ownBatch.rows[0])).toContain("B-0001");
+    // A date column prints as the document's dates do, never the raw instant.
+    expect(JSON.stringify(ownBatch.rows[0])).toContain("26-Dec-2025");
+    expect(JSON.stringify(ownBatch.rows[0])).not.toContain("T18:30");
     expect(codeAt).toBeGreaterThan(-1);
 
     const accountColumns = mapItemTable(
@@ -2750,20 +2761,40 @@ describe("Modern Manufacturing template — view model", () => {
         })
       )
     ).toBeNull();
+    // Hidden by a setting, the line stays, hidden by class, for Lydia's live toggles.
     expect(
       mapWords(
         state((invoice) => {
           invoice.hideTotalInWords = true;
         })
       )
-    ).toBeNull();
+    ).toMatchObject({ hiddenBySetting: true, hiddenByTotals: false });
     expect(
       mapWords(
         state((invoice) => {
           invoice.advanceOptions.hideTotals = true;
         })
       )
-    ).toBeNull();
+    ).toMatchObject({ hiddenBySetting: false, hiddenByTotals: true });
+    expect(mapWords(state())).toMatchObject({
+      hiddenBySetting: false,
+      hiddenByTotals: false,
+    });
+  });
+
+  it("follows Lydia's live total-in-words and hide-totals toggles", () => {
+    const html = render((invoice) => {
+      invoice.hideTotalInWords = true;
+    });
+    expect(html).toMatch(
+      /<p class="mm-words is-hidden-by-words-setting" data-ceres-total-in-words>/
+    );
+    expect(render()).toMatch(/<p class="mm-words" data-ceres-total-in-words>/);
+    expect(
+      fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8")
+    ).toMatch(
+      /\.mm-words:is\(\.is-hidden-by-totals, \.is-hidden-by-words-setting\) \{\s*display: none;/
+    );
   });
 
   it("lays terms | notes, additional info | attachments, and notes in their own row", () => {
@@ -3231,6 +3262,7 @@ describe("Modern Manufacturing template — view model", () => {
     expect(mapPrint({})).toEqual({
       textScale: "1",
       printWidth: 714,
+      browserPrintWidth: 714,
       paperHeight: 1122,
       photoCap: 596,
       stretchAllowed: false,
@@ -3290,7 +3322,7 @@ describe("Modern Manufacturing template — view model", () => {
       invoice.template = { pdfOptions: { format: "a5", textScale: 1.1 } };
     });
     expect(html).toContain(
-      'style="--mm-text-scale: 1.1; --mm-print-width: 479px; --mm-photo-cap: 415px;"'
+      'style="--mm-text-scale: 1.1; --mm-print-width: 479px; --mm-browser-print-width: 479px; --mm-photo-cap: 415px;"'
     );
     expect(html).not.toContain("--mm-print-zoom");
     expect(html).not.toContain("is-print-compact");
@@ -3652,7 +3684,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     );
   });
 
-  it("follows the repo type preset: six steps, 13 px base in print, 10 px floor", () => {
+  it("follows the repo type preset: six steps, printed 1:1 as on screen, 10 px floor", () => {
     const steps = (block: string) =>
       Object.fromEntries(
         Array.from(block.matchAll(/--mm-font-size-(\w+): (\d+)px;/g), (m) => [
@@ -3665,25 +3697,26 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     const paper = steps(print);
     // m is the banner title: 16 px on screen and paper (user request).
     expect(screen).toEqual({ xs: 10, s: 11, base: 13, m: 16, lg: 18, xl: 20 });
-    // Print compresses only the steps above base.
-    expect(paper).toEqual({ xs: 10, s: 11, base: 13, m: 16, lg: 16, xl: 18 });
+    // Print uses the screen's sizes, headings too (user, 2026-10-21: print 1:1).
+    expect(paper).toEqual({});
     // Nothing below 10 px anywhere (the parser found declarations, so this is not vacuous).
     const all = Array.from(
       source.matchAll(/(?:font-size|--mm-font-size-\w+):\s*(\d+(?:\.\d+)?)px/g),
       (m) => Number(m[1])
     );
-    expect(all.length).toBeGreaterThanOrEqual(12);
+    expect(all.length).toBeGreaterThanOrEqual(6);
     all.forEach((size) => expect(size).toBeGreaterThanOrEqual(10));
     // No page-fit zoom: print is true size; the renderer's print size does the scaling. The one
     // zoom is the last resort of a table still too wide at the 10 px floor, never cut off.
     expect(source.match(/zoom:[^;]*;/g)).toEqual([
+      "zoom: var(--mm-print-squeeze, 1);",
       "zoom: var(--mm-print-squeeze, 1);",
     ]);
   });
 
   it("prints at true size on the full printable width, fitting a wide table", () => {
     const print = source.slice(source.indexOf("@media print"));
-    expect(print).toMatch(/\.mm-doc \{[^}]*width: 100%;[^}]*margin: 0;/);
+    expect(print).toMatch(/\.mm-doc \{[^}]*width: 100%;[^}]*margin: 0 auto;/);
     // The planner's screen widths give way to the page; a table wider than it fits by shrinking.
     expect(print).toMatch(
       /\.mm-doc \.mm-items th\[style\] \{\s*width: auto !important;/
@@ -3769,7 +3802,8 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(css).toMatch(
       /\.mm-widget-table:not\(\[data-ceres-batch-summary\]\)\s*\.ceres-table:has/
     );
-    // The Payments table keeps its earlier layout (user request): content-sized, one line.
+    // The Payments table keeps its earlier layout (user request): content-sized; its words wrap
+    // only when the entries need the room (an A5 page), its figures never (td[data-mm-figure]).
     expect(rule("[data-ceres-payment-table] .ceres-table")).toMatch(
       /table-layout: auto;/
     );
@@ -3777,12 +3811,16 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       rule(
         "[data-ceres-payment-table] .ceres-table th,\n[data-ceres-payment-table] .ceres-table td"
       )
-    ).toMatch(/white-space: nowrap;/);
+    ).not.toMatch(/white-space: nowrap;/);
   });
 
   it("lines up the second field mid-box in every party box", () => {
     expect(rule(".mm-party .mm-id-grid")).toMatch(
       /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/
+    );
+    // Alone in its row (no Shipped To), the second field sits just after the first.
+    expect(rule(".mm-pair > .mm-party:only-child .mm-id-grid")).toMatch(
+      /grid-template-columns: repeat\(2, auto\);/
     );
   });
 
@@ -3922,9 +3960,6 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     );
     expect(rule(".mm-widget-table .ceres-table td[data-mm-figure]")).toMatch(
       /white-space: nowrap;/
-    );
-    expect(rule("[data-ceres-payment-table] .ceres-table th")).toMatch(
-      /white-space: normal;/
     );
     // On a phone the summary tables read as cards, like the HSN summary.
     expect(css).toMatch(

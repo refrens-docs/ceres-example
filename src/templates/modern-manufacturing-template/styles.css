@@ -259,6 +259,18 @@
   object-fit: contain;
 }
 
+/* A logo that failed to load (helpers.ts marks it) gives up its box: the seller block moves up
+   to the edge, as with no logo. */
+.mm-logo:has(.is-broken) {
+  display: none;
+}
+
+/* Any other image that failed to load keeps its box, so nothing moves, but shows no
+   broken-image mark or alt text. */
+.mm-doc img.is-broken {
+  visibility: hidden;
+}
+
 /* The company name, first in the seller block. */
 .mm-brand-name {
   max-width: 100%;
@@ -570,6 +582,12 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* A party box alone in its row (Billed To, no Shipped To) spans the page: its second field sits
+   12 px after the first, as in the header, not mid-page (user, 2026-10-26). */
+.mm-pair > .mm-party:only-child .mm-id-grid {
+  grid-template-columns: repeat(2, auto);
+}
+
 /* A line whose field does not fit its half on one line (a long email, "GSTIN:" over its number)
    gives each field a row of its own (stackCrampedFields; user, 2026-10-20). */
 .mm-id-grid > .mm-id-line.is-stacked > .mm-id {
@@ -590,6 +608,26 @@
   display: grid;
   grid-template-columns: 100px minmax(0, 1fr);
   column-gap: 24px;
+}
+
+/*
+ * Two boxes too wide together for the page (an A5 page: the bank's account number and the
+ * totals' figures, each kept on one line) stack, each the full width, rather than push the
+ * totals off the page (stackCrampedPairs; user rule, 2026-10-20: no room left, move below).
+ */
+.mm-summary-row.is-stacked,
+.mm-dispatch.is-stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mm-summary-row.is-stacked > .mm-bank {
+  border-inline-end: 0;
+  border-bottom: 1px solid var(--mm-line);
+}
+
+.mm-dispatch.is-stacked > .mm-pair-box + .mm-pair-box {
+  border-top: 1px solid var(--mm-line);
+  border-inline-start: 0;
 }
 
 /* Shipped From | Transport: a transport number (vehicle, LR, e-way bill) stays on one line, its
@@ -1488,14 +1526,13 @@
 [data-ceres-payment-table] .ceres-table th,
 [data-ceres-payment-table] .ceres-table td {
   overflow-wrap: normal;
-  white-space: nowrap;
 }
 
-/* Its headings are words: they wrap between them when the entries need the room (a tablet,
-   "Transaction Charge"), so the table never runs out of its box. */
-[data-ceres-payment-table] .ceres-table th {
-  white-space: normal;
-}
+/*
+ * Its words (headings, the mode, the account) wrap between them only when the entries need
+ * the room (a tablet, an A5 page: "Transaction Charge" was cut at the page edge), so the table
+ * never runs out of its box; its dates and amounts never wrap (td[data-mm-figure]).
+ */
 
 [data-ceres-tax-summary] .ceres-table thead tr:first-child > :last-child,
 [data-ceres-tax-summary] .ceres-table :is(tbody, tfoot) tr > :last-child:not([colspan]) {
@@ -1749,8 +1786,13 @@
   text-align: start;
 }
 
+/* Hide totals / hide total in words, at render or live from Lydia (data-ceres-total-in-words). */
+.mm-words:is(.is-hidden-by-totals, .is-hidden-by-words-setting) {
+  display: none;
+}
+
 /* Every row hidden (hide totals): no empty totals box either. */
-.mm-totals:not(:has(.ceres-subtotal-row:not(.is-hidden-by-totals, .is-hidden-by-taxes), .mm-words)) {
+.mm-totals:not(:has(.ceres-subtotal-row:not(.is-hidden-by-totals, .is-hidden-by-taxes), .mm-words:not(.is-hidden-by-totals, .is-hidden-by-words-setting))) {
   display: none;
 }
 
@@ -2060,13 +2102,7 @@
  */
 @media print {
   .mm-doc {
-    /* Density comes from the steps above base only; base and the small steps stay. */
-    --mm-font-size-xs: 10px;
-    --mm-font-size-s: 11px;
-    --mm-font-size-base: 13px;
-    --mm-font-size-m: 16px;
-    --mm-font-size-lg: 16px;
-    --mm-font-size-xl: 18px;
+    /* Every text size prints as on screen, headings too (user, 2026-10-21: print 1:1). */
 
     /* The paper's margins give the space on paper: no gutter of the page's own. */
     --mm-gutter: 0px;
@@ -2077,7 +2113,10 @@
        service lays the page out in a window wider than the paper before it prints, and the
        table fitted there was clipped on the page (user report). */
     max-width: var(--mm-print-width, none);
-    margin: 0;
+
+    /* Centred: a browser's own print keeps 1 cm margins, so a document set to wider ones
+       (xMargins 2) sits in the middle of the page rather than against its left edge. */
+    margin: 0 auto;
   }
 
   /*
@@ -2115,6 +2154,17 @@
      scales down just enough rather than lose its edge (user rule, 2026-10-20: nothing cut off
      or overlapping). Its split-off Total table carries the same style. */
   .mm-items.is-print-fit {
+    zoom: var(--mm-print-squeeze, 1);
+  }
+
+  /* The summary tables (HSN, Tax, Batch, Payments) take the page's width, not their 560 px
+     screen minimum, and one still wider than the page (an A5 page) scales down just enough
+     (fitSummaryTables) rather than lose its last column at the page edge. */
+  .mm-widget-table .ceres-table {
+    min-width: 0;
+  }
+
+  :is(.mm-widget-table .ceres-table, .mm-hsn-table).is-print-fit {
     zoom: var(--mm-print-squeeze, 1);
   }
 
@@ -2193,6 +2243,22 @@
 
   .mm-items > :last-child > tr:last-child > td {
     border-bottom-color: var(--mm-table-outline);
+  }
+
+  /* A row cut by a page break (an item taller than what is left of the page) closes with a
+     rule at the page's foot, and every page's piece of the table with it (user rule,
+     2026-10-20): the cells' own borders end open there. The items wrapper draws that rule on
+     each page's piece (box-decoration-break: clone); on the last piece the table's own
+     bottom rule lies over it. */
+  .mm-items-scroll {
+    border-bottom: 1px solid var(--mm-table-outline);
+    /* stylelint-disable-next-line property-no-vendor-prefix -- Chrome before 130 needs it */
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .mm-items-scroll > :last-child {
+    margin-bottom: calc(-1 * 1px);
   }
 
   /* Boxes and short sections never split across pages; a heading stays with its content. */

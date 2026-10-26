@@ -13,7 +13,7 @@
   data-role / data-col are the spec's test hooks (section 11).
 --}}
 {{#with (mmView @root) as |view|}}
-<div class="mm-doc" data-testid="invoice-root"{{#if view.foreignCurrency}} data-mm-currency="{{view.foreignCurrency}}"{{/if}}{{#if view.print.stretchAllowed}} data-mm-stretch-allowed{{/if}}{{#if view.print.stretchTable}} data-mm-stretch-table{{/if}} data-mm-paper-height="{{view.print.paperHeight}}" dir="{{view.script.direction}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}} style="--mm-text-scale: {{view.print.textScale}}; --mm-print-width: {{view.print.printWidth}}px; --mm-photo-cap: {{view.print.photoCap}}px;{{#if view.script.font}} --mm-script-font: '{{view.script.font}}';{{/if}}{{#if view.theme}} --mm-theme: {{view.theme.accent}}; --mm-theme-tint: {{view.theme.tint}};{{/if}}">
+<div class="mm-doc" data-testid="invoice-root"{{#if view.foreignCurrency}} data-mm-currency="{{view.foreignCurrency}}"{{/if}}{{#if view.print.stretchAllowed}} data-mm-stretch-allowed{{/if}}{{#if view.print.stretchTable}} data-mm-stretch-table{{/if}} data-mm-paper-height="{{view.print.paperHeight}}" dir="{{view.script.direction}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}} style="--mm-text-scale: {{view.print.textScale}}; --mm-print-width: {{view.print.printWidth}}px; --mm-browser-print-width: {{view.print.browserPrintWidth}}px; --mm-photo-cap: {{view.print.photoCap}}px;{{#if view.script.font}} --mm-script-font: '{{view.script.font}}';{{/if}}{{#if view.theme}} --mm-theme: {{view.theme.accent}}; --mm-theme-tint: {{view.theme.tint}};{{/if}}">
   {{#unless view.letterheadEveryPage}}
     <div class="no-dibella invoice-letterhead mm-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}">
       {{#if @root.invoice.letterHead}}
@@ -393,7 +393,7 @@
                 {{/if}}
               </div>
               {{#if view.words}}
-                <p class="mm-words"><span class="mm-words-label">{{view.words.label}}:</span> {{view.words.value}}</p>
+                <p class="mm-words{{#if view.words.hiddenByTotals}} is-hidden-by-totals{{/if}}{{#if view.words.hiddenBySetting}} is-hidden-by-words-setting{{/if}}" data-ceres-total-in-words><span class="mm-words-label">{{view.words.label}}:</span> {{view.words.value}}</p>
               {{/if}}
             </section>
           </section>

@@ -68,6 +68,8 @@ export interface ItemColumn {
   kind: ColumnKind;
   className: string;
   summable: boolean;
+  /* A date column (Expiry Date, a custom date field): printed as the document's dates are. */
+  isDate?: boolean;
 }
 
 const NUMERIC_KINDS: ColumnKind[] = [
@@ -1941,6 +1943,7 @@ const makeColumn = (column: UnknownRecord): ItemColumn => {
       NUMERIC_KINDS.includes(kind) || kind === "code" ? "is-fixed" : "is-text"
     }${NUMERIC_KINDS.includes(kind) ? " is-num" : ""}`,
     summable,
+    isDate: text(column.dataType).toLowerCase() === "date",
   };
 };
 
@@ -2012,6 +2015,11 @@ const cellValue = (
     case "number":
       return formatQuantity(value, ctx);
     default:
+      // "26-Dec-2025", as the Batch Summary prints the same expiry (an ISO instant printed
+      // as it came, "2025-12-25T18:30:00.000Z", ran over the next column).
+      if (column.isDate && !Array.isArray(value)) {
+        return formatDocumentDate(value, invoice.ownerOffset);
+      }
       return Array.isArray(value) ? value.map(text).join(", ") : text(value);
   }
 };
@@ -2938,7 +2946,12 @@ export const mapWords = (state: UnknownRecord) => {
   const invoice = asRecord(state.invoice);
   const labels = asRecord(invoice.customLabels);
   const visibility = asRecord(asRecord(state.mapped).visibility);
-  if (!visibility.showTotals || invoice.hideTotalInWords === true) return null;
+  // Hidden by a setting, the line is still printed, hidden by class: Lydia's live toggles
+  // (hide totals, hide total in words) show it again without a re-render (2026-10-24).
+  const hidden = {
+    hiddenByTotals: !visibility.showTotals,
+    hiddenBySetting: invoice.hideTotalInWords === true,
+  };
 
   // The words the document stores (as refrens.com prints them); nothing stored, the total
   // spelled in the document's currency, or none for a currency without known words.
@@ -2952,7 +2965,11 @@ export const mapWords = (state: UnknownRecord) => {
   // is editable and keeps its own case.
   const value = (stored || computed).toUpperCase();
   return value
-    ? { label: labelOr(labels, "totalInWords", "Total (in words)"), value }
+    ? {
+        label: labelOr(labels, "totalInWords", "Total (in words)"),
+        value,
+        ...hidden,
+      }
     : null;
 };
 
@@ -3284,6 +3301,9 @@ export const mapPrint = (state: UnknownRecord) => {
   return {
     textScale: compactDecimal(textScale),
     printWidth: printWidth(pdfOptions),
+    // A browser's own print (Lydia's print button, Ctrl+P) keeps its own 1 cm margins,
+    // whatever xMargins says: the page is fitted for the narrower of the two.
+    browserPrintWidth: printWidth({ ...pdfOptions, xMargins: 1 }),
     paperHeight: paperHeight(pdfOptions),
     photoCap: photoCap(pdfOptions),
     stretchAllowed,
@@ -3597,6 +3617,34 @@ export const placeFootersOnPageEdge = (root: ParentNode = document): void => {
 const MIN_PRINT_FIT = 0.6;
 // Sub-pixel rounding is not an overflow.
 const PRINT_SLACK = 0.5;
+// The share of the page's width a fitted table may take (see fitPrintTable).
+const PRINT_ROOM = 0.99;
+
+/*
+ * Chrome before 128 (Refrens' PDF service runs 122) reports the size of anything inside a
+ * CSS-zoomed element divided by that zoom; later Chrome reports what is drawn. The print fit
+ * zooms the table it measures, so it measures through this: read as Chrome 122 gives it, the
+ * squeeze never seemed to take and an A5 table was zoomed to 0.01 (2026-10-24, as Apex
+ * 2026-10-23). Elsewhere it returns the rect unchanged.
+ */
+const legacyZoom = (): boolean =>
+  typeof Element !== "undefined" && !("currentCSSZoom" in Element.prototype);
+
+const zoomWithin = (element: Element): number => {
+  let zoom = 1;
+  for (
+    let node: Element | null = element;
+    node && node !== document.documentElement;
+    node = node.parentElement
+  ) {
+    zoom *= parseFloat(getComputedStyle(node).zoom) || 1;
+  }
+  return zoom;
+};
+
+export const drawnWidth = (element: Element): number =>
+  element.getBoundingClientRect().width *
+  (legacyZoom() ? zoomWithin(element) : 1);
 
 /*
  * The totals carry on without the item headings (user, 2026-10-19): in print, the rows after
@@ -3695,26 +3743,41 @@ export const splitTotals = (root: ParentNode = document): void => {
   });
 };
 
-export const fitPrintTable = (root: ParentNode = document): void => {
+export const fitPrintTable = (
+  root: ParentNode = document,
+  force = false
+): void => {
   const printing =
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("print").matches;
+    force ||
+    (typeof window.matchMedia === "function" &&
+      window.matchMedia("print").matches);
   root.querySelectorAll<HTMLElement>(".mm-items").forEach((table) => {
     table.classList.remove("is-print-fit");
     table.style.removeProperty("--mm-print-fit");
     table.style.removeProperty("--mm-print-squeeze");
     const box = table.parentElement;
     if (!printing || !box) return;
-    const overflow = () =>
-      table.getBoundingClientRect().width - box.getBoundingClientRect().width;
+    // 1 % kept back: Chrome sets the PDF's text a little wider than the layout measured it, and a
+    // word on the table's edge ("Amount", "Expiry") was cut there.
+    const room = () => box.getBoundingClientRect().width * PRINT_ROOM;
+    // The table fills its box (width 100 %), so its own width always exceeds 99 % of it: what
+    // counts is how narrow its columns can go, measured at width 0 (a table is never narrower
+    // than its content). Read as it stood, a table that fit was shrunk to the 10 px floor.
+    const need = () => {
+      const { width } = table.style;
+      table.style.width = "0px";
+      const narrowest = drawnWidth(table);
+      table.style.width = width;
+      return narrowest;
+    };
+    const overflow = () => need() - room();
     if (overflow() <= PRINT_SLACK) return;
     table.classList.add("is-print-fit");
     let fit = 1;
     // By the measured ratio, and at least a step each time, so the last pixel or two of
     // overflow (floors, padding and rules do not scale exactly) still goes.
     for (let step = 0; step < 20 && overflow() > PRINT_SLACK; step += 1) {
-      const ratio =
-        box.getBoundingClientRect().width / table.getBoundingClientRect().width;
+      const ratio = room() / need();
       fit = Math.max(
         MIN_PRINT_FIT,
         Math.min(fit - 0.01, Math.floor(fit * ratio * 100) / 100)
@@ -3725,14 +3788,251 @@ export const fitPrintTable = (root: ParentNode = document): void => {
     // The text at its floor and still too wide: the whole table scales, never cut off.
     let squeeze = 1;
     for (let step = 0; step < 10 && overflow() > PRINT_SLACK; step += 1) {
-      const ratio =
-        box.getBoundingClientRect().width / table.getBoundingClientRect().width;
+      const ratio = room() / need();
       squeeze = Math.min(
         squeeze - 0.01,
         Math.floor(squeeze * ratio * 100) / 100
       );
       table.style.setProperty("--mm-print-squeeze", String(squeeze));
     }
+  });
+};
+
+/*
+ * The summary tables (HSN, Tax, Batch, Payments) in print: one wider than its box (an A5 page:
+ * the tax summary's Total, the batch summary's Expiry Date, the payments' last column were cut)
+ * scales down as a whole, just enough, to the same 99 % of the box as the items table.
+ */
+export const fitSummaryTables = (
+  root: ParentNode = document,
+  force = false
+): void => {
+  const printing =
+    force ||
+    (typeof window.matchMedia === "function" &&
+      window.matchMedia("print").matches);
+  root
+    .querySelectorAll<HTMLElement>(
+      ".mm-widget-table .ceres-table, .mm-hsn-table"
+    )
+    .forEach((table) => {
+      table.classList.remove("is-print-fit");
+      table.style.removeProperty("--mm-print-squeeze");
+      const box = table.parentElement;
+      if (!printing || !box) return;
+      const room = () => box.getBoundingClientRect().width * PRINT_ROOM;
+      // As the items table: each fills its box, so what counts is its narrowest width, at
+      // width 0. Their columns are fixed shares, which at width 0 would read as no width at
+      // all, so the measure sizes them by their content (auto layout) for that moment.
+      const need = () => {
+        const { width, tableLayout } = table.style;
+        table.style.width = "0px";
+        table.style.tableLayout = "auto";
+        const narrowest = drawnWidth(table);
+        table.style.width = width;
+        table.style.tableLayout = tableLayout;
+        return narrowest;
+      };
+      const overflow = () => need() - room();
+      if (overflow() <= PRINT_SLACK) return;
+      table.classList.add("is-print-fit");
+      let squeeze = 1;
+      for (let step = 0; step < 10 && overflow() > PRINT_SLACK; step += 1) {
+        const ratio = room() / need();
+        squeeze = Math.min(
+          squeeze - 0.01,
+          Math.floor(squeeze * ratio * 100) / 100
+        );
+        table.style.setProperty("--mm-print-squeeze", String(squeeze));
+      }
+    });
+};
+
+/* ------------------------------------------------------------------ print: a browser's own print */
+
+/*
+ * A browser's own print (Lydia's print button, Ctrl+P) counts the pages from the print layout
+ * as it stands when printing starts; the print media listener runs after that, so a table it
+ * fitted left blank pages at the end (two on A4, four on A5, user report 2026-10-20). Just
+ * before printing (beforeprint), the stylesheets' print rules are switched on for one
+ * synchronous measurement, the table is fitted as print lays it out, and the rules go back:
+ * the fit styles print only, so the screen never changes, and the page count is right.
+ * Refrens' PDF service switches to print media before it prints, where the listener does it.
+ */
+const MEDIA_WIDTH =
+  /\(\s*(min-width|max-width|width)\s*(:|<=|>=|<|>)\s*(\d+(?:\.\d+)?)px\s*\)/g;
+
+/* What a media query says in print, on a page `width` px wide; undefined leaves it alone. */
+export const printMediaText = (
+  query: string,
+  width: number
+): string | undefined => {
+  if (/\bprint\b/.test(query)) {
+    return /\bnot\s+print\b/.test(query)
+      ? "not all"
+      : query.replace(/\bprint\b/g, "all");
+  }
+  if (/\bscreen\b/.test(query)) return "not all";
+  const conditions = [...query.matchAll(MEDIA_WIDTH)];
+  if (!conditions.length || /,|\bor\b|\bnot\b/.test(query)) return undefined;
+  const holds = conditions.every(([, feature, op, value]) => {
+    const px = Number(value);
+    if (feature === "min-width" || op === ">=") return width >= px;
+    if (feature === "max-width" || op === "<=") return width <= px;
+    if (op === "<") return width < px;
+    return width > px;
+  });
+  return holds ? "all" : "not all";
+};
+
+export const withPrintRules = <T>(width: number, measure: () => T): T => {
+  const changed: Array<[MediaList, string]> = [];
+  const flip = (media: MediaList) => {
+    const before = media.mediaText;
+    const next = printMediaText(before, width);
+    if (next === undefined || next === before) return;
+    changed.push([media, before]);
+    // eslint-disable-next-line no-param-reassign
+    media.mediaText = next;
+  };
+  const visit = (rules: CSSRuleList) =>
+    Array.from(rules).forEach((rule) => {
+      // A media rule (or an @import with media): by its media list, which jsdom's rules carry
+      // without being CSSMediaRule instances.
+      const { media } = rule as CSSMediaRule;
+      if (media && typeof media.mediaText === "string") flip(media);
+      if ("cssRules" in rule) visit((rule as CSSGroupingRule).cssRules);
+    });
+  Array.from(document.styleSheets).forEach((sheet) => {
+    try {
+      if (sheet.media?.mediaText) flip(sheet.media);
+      visit(sheet.cssRules);
+    } catch {
+      // Another origin's stylesheet (a font): it holds no print rules of ours.
+    }
+  });
+  try {
+    return measure();
+  } finally {
+    changed.reverse().forEach(([media, before]) => {
+      // eslint-disable-next-line no-param-reassign
+      media.mediaText = before;
+    });
+  }
+};
+
+/*
+ * The template's stylesheet comes from another origin than the renderer (GitHub Pages under
+ * lstatic.refrens.com), so its rules cannot be read and withPrintRules could not switch its
+ * print rules on: a browser's own print counted the pages of an unfitted table and left blank
+ * pages at the end (2026-10-24). Once loaded, the same CSS is fetched (both hosts allow it) and
+ * put in the page as a <style> right after the link, which is then switched off: the page reads
+ * as before, and its rules can be read. A readable stylesheet (served from the renderer's own
+ * origin) is left alone.
+ */
+const TEMPLATE_STYLESHEET =
+  /\/modern-manufacturing-template\/[^/]+\/bundle\.css(?:[?#]|$)/;
+
+const readable = (sheet: CSSStyleSheet | null): boolean => {
+  try {
+    return Boolean(sheet && sheet.cssRules);
+  } catch {
+    return false;
+  }
+};
+
+export const inlineTemplateStylesheet = (): Promise<void> =>
+  Promise.all(
+    Array.from(
+      document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')
+    )
+      .filter(
+        (link) =>
+          TEMPLATE_STYLESHEET.test(link.href) &&
+          !link.disabled &&
+          !link.hasAttribute("data-mm-inlining") &&
+          link.sheet &&
+          !readable(link.sheet)
+      )
+      .map(async (link) => {
+        link.setAttribute("data-mm-inlining", "");
+        try {
+          const response = await fetch(link.href, { mode: "cors" });
+          if (!response.ok) throw new Error(String(response.status));
+          const style = document.createElement("style");
+          style.setAttribute("data-mm-stylesheet", link.href);
+          style.textContent = await response.text();
+          link.after(style);
+          // eslint-disable-next-line no-param-reassign
+          link.disabled = true;
+        } catch {
+          // Not fetched: the link stays in use; the print media listener still fits the table.
+          link.removeAttribute("data-mm-inlining");
+        }
+      })
+  ).then(() => undefined);
+
+/*
+ * For the same measurement, the template's own checks of `matchMedia("print")` answer yes, so
+ * the print steps that need no pages (the table fit, the totals split) run as print runs them.
+ */
+export const withPrintMedia = <T>(measure: () => T): T => {
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) =>
+    /\bprint\b/.test(query) && !/\bnot\b/.test(query)
+      ? ({
+          matches: true,
+          media: query,
+          onchange: null,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          addListener: () => undefined,
+          removeListener: () => undefined,
+          dispatchEvent: () => false,
+        } as MediaQueryList)
+      : original.call(window, query)) as typeof window.matchMedia;
+  try {
+    return measure();
+  } finally {
+    window.matchMedia = original;
+  }
+};
+
+/*
+ * `layout` is the print media listener's own work (the totals split and all), so the page
+ * count is taken from the layout that prints: splitting the totals off after the count left a
+ * blank page at the end of an A5 printout. Only the steps that need the pages themselves (the
+ * footer on the last page's edge) wait for the listener.
+ */
+export const prepareBrowserPrint = (
+  layout?: () => void,
+  root: ParentNode = document
+): void => {
+  const doc = root.querySelector<HTMLElement>(".mm-doc");
+  if (!doc) return;
+  const style = getComputedStyle(doc);
+  // The document's printable width, or the browser's own (1 cm margins) where narrower.
+  const width = Math.min(
+    parseFloat(style.getPropertyValue("--mm-print-width")) ||
+      doc.getBoundingClientRect().width,
+    parseFloat(style.getPropertyValue("--mm-browser-print-width")) || Infinity
+  );
+  // The phone and tablet layouts are screen only.
+  const fitted = Array.from(
+    root.querySelectorAll<HTMLElement>(".mm-items:is(.is-cards, .is-grid)")
+  ).map((table) => [table, table.className] as const);
+  fitted.forEach(([table]) => table.classList.remove("is-cards", "is-grid"));
+  const docWidth = doc.style.width;
+  withPrintRules(width, () => {
+    doc.style.width = `${width}px`;
+    withPrintMedia(() => (layout ? layout() : fitPrintTable(root, true)));
+  });
+  doc.style.width = docWidth;
+  fitted.forEach(([table, className]) => {
+    // eslint-disable-next-line no-param-reassign
+    table.className = `${className}${
+      table.classList.contains("is-print-fit") ? " is-print-fit" : ""
+    }`;
   });
 };
 
@@ -3865,6 +4165,25 @@ export const applyTemplateUpdate = (data: unknown): void => {
       )
     );
   }
+};
+
+/*
+ * Lydia's live "hide totals" ("lydia:invoice-update", top level or in advanceOptions): the
+ * renderer hides the totals rows, and a words line only inside the subtotal block; this
+ * template prints its words line under the block, so it follows here.
+ */
+export const applyInvoiceUpdate = (data: unknown): void => {
+  const message = asRecord(data);
+  if (message.type !== "lydia:invoice-update") return;
+  const fields = asRecord(message.fields);
+  const hide = [
+    fields.hideTotals,
+    asRecord(fields.advanceOptions).hideTotals,
+  ].find((value) => typeof value === "boolean");
+  if (typeof hide !== "boolean") return;
+  document
+    .querySelectorAll(".mm-doc .mm-words")
+    .forEach((line) => line.classList.toggle("is-hidden-by-totals", hide));
 };
 
 /*
@@ -4056,6 +4375,24 @@ export const stackCrampedFields = (root: ParentNode = document): void => {
     grid.classList.remove("is-measuring");
     cramped.forEach((line) => line.classList.add("is-stacked"));
   });
+  // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  stackCrampedPairs(root);
+};
+
+/*
+ * Bank | Totals and Shipped From | Transport: each half widens for its numbers, which never
+ * wrap; when the two together are wider than the page (an A5 page), they stack, each the full
+ * width, rather than push the totals' figures off the page (user rule, 2026-10-20).
+ */
+export const stackCrampedPairs = (root: ParentNode = document): void => {
+  root
+    .querySelectorAll<HTMLElement>(".mm-summary-row, .mm-dispatch")
+    .forEach((row) => {
+      row.classList.remove("is-stacked");
+      if (row.scrollWidth > row.clientWidth + 1) {
+        row.classList.add("is-stacked");
+      }
+    });
 };
 
 export const fitItemsToScreen = (root: ParentNode = document): void => {
@@ -4094,27 +4431,36 @@ export const registerModernManufacturingPrint = (): void => {
     resetItemsTableStretch();
     resetFootersOnPageEdge();
     fitPrintTable();
+    fitSummaryTables();
     fitItemsToScreen();
     stackCrampedFields();
   };
   // The table first (its width sets its height), then the stretch, then the footer.
+  const printLayout = () => {
+    fitItemsToScreen();
+    stackCrampedFields();
+    joinTotals();
+    fitPrintTable();
+    fitSummaryTables();
+    splitTotals();
+    stretchItemsTable();
+  };
   window.matchMedia("print").addEventListener("change", (event) => {
     if (!event.matches) {
       reset();
       return;
     }
-    fitItemsToScreen();
-    stackCrampedFields();
-    joinTotals();
-    fitPrintTable();
-    splitTotals();
-    stretchItemsTable();
+    printLayout();
     placeFootersOnPageEdge();
   });
-  window.addEventListener("afterprint", reset);
-  window.addEventListener("message", (event) =>
-    applyTemplateUpdate(event.data)
+  window.addEventListener("beforeprint", () =>
+    prepareBrowserPrint(printLayout)
   );
+  window.addEventListener("afterprint", reset);
+  window.addEventListener("message", (event) => {
+    applyTemplateUpdate(event.data);
+    applyInvoiceUpdate(event.data);
+  });
   // Each render into the page: the tax summary's words in the document's currency, the
   // riyal sign drawn, the item table fitted to a phone or tablet screen, the summary tables'
   // cells labelled for their phone cards, and a party line too tight for its fields stacked.
@@ -4138,6 +4484,21 @@ export const registerModernManufacturingPrint = (): void => {
   // watch sees, so a fit never sets off another.
   window.addEventListener("resize", refitSoon);
   document.addEventListener("load", refitSoon, true);
+  // An image that fails to load (an expired or private link) prints nothing: no broken-image
+  // mark and no alt text (the seller's name beside the logo a second time). As Ecommerce.
+  document.addEventListener(
+    "error",
+    (event) => {
+      const { target } = event;
+      if (target instanceof HTMLImageElement && target.closest(".mm-doc")) {
+        target.classList.add("is-broken");
+      }
+    },
+    true
+  );
+  // The template's stylesheet made readable for a browser's own print, now or once it loads.
+  inlineTemplateStylesheet();
+  document.addEventListener("load", () => inlineTemplateStylesheet(), true);
   document.fonts?.ready.then(refitSoon);
   if (typeof MutationObserver === "function") {
     new MutationObserver(refitSoon).observe(document.documentElement, {

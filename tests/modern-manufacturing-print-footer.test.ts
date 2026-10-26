@@ -2,6 +2,7 @@
  * @jest-environment jsdom
  */
 import {
+  applyInvoiceUpdate,
   applyTemplateUpdate,
   fitPrintTable,
   loadScriptFont,
@@ -15,6 +16,9 @@ import {
   drawRiyalSigns,
   stackCrampedFields,
   labelSummaryCells,
+  printMediaText,
+  withPrintRules,
+  prepareBrowserPrint,
 } from "../src/templates/modern-manufacturing-template/helpers";
 
 /*
@@ -568,7 +572,8 @@ describe("Modern Manufacturing — a wide table fitted to the printed page", () 
     mockWidths(1000, 900);
     fitPrintTable();
     expect(table().classList.contains("is-print-fit")).toBe(true);
-    expect(table().style.getPropertyValue("--mm-print-fit")).toBe("0.9");
+    // To 99 % of the box: 1 % is kept back for the PDF's slightly wider text.
+    expect(table().style.getPropertyValue("--mm-print-fit")).toBe("0.89");
   });
 
   it("never shrinks below 60 %", () => {
@@ -580,7 +585,7 @@ describe("Modern Manufacturing — a wide table fitted to the printed page", () 
 
   it("leaves a table that fits, the screen, and a detached table as they are", () => {
     printing(true);
-    mockWidths(900, 900.4);
+    mockWidths(891, 900.4);
     fitPrintTable();
     expect(table().classList.contains("is-print-fit")).toBe(false);
 
@@ -765,5 +770,88 @@ describe("Modern Manufacturing — summary tables as phone cards", () => {
         cell.hasAttribute("data-mm-figure")
       )
     ).toEqual([true, true, true, false, false]);
+  });
+});
+
+describe("Modern Manufacturing — a browser's own print", () => {
+  it("reads each media query as print would on the page", () => {
+    expect(printMediaText("print", 718)).toBe("all");
+    expect(printMediaText("print and (orientation: landscape)", 718)).toBe(
+      "all and (orientation: landscape)"
+    );
+    expect(printMediaText("screen", 718)).toBe("not all");
+    expect(printMediaText("screen and (width <= 640px)", 718)).toBe("not all");
+    expect(printMediaText("(width <= 640px)", 718)).toBe("not all");
+    expect(printMediaText("(width <= 640px)", 479)).toBe("all");
+    expect(printMediaText("(max-width: 720px)", 718)).toBe("all");
+    expect(printMediaText("(prefers-color-scheme: dark)", 718)).toBeUndefined();
+  });
+
+  it("switches the print rules on for one measurement and back", () => {
+    document.head.innerHTML =
+      "<style>@media print { .probe { color: red; } } @media screen { .probe { color: blue; } }</style>";
+    const sheet = document.styleSheets[0];
+    const media = () =>
+      Array.from(sheet.cssRules).map(
+        (rule) => (rule as CSSMediaRule).media.mediaText
+      );
+    const seen = withPrintRules(718, media);
+    expect(seen).toEqual(["all", "not all"]);
+    expect(media()).toEqual(["print", "screen"]);
+    expect(() =>
+      withPrintRules(718, () => {
+        throw new Error("measure failed");
+      })
+    ).toThrow("measure failed");
+    expect(media()).toEqual(["print", "screen"]);
+  });
+
+  it("prepares before printing, leaving the screen layout and its classes as they were", () => {
+    document.head.innerHTML = "";
+    document.body.innerHTML = `<div class="mm-doc" style="--mm-print-width: 714px;"><div class="mm-items-scroll"><table class="mm-items has-thumbnails is-cards"></table></div></div>`;
+    prepareBrowserPrint();
+    const doc = document.querySelector<HTMLElement>(".mm-doc");
+    expect(doc?.style.width).toBe("");
+    expect(document.querySelector(".mm-items")?.className).toBe(
+      "mm-items has-thumbnails is-cards"
+    );
+  });
+});
+
+describe("Modern Manufacturing — Lydia's live hide totals", () => {
+  it("hides and shows the words line under the totals with the totals", () => {
+    document.body.innerHTML = `<div class="mm-doc"><div data-ceres-subtotal></div>
+      <p class="mm-words" data-ceres-total-in-words>Total (in words): TEN RUPEES ONLY</p></div>`;
+    const line = () => document.querySelector(".mm-words") as HTMLElement;
+    applyInvoiceUpdate({
+      type: "lydia:invoice-update",
+      fields: { hideTotals: true },
+    });
+    expect(line().classList.contains("is-hidden-by-totals")).toBe(true);
+    applyInvoiceUpdate({
+      type: "lydia:invoice-update",
+      fields: { advanceOptions: { hideTotals: false } },
+    });
+    expect(line().classList.contains("is-hidden-by-totals")).toBe(false);
+    // Other messages leave it alone.
+    applyInvoiceUpdate({
+      type: "lydia:template-update",
+      fields: { hideTotals: true },
+    });
+    applyInvoiceUpdate({ type: "lydia:invoice-update", fields: {} });
+    expect(line().classList.contains("is-hidden-by-totals")).toBe(false);
+  });
+});
+
+describe("Modern Manufacturing — images that fail to load", () => {
+  it("marks a failed image inside the document so it prints nothing", () => {
+    registerModernManufacturingPrint();
+    document.body.innerHTML = `<div class="mm-doc"><div class="mm-logo"><img class="mm-logo-image" alt="Seller"></div></div><img class="outside" alt="">`;
+    const logo = document.querySelector(".mm-logo-image") as HTMLImageElement;
+    const outside = document.querySelector(".outside") as HTMLImageElement;
+    logo.dispatchEvent(new Event("error"));
+    outside.dispatchEvent(new Event("error"));
+    expect(logo.classList.contains("is-broken")).toBe(true);
+    expect(outside.classList.contains("is-broken")).toBe(false);
   });
 });
