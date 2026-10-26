@@ -1250,6 +1250,16 @@
  * label | value, in the buyer box's 136 px label column; a pair empty on both sides is
  * dropped. Screen only: paper keeps the table as written.
  */
+
+/* Pageless PDF on Refrens' PDF service: the screen layout reports the page height (helpers
+ * fitPagelessReport); print shows the whole document. */
+@media screen {
+  .vt-doc.is-pageless[style*="--vt-pageless-report"] {
+    height: var(--vt-pageless-report);
+    overflow: hidden;
+  }
+}
+
 @media screen {
   @container vt-doc (width < 600px) {
     .vt-doc .vt-note-body .toastui-editor-contents table:has(tr > :nth-child(4)) {

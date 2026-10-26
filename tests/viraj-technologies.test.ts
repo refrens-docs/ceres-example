@@ -11,6 +11,7 @@ import {
   foreignAmountInWords,
   mapDetails,
   mapPrint,
+  pagelessReportHeight,
   registerVirajHelpers,
   summaryWords,
   withGstColumnLabels,
@@ -902,5 +903,13 @@ describe("Viraj Technologies — boxes split by a page break", () => {
     expect(css()).toMatch(
       /\.vt-doc :is\(\.vt-grid-row, \.vt-billing-fields\) > \.vt-cell \{\s*orphans: 1;\s*widows: 1;/
     );
+  });
+});
+
+describe("Pageless PDF height on Refrens' PDF service", () => {
+  it("reports the content height in points, with a little to spare", () => {
+    // TTTT0009: 2396 px of content made a 2454 pt page; 1875 px now reads as 1875 pt.
+    expect(pagelessReportHeight(2396)).toBe(1875);
+    expect(pagelessReportHeight(2396)).toBeLessThan(2396);
   });
 });

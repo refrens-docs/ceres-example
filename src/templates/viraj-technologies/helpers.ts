@@ -5551,6 +5551,45 @@ export const fitItemsToScreen = (root: ParentNode = document): void => {
   });
 };
 
+/* ------------------------------------------------------------------ print: Pageless PDF height */
+
+/*
+ * Refrens' PDF service (isDibellaMode) sizes a Pageless PDF's one page from the content
+ * height the renderer reports (screen layout, CSS px) but reads that number as points, so
+ * the page came out a third taller than the content, blank below it (user report, TTTT0009:
+ * 2454 pt page, content ending at 1758 pt). Until the service converts, the screen layout —
+ * which only the service measures — is cut to the height in points; print keeps the whole
+ * document. 3% and 24 px spare cover a printed layout a little taller than the screen one.
+ */
+const PX_PER_PT = 4 / 3;
+const PAGELESS_SPARE = 1.03;
+const PAGELESS_SPARE_PX = 24;
+
+export const pagelessReportHeight = (contentHeight: number): number =>
+  Math.ceil((contentHeight * PAGELESS_SPARE) / PX_PER_PT) + PAGELESS_SPARE_PX;
+
+const isDibellaMode = (): boolean =>
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).has("isDibellaMode");
+
+export const fitPagelessReport = (root: ParentNode = document): void => {
+  if (!isDibellaMode()) return;
+  const print =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("print").matches;
+  root.querySelectorAll<HTMLElement>(".vt-doc.is-pageless").forEach((doc) => {
+    doc.style.removeProperty("--vt-pageless-report");
+    if (print) return;
+    const height = doc.scrollHeight;
+    if (height > 0) {
+      doc.style.setProperty(
+        "--vt-pageless-report",
+        `${pagelessReportHeight(height)}px`
+      );
+    }
+  });
+};
+
 /* Registers the browser-side fits: the summaries' equal columns and the print table. */
 export const registerVirajTableFit = (): void => {
   const state = window as typeof window & { vtTableFitRegistered?: boolean };
@@ -5603,6 +5642,7 @@ export const registerVirajTableFit = (): void => {
     stretchItemTable();
     fitItemsToScreen();
     labelSummaryCells();
+    fitPagelessReport();
     observer?.takeRecords();
     watch();
   };
