@@ -5590,6 +5590,52 @@ export const fitPagelessReport = (root: ParentNode = document): void => {
   });
 };
 
+// TEMPORARY probe: writes what Refrens' PDF service sees into the Pageless PDF.
+export const registerPagelessProbe = (): void => {
+  if (!isDibellaMode()) return;
+  const lines: string[] = [];
+  let last = "";
+  const take = (tag: string) => {
+    const doc = document.querySelector<HTMLElement>(".vt-doc");
+    const out = document.getElementById("documentOutput");
+    const state = `w${window.innerWidth}x${window.innerHeight} dpr${
+      window.devicePixelRatio
+    } print${window.matchMedia("print").matches ? 1 : 0} html${
+      document.documentElement.scrollHeight
+    }/${document.documentElement.offsetHeight} body${
+      document.body.scrollHeight
+    }/${document.body.offsetHeight} out${out?.scrollHeight} doc${
+      doc?.scrollHeight
+    }/${doc?.offsetHeight} pageless${
+      doc?.classList.contains("is-pageless") ? 1 : 0
+    } rep${doc?.style.getPropertyValue("--vt-pageless-report")}`;
+    if (state !== last || tag !== "t")
+      lines.push(`${tag}@${Math.round(performance.now())} ${state}`);
+    last = state;
+  };
+  const write = (tag: string) => {
+    take(tag);
+    const doc = document.querySelector<HTMLElement>(".vt-doc");
+    if (!doc) return;
+    let pre = doc.querySelector<HTMLElement>(".vt-probe");
+    if (!pre) {
+      pre = document.createElement("pre");
+      pre.className = "vt-probe";
+      pre.style.cssText =
+        "font: 9px/1.3 monospace; white-space: pre-wrap; margin: 4px 0;";
+      doc.appendChild(pre);
+    }
+    pre.textContent = lines.slice(-40).join("\n");
+  };
+  const timer = window.setInterval(() => take("t"), 150);
+  window.setTimeout(() => window.clearInterval(timer), 30000);
+  window
+    .matchMedia("print")
+    .addEventListener("change", (e) => write(e.matches ? "PRINT" : "SCREEN"));
+  window.addEventListener("beforeprint", () => write("BEFOREPRINT"));
+  window.addEventListener("resize", () => take("resize"));
+};
+
 /* Registers the browser-side fits: the summaries' equal columns and the print table. */
 export const registerVirajTableFit = (): void => {
   const state = window as typeof window & { vtTableFitRegistered?: boolean };

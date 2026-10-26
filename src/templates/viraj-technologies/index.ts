@@ -7,6 +7,7 @@ import {
   withGstColumnLabels,
   withRefrensDefaults,
   registerVirajPrint,
+  registerPagelessProbe,
   withMoneyDefaults,
   withTemplateSettings,
 } from "./helpers";
@@ -28,6 +29,7 @@ registerVirajHelpers(window.Handlebars);
 registerVirajPrint();
 registerVirajLogo();
 registerVirajTableFit();
+registerPagelessProbe();
 
 // Export template to global for main renderer to consume
 // Host template settings onto the document, the shared normalizer, then the document's
