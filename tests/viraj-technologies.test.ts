@@ -908,8 +908,8 @@ describe("Viraj Technologies — boxes split by a page break", () => {
 
 describe("Pageless PDF height on Refrens' PDF service", () => {
   it("measures the printed height in points, with a little to spare", () => {
-    // TTTT0009: 1566 px printed (1175 pt) measures 1222 while the service sizes the page.
-    expect(pagelessReportHeight(1566)).toBe(1222);
+    // TTTT0009: 1566 px printed (1175 pt) → the root measures 1270, a 1290 pt page.
+    expect(pagelessReportHeight(1566)).toBe(1270);
     expect(pagelessReportHeight(1566)).toBeGreaterThan(1566 * 0.75);
   });
 });

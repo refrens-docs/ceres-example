@@ -5556,17 +5556,18 @@ export const fitItemsToScreen = (root: ParentNode = document): void => {
 /* ------------------------------------------------------------------ print: Pageless PDF height */
 
 /*
- * Refrens' PDF service (isDibellaMode) sizes a Pageless PDF's one page from the document's
- * height once it has switched to print (734 × 1064 window), but reads that CSS px number as
- * points, so the page came out a third taller than the content, blank below it (user report;
- * probe in the real PDF, TTTT0009: 1566 px printed → 1686 pt page, content 1175 pt). From
- * the switch to print until the printout starts (beforeprint), the page frame is cut so the
- * document measures its printed height in points; beforeprint gives the whole document back
- * before a page is drawn. 2% and 24 px spare.
+ * Refrens' PDF service (isDibellaMode) sizes a Pageless PDF's one page from the template
+ * root's height, but reads that CSS px number as points, so the page came out a third taller
+ * than the content, blank below it (user report, TTTT0009: root 1666 px in its 800 px screen
+ * window → 1686 pt page, content 1175 pt printed). In real PDFs only the root's own screen
+ * height moved the page (a cut <html> or printed height did not), so the page frame is cut
+ * on screen — and, to be safe, in print until the printout starts (beforeprint) — so the
+ * root measures its printed height in points. beforeprint gives the whole document back
+ * before a page is drawn. 2% and 72 px spare.
  */
 const PT_PER_PX = 3 / 4;
 const PAGELESS_SPARE = 1.02;
-const PAGELESS_SPARE_PX = 24;
+const PAGELESS_SPARE_PX = 72;
 
 export const pagelessReportHeight = (printHeight: number): number =>
   Math.ceil(printHeight * PAGELESS_SPARE * PT_PER_PX) + PAGELESS_SPARE_PX;
@@ -5584,6 +5585,7 @@ let pagelessPrinting = false;
  */
 export const resetPagelessReport = (): void => {
   document.documentElement.style.removeProperty("--vt-pageless-frame");
+  document.documentElement.style.removeProperty("--vt-pageless-screen");
 };
 
 /*
@@ -5677,20 +5679,19 @@ const inPrintLayout = <T>(doc: HTMLElement, measure: () => T): [T, number] => {
 };
 
 /*
- * Sets the cut (on <html>) so the printed document measures `target`: an empty frame shows
- * what the rest of the document takes, and the frame gets the remainder.
+ * Sets the cut (variable `name` on <html>) so the root measures `target`: an empty frame
+ * shows what the rest of the document takes, and the frame gets the remainder.
  */
-const cutPagelessFrame = (doc: HTMLElement, zoom = 1): void => {
-  const height = doc.scrollHeight * zoom;
-  const target = pagelessReportHeight(height);
-  if (height <= target) return;
+const cutPagelessFrame = (
+  doc: HTMLElement,
+  name: string,
+  target: number,
+  zoom = 1
+): void => {
   const html = document.documentElement.style;
-  html.setProperty("--vt-pageless-frame", "0px");
+  html.setProperty(name, "0px");
   const rest = doc.scrollHeight * zoom;
-  html.setProperty(
-    "--vt-pageless-frame",
-    `${Math.max(0, (target - rest) / zoom)}px`
-  );
+  html.setProperty(name, `${Math.max(0, (target - rest) / zoom)}px`);
 };
 
 export const fitPagelessReport = (root: ParentNode = document): void => {
@@ -5702,17 +5703,25 @@ export const fitPagelessReport = (root: ParentNode = document): void => {
   const print =
     typeof window.matchMedia === "function" &&
     window.matchMedia("print").matches;
-  // The service reads the height the moment it switches to print, before any listener runs:
-  // on screen the cut is worked out from the print layout ahead of time, and print refines it.
-  if (print) cutPagelessFrame(doc);
-  else {
-    inPrintLayout(doc, () => {
-      const zoom =
-        parseFloat(getComputedStyle(doc).getPropertyValue("--vt-page-zoom")) ||
-        1;
-      cutPagelessFrame(doc, zoom);
-    });
+  if (print) {
+    const height = doc.scrollHeight;
+    const target = pagelessReportHeight(height);
+    if (height > target) cutPagelessFrame(doc, "--vt-pageless-frame", target);
+    return;
   }
+  // On screen: the printed height from the print layout, the print cut for the moment the
+  // service switches to print, and the screen cut the service measures.
+  const [target] = inPrintLayout(doc, () => {
+    const zoom =
+      parseFloat(getComputedStyle(doc).getPropertyValue("--vt-page-zoom")) || 1;
+    const height = doc.scrollHeight * zoom;
+    const printTarget = pagelessReportHeight(height);
+    if (height > printTarget) {
+      cutPagelessFrame(doc, "--vt-pageless-frame", printTarget, zoom);
+    }
+    return printTarget;
+  });
+  cutPagelessFrame(doc, "--vt-pageless-screen", target);
 };
 
 /* Registers the browser-side fits: the summaries' equal columns and the print table. */

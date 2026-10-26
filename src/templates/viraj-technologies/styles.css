@@ -1252,7 +1252,15 @@
  */
 
 /* Pageless PDF on Refrens' PDF service: the page frame is cut while the service measures the
- * page (helpers fitPagelessReport), and whole again from beforeprint. */
+ * page (helpers fitPagelessReport) — on screen, and in print until beforeprint. */
+@media screen {
+  html[style*="--vt-pageless-screen"] .vt-doc.is-pageless > .vt-page-frame {
+    display: block;
+    height: var(--vt-pageless-screen);
+    overflow: hidden;
+  }
+}
+
 @media print {
   html[style*="--vt-pageless-frame"] .vt-doc.is-pageless > .vt-page-frame {
     display: block;
