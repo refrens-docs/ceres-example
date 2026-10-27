@@ -29,7 +29,8 @@
  * the business's Heading / Body fonts (--title-font / --subtitle-font) when set.
  *
  * Every rule is scoped to .vt-doc; the page box and margins belong to the browser or the PDF
- * service (no @page: it would break Lydia's Pageless PDF). Text sizes follow the document's
+ * service (no @page: it would break Lydia's Pageless PDF), but for the service's Pageless PDF,
+ * whose page helpers.ts sizes to the content (setPagelessPage). Text sizes follow the document's
  * text scale (--vt-text-scale). The title is the one place the design sets capitals.
  */
 

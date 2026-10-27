@@ -4088,6 +4088,8 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
     printWidth,
     browserPrintWidth,
     printHeight,
+    // The paper's width in mm (landscape: its height), for the Pageless PDF's page box.
+    paperWidth: compactDecimal(paperMm),
     compactTable,
     /*
      * "Stretch invoice & quotation tables to fill the page" (Settings > Experimental,
@@ -5697,6 +5699,47 @@ const cutPagelessFrame = (
   html.setProperty(name, `${Math.max(0, (target - rest) / zoom)}px`);
 };
 
+/*
+ * The page box of a Pageless PDF on Refrens' PDF service, so its one page is as tall as the
+ * content whatever height the service asks for (user request, 27 Oct: no space left under
+ * the content, portrait and landscape): the paper's width, the printed height, and the same
+ * margin under the content as above it. Print reads it; the screen and Lydia never see it.
+ */
+const PAGELESS_MARGIN_PT = 21.6; // 0.3 in, the service's own top margin
+let pagelessPage: HTMLStyleElement | null = null;
+
+export const pagelessPageRule = (
+  paperWidth: string,
+  printHeight: number,
+  vh: string
+): string => {
+  const height =
+    Math.ceil(printHeight * PT_PER_PX) + 2 * PAGELESS_MARGIN_PT + 2;
+  // Print's vh as measured (a paper page's), not the tall page's: the large image keeps the
+  // height it was measured at.
+  return `@page { size: ${paperWidth} ${height}pt; margin-top: ${PAGELESS_MARGIN_PT}pt; margin-bottom: ${PAGELESS_MARGIN_PT}pt; } @media print { .vt-doc.is-pageless { --vt-vh: ${vh}; } }`;
+};
+
+// Measured in the print layout at the print width (inPrintLayout): the service's print
+// window is narrower than a landscape page, so a height read there is too tall.
+const setPagelessPage = (
+  doc: HTMLElement,
+  printHeight: number,
+  vh: string
+): void => {
+  const paperWidth = getComputedStyle(doc)
+    .getPropertyValue("--vt-paper-width")
+    .trim();
+  if (!paperWidth || !(printHeight > 0)) return;
+  if (!pagelessPage?.isConnected) {
+    pagelessPage = document.createElement("style");
+    pagelessPage.setAttribute("data-vt-pageless-page", "");
+    document.head.append(pagelessPage);
+  }
+  const rule = pagelessPageRule(paperWidth, printHeight, vh);
+  if (pagelessPage.textContent !== rule) pagelessPage.textContent = rule;
+};
+
 export const fitPagelessReport = (root: ParentNode = document): void => {
   if (!isDibellaMode()) return;
   resetPagelessReport();
@@ -5718,6 +5761,11 @@ export const fitPagelessReport = (root: ParentNode = document): void => {
     const zoom =
       parseFloat(getComputedStyle(doc).getPropertyValue("--vt-page-zoom")) || 1;
     const height = doc.scrollHeight * zoom;
+    setPagelessPage(
+      doc,
+      height,
+      doc.style.getPropertyValue("--vt-vh") || "1vh"
+    );
     const printTarget = pagelessReportHeight(height);
     if (height > printTarget) {
       cutPagelessFrame(doc, "--vt-pageless-frame", printTarget, zoom);
