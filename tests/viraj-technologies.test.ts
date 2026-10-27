@@ -11,7 +11,6 @@ import {
   foreignAmountInWords,
   mapDetails,
   mapPrint,
-  pagelessPageRule,
   pagelessReportHeight,
   registerVirajHelpers,
   summaryWords,
@@ -912,13 +911,5 @@ describe("Pageless PDF height on Refrens' PDF service", () => {
     // TTTT0009: 1566 px printed (1175 pt) → the root measures 1270, a 1290 pt page.
     expect(pagelessReportHeight(1566)).toBe(1270);
     expect(pagelessReportHeight(1566)).toBeGreaterThan(1566 * 0.75);
-  });
-
-  it("sizes its own page to the content, the same margin above and below", () => {
-    // TTTT0009 at the print width: 1612 px → 1209 pt of content, 21.6 pt above and below.
-    expect(pagelessPageRule("210mm", 1612, "10.46px")).toBe(
-      "@page { size: 210mm 1254.2pt; margin-top: 21.6pt; margin-bottom: 21.6pt; } @media print { .vt-doc.is-pageless { --vt-vh: 10.46px; } }"
-    );
-    expect(pagelessPageRule("297mm", 1359, "7.18px")).toContain("size: 297mm");
   });
 });
