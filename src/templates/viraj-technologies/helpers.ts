@@ -1753,16 +1753,8 @@ export const mapMeta = (state: UnknownRecord, transportRows: LabelValue[]) => {
         value: customFieldText(entry.value),
       })),
     ...transportRows,
-    // "Created by <name>" when the document's "Show in Invoice" toggle beside its creator is
-    // on (advanceOptions.showCreatorInInvoice).
-    {
-      key: "createdBy",
-      label: labelOr(labels, "createdBy", "Created By"),
-      value:
-        asRecord(invoice.advanceOptions).showCreatorInInvoice === true
-          ? text(asRecord(invoice.creator).name)
-          : "",
-    },
+    // No "Created By", whatever the document's "Show in Invoice" toggle beside its creator
+    // (advanceOptions.showCreatorInInvoice) says (user request, 27 Oct).
     {
       key: "reverseCharge",
       label: labelOr(labels, "reverseCharge", "Reverse Charge"),
