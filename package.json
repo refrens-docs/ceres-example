@@ -96,7 +96,7 @@
   "dependencies": {
     "@babel/runtime": "^7.25.0",
     "@toast-ui/editor": "^3.2.2",
-    "dompurify": "^3.3.2",
+    "dompurify": "^3.4.17",
     "libphonenumber-js": "^1.13.5",
     "marked": "^17.0.4"
   },
