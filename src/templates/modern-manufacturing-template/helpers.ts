@@ -4425,13 +4425,23 @@ export const labelSummaryCells = (root: ParentNode = document): void => {
 };
 
 /*
- * Party and header fields stay one a line, never split onto rows of their own. Only the boxes
- * are stacked here.
+ * Party fields stay one a line. The header's seller fields go two a line, one a line only when
+ * a name or value of theirs would wrap two across (an A5 page, a phone; user, 2026-10-31). The
+ * boxes are stacked too.
  */
 export const stackCrampedFields = (root: ParentNode = document): void => {
   root
     .querySelectorAll<HTMLElement>(".mm-id-line.is-stacked")
     .forEach((line) => line.classList.remove("is-stacked"));
+  root.querySelectorAll<HTMLElement>(".mm-seller-fields").forEach((grid) => {
+    grid.classList.remove("is-stacked");
+    const wraps = [...grid.querySelectorAll<HTMLElement>(".mm-field > *")].some(
+      (cell) =>
+        cell.getBoundingClientRect().height >
+        (parseFloat(getComputedStyle(cell).lineHeight) || 20) * 1.5
+    );
+    if (wraps) grid.classList.add("is-stacked");
+  });
   // eslint-disable-next-line @typescript-eslint/no-use-before-define
   stackCrampedPairs(root);
 };

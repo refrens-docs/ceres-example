@@ -82,8 +82,8 @@
                     </div>
                   {{/if}}
                   {{#if view.brand.seller.hasIdLines}}
-                    {{!-- One field a line, its name in a column, as in Billed To / Shipped To
-                         (user, 2026-10-31). --}}
+                    {{!-- Two fields a line, in order left to right (1 | 2, 3 | 4 …), names and values
+                         in aligned columns; one a line when two do not fit (user, 2026-10-31). --}}
                     <div class="mm-party-fields mm-seller-fields">
                       {{#each view.brand.seller.lines}}{{#each this}}
                         <div class="mm-field"><span class="mm-label">{{label}}</span><span class="mm-value{{#if noWrap}} mm-num{{else if isEmail}} mm-email{{/if}}"{{#if isNum}} data-testid="num"{{/if}}>{{#if isDate}}{{mmDate value @root.invoice.ownerOffset}}{{else if isPhone}}{{formatPhoneNumber value}}{{else}}{{value}}{{/if}}</span></div>

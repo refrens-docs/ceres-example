@@ -424,7 +424,11 @@ test("D1: tokens, typography, spacing and column widths match Figma", async ({
       "border-right-color"
     )
   ).toBe("rgb(189, 220, 255)");
-  expect(await style('[data-testid="items-table"]', "border-top-color")).toBe(
+  // No grey line above the coloured header (user, 2026-10-31); the sides keep the outline.
+  expect(await style('[data-testid="items-table"]', "border-top-width")).toBe(
+    "0px"
+  );
+  expect(await style('[data-testid="items-table"]', "border-left-color")).toBe(
     "rgb(220, 220, 220)"
   );
   expect(await style('[data-testid="item-row"] td', "border-right-color")).toBe(

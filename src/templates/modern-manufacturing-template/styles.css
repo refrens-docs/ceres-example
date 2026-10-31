@@ -705,6 +705,7 @@
   width: 100%;
   table-layout: auto;
   border: 1px solid var(--mm-table-outline);
+  border-top: 0; /* no grey line above the coloured header, as in print (user, 2026-10-31) */
   border-radius: 6px;
   border-collapse: separate;
   border-spacing: 0;
@@ -732,13 +733,14 @@
   word-break: normal;
 }
 
+/* The header's top corners follow the table's 6 px radius (no top border inside them). */
 .mm-items thead th:first-child {
-  border-start-start-radius: 5px;
+  border-start-start-radius: 6px;
 }
 
 .mm-items thead th:last-child {
   border-inline-end: 0;
-  border-start-end-radius: 5px;
+  border-start-end-radius: 6px;
 }
 
 .mm-items tbody td,
@@ -1011,10 +1013,27 @@
   display: contents;
 }
 
-/* The seller's GSTIN, PAN, phone, email… in the header: the party boxes' rows, across the
-   seller column (user, 2026-10-31). */
+/*
+ * The seller's GSTIN, PAN, phone, email… in the header: the party boxes' rows, two fields a
+ * line to save height, in order left to right (1 | 2, 3 | 4 …). Names and values keep their
+ * columns, 16 px from name to value and 24 px between the two fields (user, 2026-10-31). When
+ * a field would wrap two across (an A5 page, a phone), one a line (stackCrampedFields).
+ */
 .mm-seller-fields {
+  grid-template-columns: repeat(4, auto);
   align-self: stretch;
+}
+
+.mm-seller-fields > .mm-field:nth-child(even) > .mm-label {
+  margin-inline-start: 8px;
+}
+
+.mm-seller-fields.is-stacked {
+  grid-template-columns: auto auto;
+}
+
+.mm-seller-fields.is-stacked > .mm-field > .mm-label {
+  margin-inline-start: 0;
 }
 
 .mm-upi-qr {

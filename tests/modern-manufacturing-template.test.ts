@@ -3514,7 +3514,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       "--mm-signature-muted: #64748b;",
     ].forEach((token) => expect(root).toContain(token));
     expect(rule(".mm-items")).toMatch(
-      /border: 1px solid var\(--mm-table-outline\);\s*border-radius: 6px;/
+      /border: 1px solid var\(--mm-table-outline\);\s*border-top: 0;[^\n]*\s*border-radius: 6px;/
     );
     expect(rule(".mm-items thead th")).toMatch(
       /border-inline-end: 1px solid var\(--mm-accent-200\);/
@@ -3877,8 +3877,17 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       /color: var\(--mm-muted\);\s*font-weight: 400;/
     );
     expect(rule(".mm-id-line")).toMatch(/color: var\(--mm-ink\);/);
-    // The header's seller fields: the party rows, across the seller column's width.
-    expect(rule(".mm-seller-fields")).toMatch(/align-self: stretch;/);
+    // The header's seller fields: the party rows, two a line in order (1 | 2, 3 | 4).
+    expect(rule(".mm-seller-fields")).toMatch(
+      /grid-template-columns: repeat\(4, auto\);\s*align-self: stretch;/
+    );
+    // Two fields a line, 24 px between them; one a line when they would wrap.
+    expect(
+      rule(".mm-seller-fields > .mm-field:nth-child(even) > .mm-label")
+    ).toMatch(/margin-inline-start: 8px;/);
+    expect(rule(".mm-seller-fields.is-stacked")).toMatch(
+      /grid-template-columns: auto auto;/
+    );
     expect(css).not.toMatch(/mm-seller-ids/);
   });
 
