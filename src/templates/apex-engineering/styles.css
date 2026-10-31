@@ -324,7 +324,7 @@
   max-height: 100px;
 }
 
-/* The logo and, right beside it, the document QR, 8 px apart (user request). */
+/* The logo's row at the top of the header. */
 .ax-brand-row {
   display: flex;
   gap: 8px;
@@ -333,10 +333,6 @@
 
 .ax-brand-row .ax-logo {
   min-width: 0;
-}
-
-.ax-doc-qr {
-  flex: none;
 }
 
 .ax-meta {

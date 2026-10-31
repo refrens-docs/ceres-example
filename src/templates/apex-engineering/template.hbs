@@ -85,8 +85,8 @@
             {{!-- The details' rule, then the logo and details. --}}
             <span class="ax-header-rule" aria-hidden="true"></span>
             <div class="ax-header-end">
-              {{!-- The business's own logo (invoice.logo) — never its name (user request) — with the
-                    document QR right beside it, 8 px apart (user request); the details follow below. --}}
+              {{!-- The business's own logo (invoice.logo) — never its name (user request); the details
+                    follow below. No document QR in this template (user request, 2026-10-31). --}}
               {{#if view.hasBrandRow}}
                 <div class="ax-brand-row">
                   {{#if view.brand.logo}}
@@ -94,7 +94,6 @@
                       {{> CeresImage src=view.brand.logo alt=view.brand.name class="ax-logo-image"}}
                     </div>
                   {{/if}}
-                  <div class="ax-qr ax-doc-qr{{#unless view.documentQr}} is-empty{{/unless}}" data-ceres-field-container="documentQr"><img data-ceres-field="documentQr"{{#if view.documentQr}} src="{{view.documentQr}}"{{/if}} alt="Document QR Code" /></div>
                 </div>
               {{/if}}
               {{#if view.meta.length}}
