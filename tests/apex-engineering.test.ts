@@ -562,13 +562,14 @@ describe("Apex Engineering — boolean settings", () => {
     );
   });
 
-  it("hideFooter: the letterhead footer is not drawn", () => {
-    const hidden = render((invoice) => {
+  // Refrens' "Hide footer" only drops the "electronically generated" line its PDF service adds.
+  it("hideFooter: the letterhead footer is still drawn", () => {
+    const html = render((invoice) => {
       invoice.letterHeadFooter = "https://example.com/foot.png";
       invoice.template = { pdfOptions: { hideFooter: true } };
     });
-    expect(hidden).not.toContain("https://example.com/foot.png");
-    expect(hidden).toContain("ax-doc is-footer-hidden");
+    expect(html).toContain("https://example.com/foot.png");
+    expect(html).not.toContain("is-footer-hidden");
   });
 
   it("fits the print table to the paper: format and landscape", () => {

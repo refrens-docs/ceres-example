@@ -3972,7 +3972,6 @@ export const mapPrint = (
 ) => {
   const pdfOptions = asRecord(state.pdfOptions);
   const invoice = asRecord(state.invoice);
-  const template = asRecord(invoice.template);
   const format = text(pdfOptions.format).toLowerCase();
   const landscape = optionalFlag(pdfOptions.landscape) === true;
   const paperMm = landscape
@@ -4044,12 +4043,6 @@ export const mapPrint = (
       asRecord(asRecord(asRecord(invoice.owner).configuration).experimental)
         .stretchInvoiceTable === true &&
       optionalFlag(pdfOptions.fullHeightTable) === true,
-    // "Hide footer": the letterhead footer is not drawn at all.
-    hideFooter: [
-      pdfOptions.hideFooter,
-      template.hideFooter,
-      invoice.hideFooter,
-    ].some((value) => optionalFlag(value) === true),
   };
 };
 
@@ -4385,7 +4378,6 @@ export const buildApexView = (root: unknown) => {
     // it on the first page only (pdfOptions.letterHeadOnFirstPage).
     letterheadEveryPage: !visibility.letterHeadOnFirstPage && !options.pageless,
     pageless: options.pageless,
-    hideFooter: print.hideFooter,
     print,
     script: mapScript(state),
   };
@@ -4446,6 +4438,19 @@ export const registerApexLogo = (): void => {
         target.classList.contains("ax-logo-image")
       ) {
         markLogoShape(target);
+      }
+    },
+    true
+  );
+  // An image that fails to load (an expired or private link) prints nothing: no broken-image
+  // mark and no alt text (the business name printed where the logo was). As the Ecommerce
+  // template does.
+  document.addEventListener(
+    "error",
+    (event) => {
+      const { target } = event;
+      if (target instanceof HTMLImageElement && target.closest(".ax-doc")) {
+        target.classList.add("is-broken");
       }
     },
     true

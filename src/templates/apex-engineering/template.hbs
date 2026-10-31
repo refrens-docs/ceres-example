@@ -16,7 +16,7 @@
   update targets.
 --}}
 {{#with (axView @root) as |view|}}
-<div class="ax-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.hideFooter}} is-footer-hidden{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-ax-currency="{{@root.invoice.currency}}" data-testid="invoice-root" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--ax-text-scale: {{view.print.textScale}}; --ax-print-width: {{view.print.printWidth}}px; --ax-browser-print-width: {{view.print.browserPrintWidth}}px;{{#if view.theme}} --ax-theme: {{view.theme.accent}}; --ax-on-accent: {{view.theme.onAccent}};{{/if}}{{#if view.script.font}} --ax-script-font: '{{view.script.font}}';{{/if}}">
+<div class="ax-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-ax-currency="{{@root.invoice.currency}}" data-testid="invoice-root" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--ax-text-scale: {{view.print.textScale}}; --ax-print-width: {{view.print.printWidth}}px; --ax-browser-print-width: {{view.print.browserPrintWidth}}px;{{#if view.theme}} --ax-theme: {{view.theme.accent}}; --ax-on-accent: {{view.theme.onAccent}};{{/if}}{{#if view.script.font}} --ax-script-font: '{{view.script.font}}';{{/if}}">
   {{!-- The Language/Script setting's font, for the glyphs Inter lacks. --}}
   {{#if view.script.fontUrl}}<link rel="stylesheet" href="{{view.script.fontUrl}}" />{{/if}}
   {{#unless view.letterheadEveryPage}}
@@ -53,7 +53,7 @@
         </tr>
       </thead>
     {{/if}}
-    {{#if view.footerEveryPage}}{{#unless view.hideFooter}}
+    {{#if view.footerEveryPage}}
       <tfoot class="ax-page-frame-footer">
         <tr>
           <td>
@@ -63,7 +63,7 @@
           </td>
         </tr>
       </tfoot>
-    {{/unless}}{{/if}}
+    {{/if}}
     <tbody>
       <tr>
         <td class="ax-page-frame-cell">
@@ -693,14 +693,12 @@
     </tbody>
   </table>
 
-  {{#unless view.hideFooter}}
-    <div class="{{#if view.footerEveryPage}}no-dibella {{/if}}invoice-letterhead-footer ax-letterhead-footer{{#if view.footerEveryPage}} ax-footer-fixed{{/if}}{{#unless @root.invoice.letterHeadFooter}} is-empty{{/unless}}" data-ceres-page-footer data-ceres-page-policy="{{#if view.footerEveryPage}}all{{else}}last{{/if}}">
-      {{#if @root.invoice.letterHeadFooter}}
-        <img src="{{@root.invoice.letterHeadFooter}}" alt="Letterhead footer" data-ceres-height="letterhead-footer" />
-      {{else}}
-        <img alt="Letterhead footer" data-ceres-height="letterhead-footer" />
-      {{/if}}
-    </div>
-  {{/unless}}
+  <div class="{{#if view.footerEveryPage}}no-dibella {{/if}}invoice-letterhead-footer ax-letterhead-footer{{#if view.footerEveryPage}} ax-footer-fixed{{/if}}{{#unless @root.invoice.letterHeadFooter}} is-empty{{/unless}}" data-ceres-page-footer data-ceres-page-policy="{{#if view.footerEveryPage}}all{{else}}last{{/if}}">
+    {{#if @root.invoice.letterHeadFooter}}
+      <img src="{{@root.invoice.letterHeadFooter}}" alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{else}}
+      <img alt="Letterhead footer" data-ceres-height="letterhead-footer" />
+    {{/if}}
+  </div>
 </div>
 {{/with}}
