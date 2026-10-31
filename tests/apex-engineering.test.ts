@@ -11,7 +11,6 @@ import {
   formatFigure,
   foreignAmountInWords,
   withRefrensDefaults,
-  mapCompliance,
   mapContact,
   mapParty,
   mapCostCard,
@@ -326,7 +325,7 @@ describe("Apex Engineering — render", () => {
     ].forEach((hook) => expect(html).not.toContain(hook));
     // The compliance box is present (live update target) but shows only with a value (CSS).
     expect(html).toContain('data-ceres-field="irn"');
-    expect(html).toContain('data-ceres-field-container="documentQr"');
+    expect(html).not.toContain("documentQr");
   });
 });
 
@@ -628,7 +627,7 @@ describe("Apex Engineering — boolean settings", () => {
     expect(s.mapped.visibility.letterHeadOnFirstPage).toBe(true);
   });
 
-  it("irnPosition places the compliance box above or below the items; QR settings gate the document QR", () => {
+  it("irnPosition places the compliance box above or below the items", () => {
     const withIrn = (edit?: (invoice: Json) => void) =>
       render((invoice) => {
         invoice.irn = {
@@ -636,7 +635,6 @@ describe("Apex Engineering — boolean settings", () => {
           AckNo: "112233",
           AckDt: "2026-05-27 10:00:00",
         };
-        invoice.documentQr = "data:image/png;base64,AAAA";
         edit?.(invoice);
       });
     const above = withIrn();
@@ -644,7 +642,6 @@ describe("Apex Engineering — boolean settings", () => {
       above.indexOf('data-section="items"')
     );
     expect(above).toContain(">abc123<");
-    expect(above).toContain('src="data:image/png;base64,AAAA"');
 
     const below = withIrn((invoice) => {
       invoice.irnPosition = "BELOW_LINEITEMS";
@@ -652,14 +649,6 @@ describe("Apex Engineering — boolean settings", () => {
     expect(below.indexOf('data-section="compliance"')).toBeGreaterThan(
       below.indexOf('data-section="items"')
     );
-
-    const qrOff = mapCompliance(
-      state((invoice) => {
-        invoice.documentQr = "data:image/png;base64,AAAA";
-        invoice.owner.configuration.showQrCode = { quotation: false };
-      })
-    );
-    expect(qrOff.qr.document).toBe("");
   });
 
   it("Shipped From | Shipped To | Transport Details in the panel under the client", () => {
@@ -1132,19 +1121,25 @@ describe("Apex Engineering — view model", () => {
     expect(html).toMatch(/ax-meta-label">Reason<[\s\S]*?Product Return/);
   });
 
-  it("puts the document QR right beside the logo, and only one QR: the e-invoice QR while the IRN is active", () => {
-    const withQr = render((invoice) => {
+  it("never prints the document QR, whatever the QR settings (user request, 2026-10-31)", () => {
+    const html = render((invoice) => {
       invoice.documentQr = "doc-qr-payload";
+      invoice.owner.configuration.enableQrCode = true;
+      invoice.owner.configuration.showQrCode = { quotation: true };
     });
-    expect(withQr).toMatch(
-      /ax-brand-row[\s\S]*?ax-logo[\s\S]*?ax-doc-qr"[^>]*><img[^>]*src="data:image\/[\s\S]*?data-section="details"/
+    expect(html).not.toContain("Document QR Code");
+    expect(html).not.toContain("ax-doc-qr");
+    expect(html).toMatch(
+      /ax-brand-row[\s\S]*?ax-logo[\s\S]*?data-section="details"/
     );
+    // The e-invoice QR still prints while the IRN is active.
     const active = render((invoice) => {
       invoice.documentQr = "doc-qr-payload";
-      invoice.qrCode = "irn-qr-payload";
-      invoice.irn = { Irn: "abc", qrCode: "irn-qr-payload" };
+      invoice.qrCode = "data:image/png;base64,IRNQR";
+      invoice.irn = { Irn: "abc", qrCode: "data:image/png;base64,IRNQR" };
     });
-    expect(active).toContain("ax-doc-qr is-empty");
+    expect(active).toContain('src="data:image/png;base64,IRNQR"');
+    expect(active).not.toContain("Document QR Code");
   });
 
   it("sizes the table from the Figma widths with a 32 px serial column", () => {
