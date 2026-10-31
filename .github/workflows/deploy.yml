@@ -40,6 +40,22 @@ jobs:
       - name: Build the project
         run: npm run build
 
+      # A Refrens template set to a version's own manifest (templates/<name>/<version>/manifest.json)
+      # keeps working and gets the latest build: each listed version is a copy of the template's
+      # current version (only the current one is built).
+      - name: Keep pinned template versions on the latest build
+        run: |
+          pin() {
+            t="$1"; shift
+            cur=$(node -p "require('./dist/templates/$t/manifest.json').version")
+            for v in "$@"; do
+              [ "$v" = "$cur" ] && continue
+              mkdir -p "dist/templates/$t/$v"
+              cp -R "dist/templates/$t/$cur/." "dist/templates/$t/$v/"
+            done
+          }
+          pin viraj-technologies 1.0.162
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
