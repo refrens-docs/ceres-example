@@ -1,0 +1,2773 @@
+@import "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap";
+
+/*
+ * Modern Manufacturing Template — Figma "Modern Manufacturing Template." (Document-Templates,
+ * node 18506:2360; item images per node 18743:689); behaviour per INVOICE_TEMPLATE_SPEC_v2.
+ *
+ * Design canvas: 1000 px with 32 px padding (936 px of content), 16 px between sections,
+ * Inter at 13 px body text (user request; the spec has 12). Tokens are the spec's section 2. The
+ * theme colour (default blue #013d7f, header dividers #bddcff) is the document's setting:
+ * helpers.ts sets --mm-theme / --mm-theme-tint for any other colour.
+ *
+ * Every rule is scoped to .mm-doc; the page box and margins belong to the browser or PDF
+ * service. Headings, labels and table headers are the business's own (editable) text, so no
+ * rule changes their case. Print scales the design canvas to the paper (see the print block at the end), and
+ * print-color-adjust keeps the theme bars and stripes in colour. Text sizes follow the
+ * document's text scale (--mm-text-scale).
+ */
+
+/*
+ * Lydia's "Change Color & Font" (applied by the renderer as root variables, live too):
+ * primary colour → the accent (bars, headings, table header); secondary colour → the text;
+ * primary background → the page; secondary background → the boxes and sections — the same
+ * reading as the Solvin and SR Trading 2.0 templates. Unset, the design's own colours stay.
+ */
+.mm-doc {
+  --mm-accent: var(--mm-theme, var(--primary-color, #013d7f));
+  --mm-accent-200: var(--mm-theme-tint, #bddcff);
+  --mm-ink: var(--secondary-color, #1a2130);
+  --mm-strong: var(--secondary-color, #282828);
+  --mm-muted: #666670;
+  --mm-line: #d1d6e0;
+  --mm-table-outline: #dcdcdc;
+  --mm-cell-line: #d1d6db;
+  --mm-stripe: #f9fafc;
+  --mm-title-bar: #f5f7fa;
+  --mm-signature-ink: #1e293b;
+  --mm-signature-muted: #64748b;
+  --mm-on-accent: #fff;
+
+  /* The script's face (Lydia's "Change Script") follows the body font, for the glyphs it lacks. */
+  --mm-font: var(--subtitle-font, "Inter", sans-serif), var(--mm-script-font, sans-serif);
+
+  /*
+   * Type scale (design-to-template §4a): six steps, 13 px base pinned on screen and in print,
+   * nothing below the 10 px floor. Print overrides below compress only the steps above base.
+   */
+  --mm-font-size-xs: 10px;
+  --mm-font-size-s: 11px;
+  --mm-font-size-base: 13px;
+  --mm-font-size-m: 16px;
+  --mm-font-size-lg: 18px;
+  --mm-font-size-xl: 20px; /* the banner title (user, 2026-10-28) */
+  --mm-title-font: var(--title-font, var(--mm-font)), var(--mm-script-font, sans-serif);
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px; /* between sections (user request) */
+
+  /*
+   * The host body is a flex row, so #documentOutput shrinks to its content: a width taken
+   * from the viewport (the template's iframe) keeps a wide table from widening the page.
+   * One gutter, as the default template has: the content sits 32 px in from the sides, the
+   * letterhead and footer run to the page's edges. With no letterhead (or no footer) the
+   * same 32 px keeps the content off the top (or bottom) edge.
+   */
+  --mm-gutter: 32px;
+
+  width: min(100vw, 1000px);
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--mm-gutter);
+  background: var(--primary-background, #fff);
+  color: var(--mm-ink);
+  font-family: var(--mm-font);
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  font-weight: 400;
+  line-height: 1.5385;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* The heaviest weight is 600 (user request): text the browser makes bold by default, such as
+   <strong> in notes and the shared tables' totals, and table headings, is 600 as well. */
+.mm-doc :is(strong, b, th),
+.mm-doc .toastui-editor-contents :is(strong, b) {
+  font-weight: 600;
+}
+
+.mm-doc,
+.mm-doc *,
+.mm-doc *::before,
+.mm-doc *::after {
+  box-sizing: border-box;
+}
+
+/* Flex children default to min-width:auto, which would let a wide table stretch the page. */
+.mm-doc > *,
+.mm-page-body > * {
+  min-width: 0;
+}
+
+/*
+ * The print frame (see template.hbs) is transparent on screen: its sections lay out as the
+ * document's own flex items, and the footer spacer is not drawn.
+ */
+
+/* :where() keeps these as weak as the print rules that turn the frame back into a table. */
+.mm-page-frame,
+.mm-page-frame > :where(thead, tbody),
+.mm-page-frame > :where(thead, tbody) > tr,
+.mm-page-frame-header > :where(tr) > td,
+.mm-page-frame-cell,
+.mm-page-body {
+  display: contents;
+}
+
+.mm-page-frame-footer {
+  display: none;
+}
+
+.mm-doc p,
+.mm-doc h1,
+.mm-doc h2,
+.mm-doc h3,
+.mm-doc ol,
+.mm-doc ul {
+  margin: 0;
+}
+
+/* Figures, codes, dates, IDs and phone numbers never wrap (layout rule 4). */
+.mm-num {
+  white-space: nowrap;
+}
+
+
+/* ------------------------------------------------------------ letterhead */
+
+.mm-doc .invoice-letterhead,
+.mm-doc .invoice-letterhead-footer {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.mm-doc .invoice-letterhead img,
+.mm-doc .invoice-letterhead-footer img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.mm-doc .invoice-letterhead.is-empty,
+.mm-doc .invoice-letterhead-footer.is-empty {
+  display: none;
+}
+
+/* The letterhead and footer run through the gutter to the page's edges. */
+.mm-doc .mm-letterhead,
+.mm-doc .mm-letterhead-footer {
+  width: auto;
+  margin-right: calc(-1 * var(--mm-gutter));
+  margin-left: calc(-1 * var(--mm-gutter));
+}
+
+.mm-doc:has(.mm-letterhead.is-empty) {
+  padding-top: var(--mm-gutter);
+}
+
+.mm-doc:has(> .mm-letterhead-footer.is-empty) {
+  padding-bottom: var(--mm-gutter);
+}
+
+/* ------------------------------------------------------------ shared */
+
+.mm-box {
+  border: 1px solid var(--mm-line);
+  border-radius: 6px;
+  background: var(--secondary-background, transparent);
+  overflow: hidden;
+}
+
+/* Field labels 12/400; party labels take 500. Labels print as the business wrote them. */
+.mm-label {
+  color: var(--mm-muted);
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+  font-weight: 400;
+}
+
+.mm-section-title {
+  color: var(--mm-accent);
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  font-weight: 600;
+  line-height: 1.5385;
+}
+
+/*
+ * The document's Heading Font (template.titleFont → --title-font) sets every heading: the
+ * company name, the banner, box and party titles, table headers and the grand total. The
+ * Body Font (template.bodyFont → --subtitle-font) sets everything else (.mm-doc above).
+ */
+.mm-section-title,
+.mm-party-label,
+.mm-items thead th,
+.mm-hsn-table thead th,
+.mm-widget-table .ceres-table thead th,
+.mm-widget-table .ceres-table-heading,
+.mm-hsn .ceres-table-heading,
+.mm-totals .ceres-subtotal-row-grand > * {
+  font-family: var(--mm-title-font);
+}
+
+/*
+ * The Saudi riyal sign, drawn (helpers.ts drawRiyalSigns): no font in the document has it yet,
+ * and the renderer's font policy blocks an embedded one. Digit height, in the text's colour.
+ */
+.mm-riyal {
+  display: inline-block;
+  width: 0.67em;
+  height: 0.75em;
+  vertical-align: -0.04em;
+  fill: currentcolor;
+}
+
+/* ------------------------------------------------------------ 1. header */
+
+/* Brand | seller details, 20 px apart (Figma header auto layout). */
+.mm-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+/*
+ * The logo, then the company and its details beside it, left-aligned, both from the top
+ * (user, 2026-10-20). Where there is no room beside the logo, the details go under it.
+ */
+.mm-brand {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* The logo shrinks only when the brand is narrower than the logo itself. */
+.mm-logo {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* The business logo: up to 120 px tall (user request), up to 240 px wide for a wide mark. */
+.mm-logo .mm-logo-image {
+  display: block;
+  max-width: min(240px, 100%);
+  max-height: 120px;
+  object-fit: contain;
+}
+
+/* A logo that failed to load (helpers.ts marks it) gives up its box: the seller block moves up
+   to the edge, as with no logo. */
+.mm-logo:has(.is-broken) {
+  display: none;
+}
+
+/* Any other image that failed to load keeps its box, so nothing moves, but shows no
+   broken-image mark or alt text. */
+.mm-doc img.is-broken {
+  visibility: hidden;
+}
+
+/* The company name, first in the seller block. */
+.mm-brand-name {
+  max-width: 100%;
+  color: var(--mm-strong);
+  font-family: var(--mm-title-font);
+  font-size: calc(var(--mm-font-size-lg) * var(--mm-text-scale, 1));
+  line-height: 1.3333;
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+
+/* The document QR, alone on the right. */
+.mm-header-end {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 100%;
+}
+
+/*
+ * The seller block beside the logo, left-aligned: it takes the room up to the QR, and goes
+ * under the logo when less than 260 px is left there.
+ */
+.mm-seller {
+  display: flex;
+  flex: 1 1 260px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The seller's address under the company name: street, city, state and country, all grey. */
+.mm-seller-address {
+  max-width: 342px;
+  color: var(--mm-muted);
+  overflow-wrap: break-word;
+}
+
+/* The whole address in grey, the street too (user, 2026-10-20). */
+.mm-seller-street {
+  color: var(--mm-muted);
+  font-weight: 400;
+}
+
+.mm-header-qr {
+  flex: none;
+}
+
+/* Every QR code is 120 × 120 (user request): the document, e-invoice and UPI QRs. */
+.mm-qr.mm-header-qr img {
+  width: 120px;
+  height: 120px;
+  border-radius: 8px;
+}
+
+/* GSTIN / PAN / phone / email: the value 500 in ink, its name 400 in grey, as in the details
+   box (user, 2026-10-27); 8 px between items. */
+.mm-id-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--mm-ink);
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------ 2. banner */
+
+.mm-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--mm-accent);
+  color: var(--mm-on-accent);
+}
+
+/* The status tag on the title bar: the shared invoice-status widget's chip, at the s step,
+   after the title (and the copy tag). */
+.mm-status {
+  flex: none;
+}
+
+.mm-status .invoice-tag {
+  margin: 0;
+  font-size: calc(var(--mm-font-size-s) * var(--mm-text-scale, 1));
+  line-height: 1.4545;
+}
+
+/* .mm-banner .mm-banner-title outranks the h2 margin reset. Title, copy tag and status tag sit
+   together at the start, 12 px apart (the banner's gap); the subtitle takes the free space. */
+
+/* The title 20 px on 24 px lines (user, 2026-10-28). */
+.mm-banner .mm-banner-title {
+  min-width: 0;
+  margin-inline-end: 0;
+  font-family: var(--mm-title-font);
+  font-size: calc(var(--mm-font-size-xl) * var(--mm-text-scale, 1));
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.mm-subtitle {
+  min-width: 0;
+  margin-inline-start: auto;
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+  font-weight: 400;
+  overflow-wrap: break-word;
+  text-align: end;
+}
+
+/* The copy tag reads like the subtitle: the same body font, size and weight (user request). */
+.mm-copy {
+  flex: none;
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ 3. invoice details */
+
+/*
+ * Columns share the width, but none shrinks below its content's narrowest form: a value that
+ * cannot wrap (a long invoice number) widens its own cell instead of running into the next,
+ * and the other cells share what is left, wrapping their text.
+ */
+.mm-details {
+  display: grid;
+  grid-template-columns: repeat(
+    var(--mm-detail-columns, 5),
+    minmax(min-content, 1fr)
+  );
+}
+
+/*
+ * Each cell draws its own right and bottom rule; the outer ones land on the box's border and
+ * are clipped by its overflow, so the grid closes whatever the cell count.
+ */
+.mm-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  box-shadow:
+    1px 0 0 var(--mm-line),
+    0 1px 0 var(--mm-line);
+}
+
+.mm-detail .mm-value {
+  color: var(--mm-ink);
+  font-weight: 600; /* user, 2026-10-28 */
+  overflow-wrap: break-word;
+}
+
+/* ------------------------------------------------------------ compliance (IRN / QR) */
+
+/* Shown only once there is an IRN or a QR to show — including one posted in live. */
+
+/* The IRN details start at the box's top, beside the QR (user request). */
+.mm-compliance {
+  display: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+}
+
+.mm-compliance:has(.mm-irn-value:not(:empty)),
+.mm-compliance:has(.mm-compliance-fields .mm-num),
+.mm-compliance:has(.mm-qr:not(.is-empty)) {
+  display: flex;
+}
+
+/* It fills the room beside the QR: its own width does not count (container-type). */
+.mm-compliance-fields {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.mm-irn-row:has(.mm-irn-value:empty) {
+  display: none;
+}
+
+.mm-irn-value {
+  word-break: break-all;
+}
+
+.mm-qr-list {
+  display: flex;
+  flex: none;
+  gap: 12px;
+}
+
+.mm-qr img {
+  display: block;
+  width: 120px;
+  height: 120px;
+  border-radius: 8px;
+}
+
+.mm-qr.is-empty {
+  display: none;
+}
+
+/* ------------------------------------------------------------ paired boxes */
+
+/*
+ * Two equal boxes in one bordered group, equal height, sharing the border between them. A
+ * lone box (its partner switched off) spans the full width; a row with no boxes is not
+ * rendered.
+ */
+.mm-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  border: 1px solid var(--mm-line);
+  border-radius: 6px;
+  background: var(--secondary-background, transparent);
+  overflow: hidden;
+}
+
+.mm-pair-box {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 12px;
+}
+
+.mm-pair-box + .mm-pair-box {
+  border-inline-start: 1px solid var(--mm-line);
+}
+
+.mm-pair-box:only-child {
+  grid-column: 1 / -1;
+}
+
+/* ------------------------------------------------------------ 4–5. parties, dispatch */
+
+/* Bill To | Ship To and Shipped From | Transport: padding 12 (user request), 6 px between lines. */
+.mm-parties > .mm-pair-box,
+.mm-dispatch > .mm-pair-box {
+  gap: 6px;
+  padding: 12px;
+}
+
+/* Party and transport box titles (Billed To, Shipped From …) in the theme colour, like the
+   other section titles. */
+.mm-party-label {
+  color: var(--mm-accent);
+  font-weight: 600;
+}
+
+/* Party boxes: the title 4 px above the name; name, address and the fields 4 px apart (user,
+   2026-10-28). */
+.mm-parties > .mm-party,
+.mm-dispatch > .mm-party {
+  gap: 4px;
+}
+
+.mm-party-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mm-party-name {
+  color: var(--mm-strong);
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+
+.mm-party-address {
+  color: var(--mm-muted);
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+  overflow-wrap: break-word;
+}
+
+.mm-id-label {
+  color: var(--mm-muted);
+  font-weight: 400;
+}
+
+/*
+ * GSTIN | PAN and Phone | Email: both lines share one grid, so the second item of each line
+ * starts at the same place (12 px after the widest first item), 4 px between the lines. Each
+ * column takes the width of its widest entry; a long value wraps instead of overflowing.
+ */
+.mm-id-grid {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  justify-content: start;
+  gap: 4px 12px;
+}
+
+.mm-id-grid > .mm-id-line {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+.mm-id-grid .mm-id {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A field alone on its line (a responsible person, a lone phone) takes the whole line. */
+.mm-id-grid > .mm-id-line > .mm-id:only-child {
+  grid-column: 1 / -1;
+}
+
+/*
+ * Party boxes (Billed To, Shipped To, Shipped From): one field a line, in order, the names in a
+ * column at least 100 px wide, the values 16 px after it. The name column widens to its longest
+ * name ("Responsible Person" on one line) while the values still fit the box; once they reach
+ * the box edge, names and values both wrap, sharing the room (user, 2026-10-28). A narrow box
+ * (A5) lowers the 100 px floor, so a number never runs into the next box.
+ */
+.mm-party-fields {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  gap: 4px 16px; /* rows 4 px apart (user, 2026-10-28) */
+  container-type: inline-size;
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+}
+
+/* The 100 px floor as a spacer, so a word of the name (Responsible) never breaks below it. */
+.mm-field > .mm-label::before {
+  content: "";
+  display: block;
+  width: min(100px, 30cqi);
+  height: 0;
+}
+
+.mm-field {
+  display: contents;
+}
+
+/* No min-width: 0 here: a number keeps its width and the names wrap first. */
+.mm-field > * {
+  overflow-wrap: break-word;
+}
+
+.mm-field .mm-value {
+  color: var(--mm-ink);
+  font-weight: 600; /* user, 2026-10-27: party values stand out from their grey names */
+}
+
+/* An email has no spaces: it breaks anywhere, and only when its column is too narrow. */
+.mm-email {
+  overflow-wrap: anywhere;
+}
+
+/* Label (100 px) + value rows: transport and bank details. */
+.mm-kv-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  column-gap: 16px; /* user, 2026-10-28 */
+}
+
+/*
+ * Two boxes too wide together for the page (an A5 page: the bank's account number and the
+ * totals' figures, each kept on one line) stack, each the full width, rather than push the
+ * totals off the page (stackCrampedPairs; user rule, 2026-10-20: no room left, move below).
+ */
+.mm-summary-row.is-stacked,
+.mm-dispatch.is-stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mm-summary-row.is-stacked > .mm-bank {
+  border-inline-end: 0;
+  border-bottom: 1px solid var(--mm-line);
+}
+
+.mm-dispatch.is-stacked > .mm-pair-box + .mm-pair-box {
+  border-top: 1px solid var(--mm-line);
+  border-inline-start: 0;
+}
+
+/* Shipped From | Transport: a transport number (vehicle, LR, e-way bill) stays on one line, its
+   half widening for it (user rule, 2026-10-20). */
+.mm-transport .mm-kv-row {
+  grid-template-columns: 100px minmax(min-content, 1fr);
+}
+
+.mm-dispatch {
+  grid-template-columns: repeat(2, minmax(min-content, 1fr));
+}
+
+.mm-kv-label {
+  color: var(--mm-muted);
+}
+
+.mm-kv-value {
+  color: var(--mm-strong);
+  font-weight: 600; /* Transport and Bank values at 600, as the party values (user, 2026-10-28) */
+  overflow-wrap: break-word;
+}
+
+/* Rows 4 px apart (user, 2026-10-28); the title stays 6 px above them. */
+.mm-dispatch > .mm-transport {
+  gap: 4px;
+}
+
+.mm-transport > .mm-party-label {
+  margin-bottom: 2px;
+}
+
+/* ------------------------------------------------------------ supply */
+
+/* Place / Country of Supply under Shipped To: cells of its field grid, after its other fields. */
+.mm-party-supply {
+  display: contents;
+}
+
+/* ------------------------------------------------------------ 6. items table */
+
+/* Below the table's minimum width it scrolls inside its own box; the page never does. */
+.mm-items-scroll {
+  overflow-x: auto;
+}
+
+/*
+ * Outline #dcdcdc with 6 px corners, header in the theme with #bddcff dividers, body rows
+ * white / #f9fafc with #d1d6db dividers. Cells 8 × 6; the first and last cell of every row
+ * carry 8 px more (the row's own padding).
+ */
+.mm-items {
+  width: 100%;
+  table-layout: auto;
+  border: 1px solid var(--mm-table-outline);
+  border-radius: 6px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+}
+
+/* Every header and cell: 6 px on each side (user request). */
+.mm-items th,
+.mm-items td {
+  padding: 6px;
+  color: var(--mm-ink);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.mm-items thead th {
+  background: var(--mm-accent);
+  color: var(--mm-on-accent);
+  font-weight: 600;
+  border-inline-end: 1px solid var(--mm-accent-200);
+
+  /* Headers wrap between words and after "/" only — never mid-word. */
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.mm-items thead th:first-child {
+  border-start-start-radius: 5px;
+}
+
+.mm-items thead th:last-child {
+  border-inline-end: 0;
+  border-start-end-radius: 5px;
+}
+
+.mm-items tbody td,
+.mm-items tfoot td {
+  border-top: 1px solid var(--mm-line);
+  border-inline-end: 1px solid var(--mm-cell-line);
+}
+
+.mm-items tbody td:last-child,
+.mm-items tfoot td:last-child {
+  border-inline-end: 0;
+}
+
+.mm-items > :last-child > tr:last-child > td:first-child {
+  border-end-start-radius: 5px;
+}
+
+.mm-items > :last-child > tr:last-child > td:last-child {
+  border-end-end-radius: 5px;
+}
+
+.mm-items tr.is-stripe td {
+  background: var(--mm-stripe);
+}
+
+/* The full-width description row reads as one band: no divider after its empty Sr cell. */
+.mm-items .mm-detail-row > td.mm-col-serial {
+  border-inline-end: 0;
+}
+
+/* A row with a note or images reads from the top. */
+.mm-items tr.is-rich td,
+.mm-items .mm-detail-row td {
+  vertical-align: top;
+}
+
+.mm-items th[data-col="desc"],
+.mm-items td[data-col="desc"] {
+  text-align: start;
+}
+
+/* Holds Description at its minimum share of the table, even when the table scrolls. */
+.mm-desc-min {
+  display: block;
+  height: 0;
+}
+
+/* Item name, amount and the Total row are bold (600); everything else 400. */
+.mm-items td[data-col="amt"],
+.mm-items tfoot td {
+  font-weight: 600;
+}
+
+.mm-items td.mm-col-batch {
+  color: var(--mm-muted);
+}
+
+/* One-word values in text columns (a date, a code) stay on one line. */
+.mm-items td.is-word {
+  white-space: nowrap;
+}
+
+/* Last width fallback: figures 10% smaller. */
+.mm-items.has-small-numbers td .mm-num {
+  font-size: 0.9em;
+}
+
+.mm-items .mm-group-row td {
+  background: var(--mm-title-bar);
+  font-weight: 600;
+  text-align: start;
+}
+
+.mm-item-name {
+  display: block;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Inline codes (SKU, HSN/SAC …) sit side by side under the name, wrapping only when narrow. */
+.mm-item-codes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px;
+}
+
+.mm-item-code {
+  color: var(--mm-muted);
+  font-size: calc(var(--mm-font-size-s) * var(--mm-text-scale, 1));
+  line-height: 1.4545;
+}
+
+/*
+ * A plain block (not flex): the note's lines wrap beside the floated thumbnail, while the
+ * large image and the gallery clear below it at full width.
+ */
+.mm-item-detail {
+  display: block;
+  text-align: start;
+}
+
+/* 12 px between the name and codes and the item's description. */
+.mm-items td[data-col="desc"] .mm-item-detail {
+  margin-top: 12px;
+}
+
+.mm-item-detail > * + * {
+  margin-top: 8px;
+}
+
+/* A single long word (a 60-character code) breaks inside the description. */
+.mm-item-desc {
+  width: 100%;
+  color: var(--mm-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 64 px thumbnail beside the name; the name and note wrap to its left. */
+.mm-item-thumbnail {
+  float: inline-end;
+  margin: 0 0 4px 4px;
+}
+
+/* A column never narrower than the thumbnail and a short word beside it: on a page of many
+   columns it fell to the thumbnail's width and the name broke inside its words ("tes / t"). */
+.mm-items td.mm-col-name:has(> .mm-item-thumbnail)::before {
+  content: "";
+  display: block;
+  width: calc(68px + 4em);
+  height: 0;
+}
+
+/* Item images are square-cornered: thumbnail, large image and the gallery below. */
+.mm-thumbnail {
+  display: block;
+  width: 64px;
+  height: 64px;
+  border-radius: 0;
+  object-fit: cover;
+}
+
+/*
+ * Original images: a row of their own under the item, each filling the table's width at its
+ * own proportions, 8 px apart.
+ */
+.mm-large-image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.mm-large-image + .mm-large-image {
+  margin-top: 8px;
+}
+
+/* Images below: 64 px each, 8 px apart, wrapping to new lines. */
+.mm-items .ceres-image-gallery {
+  clear: both;
+  gap: 8px;
+  padding-top: 0;
+}
+
+.mm-items .ceres-image-gallery .ceres-image {
+  border: 0;
+  border-radius: 0;
+}
+
+.mm-items .ceres-image-gallery-thumbnail .ceres-image {
+  width: 64px;
+  height: 64px;
+}
+
+/* ------------------------------------------------------------ 7. bank + totals */
+
+/*
+ * One bordered container, two equal columns with a divider between them: bank details with
+ * the Scan to Pay QR on the left, totals on the right. With the bank side off, an empty
+ * spacer keeps the totals (then a box of their own) in the right half (spec C3).
+ */
+.mm-summary-row {
+  display: grid;
+
+  /* Equal halves, except that a side widens to keep its numbers on one line (user rule,
+     2026-10-20: a bank value "12345678901 / 12345678901" never wraps or overlaps the totals). */
+  grid-template-columns: repeat(2, minmax(min-content, 1fr));
+  align-items: stretch;
+}
+
+.mm-summary-row:has(> .mm-bank) {
+  border: 1px solid var(--mm-line);
+  border-radius: 6px;
+  background: var(--secondary-background, transparent);
+  overflow: hidden;
+}
+
+.mm-bank {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border-inline-end: 1px solid var(--mm-line);
+}
+
+.mm-totals {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mm-summary-spacer + .mm-totals {
+  border: 1px solid var(--mm-line);
+  border-radius: 6px;
+  background: var(--secondary-background, transparent);
+  overflow: hidden;
+}
+
+.mm-bank-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* "Scan to pay via UPI" over the 120 px QR, centred, on one line (user request). */
+.mm-scan-title {
+  flex: none;
+  min-width: 120px;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.mm-bank-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mm-bank-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/*
+ * One grid for all bank rows: labels share a column at least 100 px wide (wider for a longer
+ * label, so no label wraps), values align 24 px after it. The rows keep
+ * room for an unbroken UPI ID; the QR drops below them when it cannot fit beside.
+ */
+.mm-bank-rows {
+  display: grid;
+  flex: 1 1 240px;
+  grid-template-columns: minmax(100px, max-content) minmax(min-content, 1fr);
+  gap: 4px 16px; /* rows 4 px apart, 16 px to the value (user, 2026-10-28) */
+  align-content: start;
+  min-width: 0;
+}
+
+.mm-bank-rows > .mm-kv-row {
+  display: contents;
+}
+
+/* The seller's GSTIN | PAN, Phone | Email… in the header: two fields a line, each name 12 px
+   before its value, the second field of every line at the same place, lines 4 px apart
+   (user, 2026-10-28). */
+.mm-seller-ids,
+.mm-seller-ids > .mm-id-line {
+  gap: 4px 24px; /* the line's own gap would win over the grid's */
+  min-width: 0;
+}
+
+.mm-seller-ids .mm-id-label {
+  margin-inline-end: 12px;
+}
+
+/* Values at 600, as in the other boxes (user, 2026-10-28); the names stay 400. */
+.mm-seller-ids > .mm-id-line {
+  font-weight: 600;
+}
+
+/* Too narrow two across (stackCrampedFields): one field a line. */
+.mm-seller-ids.is-stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mm-upi-qr {
+  display: block;
+  flex: none;
+  width: 120px;
+  height: 120px;
+  border-radius: 8px;
+}
+
+.mm-upi-note {
+  color: var(--mm-accent);
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+}
+
+/* Totals rows: padding 12, 8 px apart; labels 400 muted, values 600 ink. */
+.mm-totals .ceres-subtotal-table {
+  width: 100%;
+}
+
+.mm-totals .ceres-subtotal-table th,
+.mm-totals .ceres-subtotal-table td {
+  padding: 4px 12px;
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+}
+
+.mm-totals .ceres-subtotal-table:first-child tr:first-child th,
+.mm-totals .ceres-subtotal-table:first-child tr:first-child td {
+  padding-top: 12px;
+}
+
+.mm-totals .ceres-subtotal-row:has(+ .ceres-subtotal-row-grand) > * {
+  padding-bottom: 12px;
+}
+
+.mm-totals .ceres-subtotal-label {
+  color: var(--mm-muted);
+  font-weight: 400;
+}
+
+.mm-totals .ceres-subtotal-value {
+  color: var(--mm-ink);
+  font-weight: 600;
+}
+
+/*
+ * Grand total: a theme bar edge to edge, 12 × 14, label 18/500 and amount 18/800. The label's
+ * fill runs 1 px under the amount cell, so a scaled print or PDF shows no seam between them.
+ */
+.mm-totals .ceres-subtotal-row-grand > .ceres-subtotal-label,
+.mm-totals .ceres-subtotal-row-grand > .ceres-subtotal-value {
+  padding: 12px 14px;
+  border-top: 0;
+  background: var(--mm-accent);
+  box-shadow: 1px 0 0 var(--mm-accent);
+  color: var(--mm-on-accent);
+  font-size: calc(var(--mm-font-size-lg) * var(--mm-text-scale, 1));
+  line-height: 1.3333;
+  vertical-align: middle;
+}
+
+.mm-totals .ceres-subtotal-row-grand > .ceres-subtotal-label {
+  font-weight: 500;
+}
+
+/* The converted amount under the grand total: 600, not the shared widget's 700. */
+.mm-totals .ceres-subtotal-row-grand > .ceres-subtotal-value {
+  font-weight: 600;
+}
+
+.mm-totals .ceres-subtotal-row-grand [data-role="grand-total"] {
+  font-size: calc(var(--mm-font-size-lg) * var(--mm-text-scale, 1));
+  line-height: 1.3333;
+  font-weight: 600;
+}
+
+.mm-totals .ceres-subtotal-row-due > .ceres-subtotal-label,
+.mm-totals .ceres-subtotal-row-due > .ceres-subtotal-value {
+  color: var(--mm-ink);
+  font-weight: 600;
+}
+
+.mm-totals .ceres-subtotal-note,
+.mm-totals .ceres-subtotal-converted,
+.mm-totals .ceres-subtotal-extra {
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+}
+
+/* The widget's own words line is replaced by the one under the grand total. */
+.mm-totals .ceres-subtotal-words {
+  display: none;
+}
+
+.mm-words {
+  padding: 4px 12px;
+  color: var(--mm-strong);
+}
+
+/*
+ * Rows after the grand total (Amount Paid, Due Amount, extra fields) keep the 8 px rhythm of
+ * the rows above it, and a rule separates them from the words line, 8 px either side.
+ */
+.mm-totals :is(.ceres-subtotal-table-extra, .ceres-subtotal-table-due)
+  tr:first-child
+  > * {
+  padding-top: 8px;
+}
+
+.mm-totals :is(.ceres-subtotal-table-extra, .ceres-subtotal-table-due):last-child
+  tr:last-child
+  > * {
+  padding-bottom: 8px;
+}
+
+.mm-totals:has(.ceres-subtotal-table-extra, .ceres-subtotal-table-due) .mm-words {
+  padding-top: 8px;
+  border-top: 1px solid var(--mm-line);
+}
+
+.mm-words-label {
+  color: var(--mm-accent);
+  font-weight: 600;
+}
+
+/*
+ * Optional summaries (tax summary, payments record) when the business turns them on, drawn
+ * like the HSN summary: one rounded outer border (the box), column rules inside only. The
+ * shared widget's own outer cell borders, dark footer rule and section margin are replaced,
+ * so no line is drawn twice. A summary with no rows renders no box at all.
+ */
+.mm-widget-box {
+  overflow-x: auto;
+  border: 1px solid var(--mm-line);
+  border-radius: 6px;
+  background: var(--secondary-background, transparent);
+}
+
+.mm-widget-box:not(:has(.ceres-table)) {
+  display: none;
+}
+
+.mm-widget-table .ceres-table-section {
+  margin: 0;
+  overflow: visible;
+}
+
+/*
+ * Columns share the width evenly. Below 560 px the table keeps that width and scrolls in its
+ * box, so figures never squeeze out of their cells.
+ */
+.mm-widget-table .ceres-table {
+  width: 100%;
+  min-width: 560px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+}
+
+/*
+ * An equal share per column (user request), counted from the first body row, whatever the
+ * cells hold: the layout is fixed, so the first row's widths decide. A tax heading spans its
+ * Rate and Amount, two shares; the shares add up to the whole width, so the extra columns the
+ * tax summary's words line opens (colspan="99") get none.
+ */
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(2):last-child)
+  :is(th, td):not([colspan]) {
+  width: 50%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(3):last-child)
+  :is(th, td):not([colspan]) {
+  width: 33.3333%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(4):last-child)
+  :is(th, td):not([colspan]) {
+  width: 25%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(5):last-child)
+  :is(th, td):not([colspan]) {
+  width: 20%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(6):last-child)
+  :is(th, td):not([colspan]) {
+  width: 16.6667%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(7):last-child)
+  :is(th, td):not([colspan]) {
+  width: 14.2857%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(8):last-child)
+  :is(th, td):not([colspan]) {
+  width: 12.5%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(9):last-child)
+  :is(th, td):not([colspan]) {
+  width: 11.1111%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(10):last-child)
+  :is(th, td):not([colspan]) {
+  width: 10%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(3):last-child)
+  [colspan="2"] {
+  width: 66.6667%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(4):last-child)
+  [colspan="2"] {
+  width: 50%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(5):last-child)
+  [colspan="2"] {
+  width: 40%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(6):last-child)
+  [colspan="2"] {
+  width: 33.3333%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(7):last-child)
+  [colspan="2"] {
+  width: 28.5714%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(8):last-child)
+  [colspan="2"] {
+  width: 25%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(9):last-child)
+  [colspan="2"] {
+  width: 22.2222%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])
+  .ceres-table:has(tbody tr:first-child > :nth-child(10):last-child)
+  [colspan="2"] {
+  width: 20%;
+}
+
+/*
+ * Every column but the first is centred; cells 6 px on every side, as in the items table.
+ * The columns are equal, so a long entry wraps in its own cell: between words, and anywhere
+ * only when one word (an email, a long code) is wider than the column.
+ */
+.mm-widget-table .ceres-table th,
+.mm-widget-table .ceres-table td {
+  padding: 6px;
+  border: 0;
+  border-bottom: 1px solid var(--mm-line);
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.mm-widget-table .ceres-table th + th,
+.mm-widget-table .ceres-table td + td {
+  border-inline-start: 1px solid var(--mm-line);
+}
+
+.mm-widget-table .ceres-table thead th {
+  background: var(--mm-title-bar);
+  color: var(--mm-accent);
+  font-weight: 600;
+}
+
+/*
+ * Two heading rows (the tax summary): "Tax Rate" and "Total" span both, so no rule between a
+ * heading and its blank cell. A single heading row (payment record) keeps its rule.
+ */
+.mm-widget-table .ceres-table thead tr:first-child:not(:only-child) th:not([colspan]) {
+  border-bottom-color: transparent;
+}
+
+.mm-widget-table .ceres-table tbody tr:nth-child(even) {
+  background: var(--mm-stripe);
+}
+
+.mm-widget-table .ceres-table tfoot td {
+  font-weight: 600;
+}
+
+/* The box draws the outer edge, so the last row closes without a rule of its own. */
+.mm-widget-table .ceres-table > :last-child > tr:last-child > * {
+  border-bottom: 0;
+}
+
+.mm-widget-table .ceres-table th:first-child,
+.mm-widget-table .ceres-table td:first-child,
+.mm-widget-table .ceres-table-words {
+  text-align: start;
+  white-space: normal;
+}
+
+/* A figure or a date (labelSummaryCells) stays on one line; its column widens for it (user rule,
+   2026-10-20: "Sep 15, 2026" and "26-Dec-2025" broke over lines at tablet width). */
+.mm-widget-table .ceres-table td[data-mm-figure] {
+  white-space: nowrap;
+}
+
+/* The tax summary's Total column reads from the right, heading included (user request). */
+
+/*
+ * The tax summary's Tax Rate column as narrow as the HSN summary's HSN column above it (user,
+ * 2026-10-20: one share of the HSN summary's equal columns); each tax's Rate and Amount and the
+ * Total share the rest equally. The layout is fixed, so the first heading row's widths decide.
+ */
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(3):last-child)
+  thead
+  tr:first-child
+  > :first-child {
+  width: 25%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(3):last-child)
+  thead
+  tr:first-child
+  > [colspan="2"] {
+  width: 75%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(3):last-child)
+  thead
+  tr:first-child
+  > :not(:first-child, [colspan]) {
+  width: 37.5%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(4):last-child)
+  thead
+  tr:first-child
+  > :first-child {
+  width: 20%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(4):last-child)
+  thead
+  tr:first-child
+  > [colspan="2"] {
+  width: 53.3333%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(4):last-child)
+  thead
+  tr:first-child
+  > :not(:first-child, [colspan]) {
+  width: 26.6667%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(5):last-child)
+  thead
+  tr:first-child
+  > :first-child {
+  width: 16.6667%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(5):last-child)
+  thead
+  tr:first-child
+  > [colspan="2"] {
+  width: 41.6667%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(5):last-child)
+  thead
+  tr:first-child
+  > :not(:first-child, [colspan]) {
+  width: 20.8333%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(6):last-child)
+  thead
+  tr:first-child
+  > :first-child {
+  width: 14.2857%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(6):last-child)
+  thead
+  tr:first-child
+  > [colspan="2"] {
+  width: 34.2857%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(6):last-child)
+  thead
+  tr:first-child
+  > :not(:first-child, [colspan]) {
+  width: 17.1429%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(7):last-child)
+  thead
+  tr:first-child
+  > :first-child {
+  width: 12.5%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(7):last-child)
+  thead
+  tr:first-child
+  > [colspan="2"] {
+  width: 29.1667%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(7):last-child)
+  thead
+  tr:first-child
+  > :not(:first-child, [colspan]) {
+  width: 14.5833%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(8):last-child)
+  thead
+  tr:first-child
+  > :first-child {
+  width: 11.1111%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(8):last-child)
+  thead
+  tr:first-child
+  > [colspan="2"] {
+  width: 25.3968%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(8):last-child)
+  thead
+  tr:first-child
+  > :not(:first-child, [colspan]) {
+  width: 12.6984%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(9):last-child)
+  thead
+  tr:first-child
+  > :first-child {
+  width: 10%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(9):last-child)
+  thead
+  tr:first-child
+  > [colspan="2"] {
+  width: 22.5%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(9):last-child)
+  thead
+  tr:first-child
+  > :not(:first-child, [colspan]) {
+  width: 11.25%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(10):last-child)
+  thead
+  tr:first-child
+  > :first-child {
+  width: 9.0909%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(10):last-child)
+  thead
+  tr:first-child
+  > [colspan="2"] {
+  width: 20.202%;
+}
+
+.mm-widget-table:not([data-ceres-batch-summary])[data-ceres-tax-summary]
+  .ceres-table:has(tbody tr:first-child > :nth-child(10):last-child)
+  thead
+  tr:first-child
+  > :not(:first-child, [colspan]) {
+  width: 10.101%;
+}
+
+/*
+ * The Batch Summary keeps columns sized by their content (user request): a long item name
+ * takes the room it needs and wraps between words; a short column (Qty) stays narrow.
+ */
+[data-ceres-batch-summary] .ceres-table {
+  table-layout: auto;
+}
+
+[data-ceres-batch-summary] .ceres-table th,
+[data-ceres-batch-summary] .ceres-table td {
+  overflow-wrap: break-word;
+}
+
+/*
+ * The Payments table keeps its earlier layout (user request): columns sized by their content
+ * around the equal shares, each entry on one line.
+ */
+[data-ceres-payment-table] .ceres-table {
+  table-layout: auto;
+}
+
+[data-ceres-payment-table] .ceres-table th,
+[data-ceres-payment-table] .ceres-table td {
+  overflow-wrap: normal;
+}
+
+/*
+ * Its words (headings, the mode, the account) wrap between them only when the entries need
+ * the room (a tablet, an A5 page: "Transaction Charge" was cut at the page edge), so the table
+ * never runs out of its box; its dates and amounts never wrap (td[data-mm-figure]).
+ */
+
+[data-ceres-tax-summary] .ceres-table thead tr:first-child > :last-child,
+[data-ceres-tax-summary] .ceres-table :is(tbody, tfoot) tr > :last-child:not([colspan]) {
+  text-align: end;
+}
+
+.mm-widget-table .ceres-table .ceres-table-words {
+  color: var(--mm-muted);
+  font-weight: 400;
+}
+
+.mm-widget-table .ceres-table-heading,
+.mm-hsn .ceres-table-heading {
+  margin: 0;
+  padding: 6px;
+  border-bottom: 1px solid var(--mm-line);
+  color: var(--mm-accent);
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------ 8–10. terms, notes, info */
+
+/* Text boxes: 12 px between groups, 8 px between a title and its content. */
+.mm-note-block {
+  gap: 12px;
+  color: var(--mm-muted);
+}
+
+.mm-notes-row {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
+.mm-note-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mm-terms,
+.mm-attachments {
+  padding: 0;
+  list-style-position: inside;
+}
+
+/*
+ * Running text reads looser than labels and figures (user request): terms, attachments, notes
+ * and item descriptions take 22 px lines at 13 px (1.6923), and their points sit 4 px apart.
+ */
+.mm-terms,
+.mm-attachments,
+.mm-note-body,
+.mm-item-desc {
+  line-height: 1.6923;
+}
+
+.mm-terms > li + li,
+.mm-attachments > li + li,
+.mm-doc .mm-note-body .toastui-editor-contents li + li,
+.mm-doc .mm-item-desc .toastui-editor-contents li + li {
+  margin-top: 4px;
+}
+
+/*
+ * One line per file (user request): a name wider than the box is cut off with "…" at its
+ * edge, and the full name shows on hover.
+ */
+.mm-attachments > li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mm-attachments a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.mm-note-body {
+  overflow-wrap: break-word;
+}
+
+/*
+ * Additional Info: one grid for all rows, like the bank details. The label column takes the
+ * longest label (100 px at the least, half the box at most), so a label wraps only when it
+ * cannot fit (user request); 8 px to the value, rows 6 px apart; values wrap.
+ */
+.mm-info-rows {
+  display: grid;
+  grid-template-columns: fit-content(50%) minmax(0, 1fr);
+  gap: 6px 8px;
+}
+
+.mm-info-row {
+  display: contents;
+}
+
+.mm-info-label {
+  min-width: 100px;
+  color: var(--mm-muted);
+  font-weight: 400;
+  overflow-wrap: break-word;
+}
+
+.mm-info-value {
+  color: var(--mm-strong);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The markdown viewer hydrates after the template's CSS and brings its own stylesheet; these
+ * selectors outrank it, so descriptions and notes read the same whichever loads first.
+ */
+.mm-doc .mm-item-desc .toastui-editor-contents,
+.mm-doc .mm-note-body .toastui-editor-contents {
+  max-width: 100%;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.mm-doc .mm-item-desc .toastui-editor-contents *:not(table),
+.mm-doc .mm-note-body .toastui-editor-contents *:not(table) {
+  line-height: inherit;
+}
+
+.mm-doc .mm-item-desc .toastui-editor-contents :is(p, ul, ol, li, h1, h2, h3, h4, h5, h6),
+.mm-doc .mm-note-body .toastui-editor-contents :is(p, ul, ol, li, h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/*
+ * Paragraphs (a blank line in the text) stay visibly apart: 8 px between blocks. The :is()
+ * matches the reset above in specificity, so this later rule wins.
+ */
+.mm-doc
+  .mm-item-desc
+  .toastui-editor-contents
+  > * + :is(p, ul, ol, h1, h2, h3, h4, h5, h6, blockquote, pre, table, div),
+.mm-doc
+  .mm-note-body
+  .toastui-editor-contents
+  > * + :is(p, ul, ol, h1, h2, h3, h4, h5, h6, blockquote, pre, table, div) {
+  margin-top: 8px;
+}
+
+/*
+ * A table written into a description or note is headed like the summary tables (user
+ * request): the grey title bar, bold accent text and the same rules, not the viewer's dark bar.
+ */
+.mm-doc .mm-item-desc .toastui-editor-contents th,
+.mm-doc .mm-note-body .toastui-editor-contents th {
+  border-color: var(--mm-line);
+  background: var(--mm-title-bar);
+  color: var(--mm-accent);
+  font-weight: 600;
+}
+
+/* Its headings and cells read from the left (user request), not centred. */
+.mm-doc .mm-item-desc .toastui-editor-contents :is(th, td),
+.mm-doc .mm-note-body .toastui-editor-contents :is(th, td) {
+  text-align: start;
+}
+
+/* Bullets and list numbers in the text's own colour (user request), not the viewer's grey. */
+.mm-doc .mm-item-desc .toastui-editor-contents ul > li::before,
+.mm-doc .mm-note-body .toastui-editor-contents ul > li::before {
+  background-color: currentcolor;
+}
+
+.mm-doc .mm-item-desc .toastui-editor-contents ol > li::before,
+.mm-doc .mm-note-body .toastui-editor-contents ol > li::before {
+  color: inherit;
+}
+
+.mm-doc .mm-item-desc .toastui-editor-contents :is(ul, ol),
+.mm-doc .mm-note-body .toastui-editor-contents :is(ul, ol) {
+  padding-inline-start: 16px;
+}
+
+/* ------------------------------------------------------------ 13. HSN summary */
+
+/* Header #f5f7fa, cells 6 × 8 px, the same at the row ends (user request); columns share the
+   width evenly. */
+.mm-hsn-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
+  line-height: 1.5385;
+}
+
+/* Every column but the first (HSN/SAC) is centred. */
+.mm-hsn-table th,
+.mm-hsn-table td {
+  padding: 6px;
+  border-bottom: 1px solid var(--mm-line);
+  color: var(--mm-ink);
+  text-align: center;
+}
+
+.mm-hsn-table th + th,
+.mm-hsn-table td + td {
+  border-inline-start: 1px solid var(--mm-line);
+}
+
+/* Each tax's Rate | Amount under its name (refrens.com): the second header row's first cell
+   starts after the two-row HSN and Taxable Value headings, so it draws its own rule. */
+.mm-hsn-table thead tr + tr th {
+  border-inline-start: 1px solid var(--mm-line);
+}
+
+.mm-hsn-table thead th {
+  background: var(--mm-title-bar);
+  color: var(--mm-accent);
+  font-weight: 600;
+}
+
+.mm-hsn-table .is-text {
+  text-align: start;
+}
+
+/* The Total column reads from the right, heading included (user request). */
+.mm-hsn-table thead tr:first-child > :last-child,
+.mm-hsn-table :is(tbody, tfoot) tr > :last-child:not([colspan]) {
+  text-align: end;
+}
+
+.mm-hsn-table tbody tr:nth-child(even) td {
+  background: var(--mm-stripe);
+}
+
+.mm-hsn-table tfoot td {
+  font-weight: 600;
+}
+
+/* The tax in words: one muted line across the table, closing it. */
+.mm-hsn-table .mm-hsn-words td {
+  border-bottom: 0;
+  color: var(--mm-muted);
+  font-weight: 400;
+  text-align: start;
+}
+
+/* Hide totals / hide total in words, at render or live from Lydia (data-ceres-total-in-words). */
+.mm-words:is(.is-hidden-by-totals, .is-hidden-by-words-setting) {
+  display: none;
+}
+
+/* Every row hidden (hide totals): no empty totals box either. */
+.mm-totals:not(:has(.ceres-subtotal-row:not(.is-hidden-by-totals, .is-hidden-by-taxes), .mm-words:not(.is-hidden-by-totals, .is-hidden-by-words-setting))) {
+  display: none;
+}
+
+/* ------------------------------------------------------------ 14. signature */
+
+/* The usual 16 px section gap above it (user request: one spacing scale), right-aligned. */
+.mm-signature-section {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/*
+ * As wide as its widest line (user request): "For <company>" and the designation stay on
+ * one line and the rule above them spans the text, 240 px at the least; only a name wider
+ * than the page wraps.
+ */
+.mm-signature {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: max-content;
+  min-width: min(240px, 100%);
+  max-width: 100%;
+  text-align: end;
+}
+
+.mm-signature-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+
+.mm-signature-image {
+  display: block;
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+}
+
+/* Kept in the DOM so the PDF pipeline can measure where the digital signature goes. */
+.mm-signature-placeholder {
+  width: 160pt;
+  height: 90pt;
+  visibility: hidden;
+}
+
+.mm-signature-banner {
+  color: var(--mm-accent);
+  font-weight: 600;
+}
+
+.mm-signature-line {
+  width: 100%;
+  margin-bottom: 8px;
+  border-top: 1px solid var(--mm-line);
+}
+
+/* Company 12/700 #1e293b, designation 12/400 #64748b, 2 px apart. */
+.mm-signature-for {
+  color: var(--mm-signature-ink);
+  font-weight: 600;
+}
+
+.mm-signature-label {
+  margin-top: 2px;
+  color: var(--mm-signature-muted);
+}
+
+/* ------------------------------------------------------------ footer */
+
+/* The enquiry line reads in the main text colour, like the rest of the document. */
+.mm-contact {
+  color: var(--mm-ink);
+  text-align: center;
+}
+
+/* ------------------------------------------------------------ right to left */
+
+/*
+ * Lydia's "Change Script" with right-to-left on (dir="rtl" on the page): the layout mirrors
+ * through the logical properties above. Figures, dates, codes, emails and phone numbers keep
+ * their left-to-right order ("15-Sep-2026", not "Sep-2026-15"). Field labels take the
+ * direction of their own text, so an English label keeps its full stop at its end ("Invoice
+ * No.") and an Arabic one reads right to left; both sit on the right, the start of the line.
+ */
+.mm-doc[dir="rtl"] :is(.mm-num, .mm-email) {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.mm-doc[dir="rtl"] :is(.mm-detail > .mm-value, .mm-detail > .mm-label, .mm-field > .mm-value, .mm-field > .mm-label, .mm-kv-label, .mm-kv-value, .mm-info-label, .mm-info-value) {
+  text-align: right;
+}
+
+/*
+ * "PAN: AAVFV1234H" reads as one line in the direction of its own label, as do the labels and
+ * the centred Sr. heading ("Sr.", not ".Sr").
+ */
+.mm-doc[dir="rtl"] :is(.mm-detail > .mm-label, .mm-field > .mm-label, .mm-kv-label, .mm-info-label, .mm-id, .mm-items th.mm-col-serial) {
+  unicode-bidi: plaintext;
+}
+
+/* ------------------------------------------------------------ narrow previews */
+
+/* Screen only: the iframe viewport is the document width. */
+@media screen and (width <= 640px) {
+  .mm-doc {
+    --mm-gutter: 16px;
+  }
+
+  .mm-header {
+    flex-direction: column;
+  }
+
+  .mm-header-end {
+    flex-wrap: wrap;
+  }
+
+  .mm-seller {
+    flex: 1 1 200px;
+    align-items: flex-start;
+    width: auto;
+    min-width: 0;
+    text-align: start;
+  }
+
+  .mm-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Too narrow for aligned columns: each line wraps on its own. */
+  .mm-id-grid {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mm-id-grid > .mm-id-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  .mm-pair,
+  .mm-summary-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Stacked, each box of a pair hugs its own content (user request; spec K2 matched them). */
+  .mm-pair {
+    grid-auto-rows: auto;
+  }
+
+  .mm-pair-box + .mm-pair-box {
+    border-top: 1px solid var(--mm-line);
+    border-inline-start: 0;
+  }
+
+  /* Bank above totals, in the same box. */
+  .mm-bank {
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--mm-line);
+  }
+
+  .mm-summary-spacer {
+    display: none;
+  }
+}
+
+/*
+ * Narrow previews: up to nine columns of unbroken figures (each tax's Rate and Amount) cannot
+ * fit, and nothing outside the items table may scroll (spec K6), so each HSN row becomes a
+ * small card of label / value lines.
+ */
+@media screen and (width <= 640px) {
+  .mm-hsn-table thead {
+    display: none;
+  }
+
+  .mm-hsn-table,
+  .mm-hsn-table tbody,
+  .mm-hsn-table tfoot,
+  .mm-hsn-table tr {
+    display: block;
+    width: 100%;
+  }
+
+  .mm-hsn-table tr {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--mm-line);
+  }
+
+  .mm-hsn-table tfoot tr:last-child {
+    border-bottom: 0;
+  }
+
+  .mm-hsn-table td,
+  .mm-hsn-table td + td,
+  .mm-hsn-table .is-text,
+  .mm-hsn-table .is-num,
+  .mm-hsn-table tr > :first-child,
+  .mm-hsn-table tr > :last-child {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 2px 0;
+    border: 0;
+    background: none;
+    text-align: end;
+  }
+
+  .mm-hsn-table td[data-label]::before {
+    color: var(--mm-muted);
+    font-weight: 400;
+    content: attr(data-label);
+    text-align: start;
+  }
+
+  .mm-hsn-table tbody tr:nth-child(even) {
+    background: var(--mm-stripe);
+  }
+
+  .mm-hsn-table .mm-hsn-words td {
+    display: block;
+    text-align: start;
+  }
+
+  /* The Total row's empty Rate cells: nothing to read on a card. */
+  .mm-hsn-table td.mm-hsn-rate {
+    display: none;
+  }
+
+  /*
+   * Tax Summary, Batch Summary and Payments the same way (user, 2026-10-20): a card per row,
+   * each value beside its column's heading (labelSummaryCells), the Total row titled by its
+   * first cell, empty cells left off.
+   */
+  .mm-doc .mm-widget-table .ceres-table thead {
+    display: none;
+  }
+
+  .mm-doc .mm-widget-table .ceres-table,
+  .mm-doc .mm-widget-table .ceres-table tbody,
+  .mm-doc .mm-widget-table .ceres-table tfoot,
+  .mm-doc .mm-widget-table .ceres-table tr {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .mm-doc .mm-widget-table .ceres-table tr {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--mm-line);
+  }
+
+  .mm-doc .mm-widget-table .ceres-table > :last-child > tr:last-child {
+    border-bottom: 0;
+  }
+
+  .mm-doc .mm-widget-table .ceres-table td,
+  .mm-doc .mm-widget-table .ceres-table td + td,
+  .mm-doc .mm-widget-table .ceres-table td:first-child {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100% !important; /* over the equal column shares, whose :has() outranks this */
+    padding: 2px 0;
+    border: 0;
+    background: none;
+    text-align: end;
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+
+  .mm-doc .mm-widget-table .ceres-table td[data-label]::before {
+    flex: 0 1 auto;
+    max-width: 50%;
+    color: var(--mm-muted);
+    font-weight: 400;
+    content: attr(data-label);
+    text-align: start;
+  }
+
+  .mm-doc .mm-widget-table .ceres-table td:not([data-label]),
+  .mm-doc .mm-widget-table .ceres-table .ceres-table-words {
+    display: block;
+    text-align: start;
+  }
+
+  .mm-doc .mm-widget-table .ceres-table td[data-mm-empty] {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ print / PDF */
+
+/*
+ * Print at true size (design-to-template §4a): 13 px body text prints at 13 px, nothing below
+ * 10 px. The page fills the printable width; the template applies no zoom of its own, so the
+ * renderer's print size setting (Lydia's zoomSize) is what scales a printout. Margins stay
+ * with Lydia (the business's xMargins), the browser or the PDF service: none of the page's own.
+ */
+@media print {
+  .mm-doc {
+    /* Every text size prints as on screen, headings too (user, 2026-10-21: print 1:1). */
+
+    /* The paper's margins give the space on paper: no gutter of the page's own. */
+    --mm-gutter: 0px;
+
+    width: 100%;
+
+    /* Never wider than the paper's printable width (helpers.ts printWidth): Refrens' PDF
+       service lays the page out in a window wider than the paper before it prints, and the
+       table fitted there was clipped on the page (user report). */
+    max-width: var(--mm-print-width, none);
+
+    /* Centred: a browser's own print keeps 1 cm margins, so a document set to wider ones
+       (xMargins 2) sits in the middle of the page rather than against its left edge. */
+    margin: 0 auto;
+  }
+
+  /*
+   * The planner's column widths are for the 1000 px screen canvas: on paper the table sizes
+   * itself to the page, never wider than its content needs.
+   */
+  .mm-doc .mm-items th[style] {
+    width: auto !important;
+  }
+
+
+  .mm-desc-min {
+    display: none;
+  }
+
+  /*
+   * A table wider than its page (fitPrintTable, measured once the print layout applies) takes
+   * tight padding, then its text shrinks just enough to fit by --mm-print-fit, never under the
+   * 10 px floor (ported from the Ecommerce template; it was cut off at the page edge).
+   */
+  .mm-items.is-print-fit :is(th, td) {
+    padding-right: 4px;
+    padding-left: 4px;
+    font-size: inherit;
+  }
+
+  .mm-items.is-print-fit {
+    font-size: max(10px, calc(var(--mm-font-size-base) * var(--mm-text-scale, 1) * var(--mm-print-fit, 1)));
+  }
+
+  .mm-items.is-print-fit .mm-item-code {
+    font-size: max(10px, calc(var(--mm-font-size-s) * var(--mm-text-scale, 1) * var(--mm-print-fit, 1)));
+  }
+
+  /* Still wider at the 10 px floor (many columns on A5, a large print zoom): the whole table
+     scales down just enough rather than lose its edge (user rule, 2026-10-20: nothing cut off
+     or overlapping). Its split-off Total table carries the same style. */
+  .mm-items.is-print-fit {
+    zoom: var(--mm-print-squeeze, 1);
+  }
+
+  /* The summary tables (HSN, Tax, Batch, Payments) take the page's width, not their 560 px
+     screen minimum, and one still wider than the page (an A5 page) scales down just enough
+     (fitSummaryTables) rather than lose its last column at the page edge. */
+  .mm-widget-table .ceres-table {
+    min-width: 0;
+  }
+
+  :is(.mm-widget-table .ceres-table, .mm-hsn-table).is-print-fit {
+    zoom: var(--mm-print-squeeze, 1);
+  }
+
+  /* clip is not a scroll container, so a preview scroll offset cannot shift the printout. */
+  .mm-items-scroll,
+  .mm-widget-box {
+    overflow: clip;
+  }
+
+  /* Column headings repeat on every page a table spans; its totals print once, at the end. */
+  .mm-items thead,
+  .mm-hsn-table thead,
+  .mm-widget-box .ceres-table thead {
+    display: table-header-group;
+  }
+
+  .mm-items tfoot,
+  .mm-hsn-table tfoot {
+    display: table-row-group;
+  }
+
+  .mm-items tr,
+  .mm-hsn-table tr,
+  .mm-widget-box .ceres-table tr {
+    break-inside: avoid;
+  }
+
+  /* Each line item prints whole: its description and image rows move to the next page with
+     it (user rule, 2026-10-19). */
+  .mm-items .mm-detail-row,
+  .mm-items .mm-image-row {
+    break-before: avoid;
+  }
+
+  /* An item's original images never taller than 55 % of a page, in proportion, so an item
+     and its images print together on one page (user, 2026-10-19; as the Viraj template). */
+  .mm-large-image {
+    max-height: var(--mm-photo-cap, 600px); /* 55 % of the paper (helpers photoCap), never vh */
+    object-fit: contain;
+  }
+
+  /* A table in a description or note breaks between its rows, its headings repeated at the top
+     of every page it spans (user, 2026-10-19). */
+  .mm-doc :is(.mm-item-desc, .mm-note-body) .toastui-editor-contents thead {
+    display: table-header-group;
+  }
+
+  .mm-doc :is(.mm-item-desc, .mm-note-body) .toastui-editor-contents tr {
+    break-inside: avoid;
+  }
+
+  /*
+   * A table split across pages would draw its outline down to the foot of the page. The
+   * cells draw it instead, and every row closes with its own bottom rule, so each page's
+   * table ends right under its last row.
+   */
+  .mm-items {
+    border: 0;
+  }
+
+  .mm-items tr > th:first-child,
+  .mm-items tr > td:first-child {
+    border-inline-start: 1px solid var(--mm-table-outline);
+  }
+
+  .mm-items tr > th:last-child,
+  .mm-items tr > td:last-child {
+    border-inline-end: 1px solid var(--mm-table-outline);
+  }
+
+  .mm-items tbody td,
+  .mm-items tfoot td {
+    border-top: 0;
+    border-bottom: 1px solid var(--mm-line);
+  }
+
+  .mm-items > :last-child > tr:last-child > td {
+    border-bottom-color: var(--mm-table-outline);
+  }
+
+  /* A row cut by a page break (an item taller than what is left of the page) closes with a
+     rule at the page's foot, and every page's piece of the table with it (user rule,
+     2026-10-20): the cells' own borders end open there. The items wrapper draws that rule on
+     each page's piece (box-decoration-break: clone); on the last piece the table's own
+     bottom rule lies over it. */
+  .mm-items-scroll {
+    border-bottom: 1px solid var(--mm-table-outline);
+    /* stylelint-disable-next-line property-no-vendor-prefix -- Chrome before 130 needs it */
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .mm-items-scroll > :last-child {
+    margin-bottom: calc(-1 * 1px);
+  }
+
+  /* Boxes and short sections never split across pages; a heading stays with its content. */
+  .mm-header,
+  .mm-banner,
+  .mm-details,
+  .mm-box,
+  .mm-pair,
+  .mm-summary-row,
+  .mm-doc > .mm-letterhead-footer {
+    /* Boxes move to a page whole; so does the footer (helpers.ts sets it on the edge). */
+    break-inside: avoid;
+  }
+
+  /* The status tag prints only when the document asks for it (showStatusTagInPrint). */
+  .mm-status.no-print {
+    display: none;
+  }
+
+  /* A stretched last row (fullHeightTable, helpers.ts) keeps its text at the top. */
+  .mm-items > tbody > tr[data-mm-stretched] > td {
+    vertical-align: top;
+  }
+
+  .mm-signature-section {
+    break-inside: avoid;
+  }
+
+  .mm-section-title {
+    break-after: avoid-page;
+  }
+
+  /*
+   * Footer on every page (pdfOptions.footerOnLastPage off): the real footer is fixed to the
+   * foot of each printed page, and the frame's repeating <tfoot> holds an invisible copy of
+   * it, so content stops above it on every page. Last page only: it follows the content.
+   */
+  .mm-page-frame {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .mm-page-frame > tbody {
+    display: table-row-group;
+  }
+
+  .mm-page-frame-footer {
+    display: table-footer-group;
+  }
+
+  /* The letterhead on every page, 16 px above that page's content. */
+  .mm-page-frame-header {
+    display: table-header-group;
+  }
+
+  .mm-page-frame > .mm-page-frame-header > tr > td {
+    padding-bottom: 16px;
+  }
+
+  .mm-page-frame > * > tr {
+    display: table-row;
+  }
+
+  .mm-page-frame > * > tr > td {
+    display: table-cell;
+    padding: 0;
+    vertical-align: top;
+  }
+
+  .mm-page-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .mm-footer-spacer {
+    padding-top: 16px;
+    visibility: hidden;
+  }
+
+  .mm-doc .mm-footer-spacer.is-empty {
+    display: none;
+  }
+
+  /*
+   * Fixed to the foot of every page, edge to edge of the printable area. The template
+   * declares no page box (it would break Lydia's Pageless PDF), so the paper's own margin,
+   * if the print dialog or PDF service sets one, stays outside it.
+   */
+  .mm-letterhead-footer.mm-footer-fixed {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  /* Under a quarter of the page each (helpers repeatedBandCap), or Chrome stops repeating the
+     frame's copies and the fixed footer prints over the content: a taller image keeps its
+     proportions, centred. */
+  .mm-doc :is(.mm-page-frame-header .mm-letterhead, .mm-footer-spacer, .mm-footer-fixed) img {
+    max-height: var(--mm-band-cap, none);
+    object-fit: contain;
+  }
+
+  /* The PDF service draws the letterhead and footer itself. */
+  body[class~="isDibella"]
+    .mm-doc
+    .no-dibella:is(.invoice-letterhead, .invoice-letterhead-footer) {
+    display: none;
+  }
+}
+
+/*
+ * A box split by a page break closes at the foot of the page and opens again at the top of the
+ * next: its border, corners and padding are drawn on each piece (user, 2026-10-19).
+ */
+@media print {
+  :is(.mm-box, .mm-pair, .mm-pair-box, .mm-bank, .mm-summary-row, .mm-widget-box) {
+    box-decoration-break: clone;
+  }
+}
+
+/*
+ * In print the totals sit in a table of their own under the items (helpers.ts splitTotals), so a
+ * page holding only them repeats no item headings. It overlaps the item table by one rule, so
+ * the two meet on a single line.
+ */
+@media print {
+  .mm-items[data-mm-totals-split] {
+    margin-top: calc(-1 * 1px);
+  }
+
+  /* One solid ground under the totals, so no hairline seams show between their empty cells. */
+  .mm-items[data-mm-totals-split] {
+    background-color: var(--primary-background, #fff);
+  }
+}
+
+/* ------------------------------------------------------------ phones and tablets */
+
+/*
+ * On a phone or tablet screen the item table no longer scrolls sideways (user request,
+ * 2026-10-20, after Refrens' own invoice pages). fitItemsToScreen (helpers.ts) chooses: on a
+ * screen up to 640 px each item reads as a card (is-cards), like the HSN rows above: its
+ * number and name across the top, its codes and description under them, then each column's
+ * figure on a line of its own beside the column's heading, the last one (the amount) bold,
+ * every other card striped. Narrower than an A4 page (794 px) the table stays as on paper
+ * while it fits; one that would scroll keeps its headings in a row with each item's name and
+ * description across the full width above its figures (is-grid), or reads as cards when it has
+ * more than eight figure columns. Print keeps the table as it is. The rules start at
+ * .mm-items-scroll so they outrank the table's own.
+ */
+@media screen {
+  .mm-doc .mm-items-scroll:has(> .mm-items:is(.is-cards, .is-grid)) {
+    overflow-x: visible;
+  }
+
+  .mm-doc .mm-items-scroll .mm-items:is(.is-cards, .is-grid),
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    > :is(thead, tbody, tfoot),
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    > :is(thead, tbody, tfoot)
+    > tr,
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    > :is(thead, tbody, tfoot)
+    > tr
+    > :is(th, td) {
+    display: block;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    > :is(thead, tbody, tfoot)
+    > tr
+    > :is(th, td) {
+    border: 0;
+    border-radius: 0;
+    background: none;
+    text-align: start;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    > :is(tbody, tfoot)
+    > tr
+    + tr,
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    > tbody
+    + tfoot
+    > tr:first-child {
+    border-top: 1px solid var(--mm-line);
+  }
+
+  .mm-doc .mm-items-scroll .mm-items:is(.is-cards, .is-grid) .mm-desc-min {
+    display: none;
+  }
+
+  .mm-doc .mm-items-scroll .mm-items:is(.is-cards, .is-grid) tr.is-stripe {
+    background: var(--mm-stripe);
+  }
+
+  .mm-doc .mm-items-scroll .mm-items:is(.is-cards, .is-grid) .mm-group-row {
+    background: var(--mm-title-bar);
+    font-weight: 600;
+  }
+
+  /* An item card: number and name, codes and description, then a line per figure. */
+  .mm-doc .mm-items-scroll .mm-items:is(.is-cards, .is-grid) > thead {
+    display: none;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    > :is(tbody, tfoot)
+    > tr {
+    padding: 8px 12px;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    :is(.mm-item-row, .mm-total-row) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 4px 8px;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    :is(.mm-item-row, .mm-total-row)
+    > td {
+    grid-column: 1 / -1;
+    padding: 0;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    .mm-item-row
+    > .mm-col-serial {
+    grid-column: 1;
+    font-weight: 600;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    .mm-item-row
+    > .mm-col-serial
+    .mm-num::after {
+    content: ".";
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    .mm-item-row
+    > [data-col="desc"] {
+    grid-column: 2;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    :is(.mm-item-row, .mm-total-row)
+    > td[data-label] {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    text-align: end;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    :is(.mm-item-row, .mm-total-row)
+    > td[data-label]::before {
+    color: var(--mm-muted);
+    font-weight: 400;
+    content: attr(data-label);
+    text-align: start;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    :is(.mm-item-row, .mm-total-row)
+    > td[data-label]:empty {
+    display: none;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    :is(.mm-item-row, .mm-total-row)
+    > td[data-label]:last-child {
+    font-weight: 600;
+  }
+
+  /* The description and the large images under an item: the same card, no rule between. */
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    :is(.mm-item-row, .mm-detail-row)
+    + :is(.mm-detail-row, .mm-image-row) {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    .mm-detail-row
+    > .mm-col-serial,
+  .mm-doc
+    .mm-items-scroll
+    .mm-items:is(.is-cards, .is-grid)
+    .mm-total-row
+    > .mm-col-serial:empty {
+    display: none;
+  }
+
+  .mm-doc .mm-items-scroll .mm-items:is(.is-cards, .is-grid) .mm-total-row {
+    background: var(--mm-title-bar);
+    font-weight: 600;
+  }
+}
+
+/* is-grid: the headings in a row, each item's name and description across the full width
+   above its figures. */
+@media screen {
+  .mm-doc .mm-items-scroll .mm-items.is-grid > thead {
+    display: block;
+    background: var(--mm-accent);
+  }
+
+  .mm-doc .mm-items-scroll .mm-items.is-grid > thead > tr,
+  .mm-doc .mm-items-scroll .mm-items.is-grid :is(.mm-item-row, .mm-total-row) {
+    display: grid;
+    grid-template-columns: var(--mm-serial-width, 34px) repeat(
+        var(--mm-figures, 1),
+        minmax(0, 1fr)
+      );
+    gap: 4px 0;
+    padding: 0;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items.is-grid
+    > :is(thead, tbody, tfoot)
+    > tr
+    > :is(th, td) {
+    grid-column: auto;
+    padding: 6px;
+    text-align: center;
+  }
+
+  /* The headings' widths are set on each heading for the table's own layout; in the row of
+     equal tracks each heading takes its track instead. */
+  .mm-doc .mm-items-scroll .mm-items.is-grid > thead > tr > th {
+    width: auto !important;
+    color: var(--mm-on-accent);
+  }
+
+  .mm-doc .mm-items-scroll .mm-items.is-grid > thead > tr > [data-col="desc"] {
+    display: none;
+  }
+
+  .mm-doc .mm-items-scroll .mm-items.is-grid tr > .mm-col-serial {
+    grid-column: 1;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items.is-grid
+    :is(.mm-item-row, .mm-total-row)
+    > [data-col="desc"] {
+    grid-column: 2 / -1;
+    text-align: start;
+  }
+
+  /* The first figure under the first heading; the rest follow in order. */
+  .mm-doc
+    .mm-items-scroll
+    .mm-items.is-grid
+    tr
+    > :nth-child(1 of [data-label]) {
+    grid-column-start: 2;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items.is-grid
+    :is(.mm-item-row, .mm-total-row)
+    > td[data-label] {
+    display: block;
+    text-align: center;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items.is-grid
+    :is(.mm-item-row, .mm-total-row)
+    > td[data-label]::before {
+    content: none;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items.is-grid
+    :is(.mm-item-row, .mm-total-row)
+    > td[data-label]:empty,
+  .mm-doc
+    .mm-items-scroll
+    .mm-items.is-grid
+    .mm-total-row
+    > .mm-col-serial:empty {
+    display: block;
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items.is-grid
+    :is(.mm-detail-row, .mm-image-row, .mm-group-row)
+    > td {
+    padding: 6px 6px 6px calc(var(--mm-serial-width, 34px) + 6px);
+  }
+
+  .mm-doc
+    .mm-items-scroll
+    .mm-items.is-grid
+    > tbody
+    > tr:is(.mm-detail-row, .mm-image-row, .mm-group-row) {
+    padding: 0;
+  }
+}
