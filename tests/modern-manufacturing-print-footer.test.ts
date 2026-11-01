@@ -638,6 +638,26 @@ describe("Modern Manufacturing — table stretched to fill the page", () => {
     window.dispatchEvent(new Event("afterprint"));
     expect(lastRow().style.height).toBe("");
   });
+
+  it("lays the page out for print when it renders already in print media (the PDF service)", () => {
+    // Real A00052-E (1.0.50): the PDF service was in print media before the template
+    // rendered, no switch to print came, and the table never stretched.
+    jest.useFakeTimers();
+    const state = window as typeof window & { mmPrintRegistered?: boolean };
+    delete state.mmPrintRegistered;
+    window.matchMedia = ((query: string) => ({
+      matches: query === "print",
+      media: query,
+      addEventListener: () => undefined,
+    })) as unknown as typeof window.matchMedia;
+    window.history.replaceState(null, "", "/");
+    page(true);
+    mockStretchLayout({ ...onePage, rowHeight: 40 });
+    registerModernManufacturingPrint();
+    jest.runOnlyPendingTimers();
+    expect(lastRow().style.height).toBe("338px");
+    jest.useRealTimers();
+  });
 });
 
 describe("Modern Manufacturing — the preview's table stretched to an A4 sheet", () => {

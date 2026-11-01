@@ -4338,6 +4338,15 @@ const PAPER_WIDTH = 794;
 /* A table that grows after it was fitted (a font, a style set late) is fitted again. */
 let fitTimer = 0;
 let tableWatch: ResizeObserver | undefined;
+/*
+ * Refrens' PDF service can be in print media before the template renders (real A00052-E,
+ * 1.0.50: no switch to print ever came, so the multi-page stretch never ran). A render or a
+ * refit in print media, outside a browser's own print, lays the page out for print itself:
+ * set by registerModernManufacturingPrint; pageWatch's own records (the stretch's page-break markers) are
+ * dropped after it so it does not set itself off again.
+ */
+let servicePrintLayout: (() => void) | undefined;
+let pageWatch: MutationObserver | undefined;
 const refitSoon = (): void => {
   window.clearTimeout(fitTimer);
   fitTimer = window.setTimeout(() => {
@@ -4348,6 +4357,15 @@ const refitSoon = (): void => {
     // eslint-disable-next-line @typescript-eslint/no-use-before-define
     stackCrampedFields();
     stretchItemsToSheet();
+    if (
+      servicePrintLayout &&
+      !browserPrinting &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("print").matches
+    ) {
+      servicePrintLayout();
+      pageWatch?.takeRecords();
+    }
   }, 0);
 };
 
@@ -4520,13 +4538,16 @@ export const registerModernManufacturingPrint = (): void => {
     splitTotals();
     stretchItemsTable();
   };
+  servicePrintLayout = () => {
+    printLayout();
+    placeFootersOnPageEdge();
+  };
   window.matchMedia("print").addEventListener("change", (event) => {
     if (!event.matches) {
       reset();
       return;
     }
-    printLayout();
-    placeFootersOnPageEdge();
+    servicePrintLayout?.();
   });
   // Refrens' PDF service is already in print media when it prints (the listener above laid
   // the page out) and its PDF call fires beforeprint too: refitting then would fit the table
@@ -4593,9 +4614,12 @@ export const registerModernManufacturingPrint = (): void => {
   // A font that arrives later (Lydia's live font change) as well.
   document.fonts?.addEventListener?.("loadingdone", refitSoon);
   if (typeof MutationObserver === "function") {
-    new MutationObserver(refitSoon).observe(document.documentElement, {
+    pageWatch = new MutationObserver(refitSoon);
+    pageWatch.observe(document.documentElement, {
       childList: true,
       subtree: true,
     });
   }
+  // Already in print media (the PDF service): laid out for print once rendered (refitSoon).
+  refitSoon();
 };
