@@ -3940,6 +3940,16 @@ export const withRefrensDefaults = <T>(payload: T): T => {
   const root = asRecord(payload);
   const wrapped = isRecord(root.invoice);
   const invoice = wrapped ? asRecord(root.invoice) : root;
+  // Refrens' PDF service reads a sales order from /salesorders/<id>, where bankAccount is only
+  // the account's id and the account itself is bankAccountDetails: the bank details went
+  // missing from real sales-order PDFs (inventoryinc A00009, 1 Nov 2026).
+  const bankDetails = asRecord(invoice.bankAccountDetails);
+  if (!isRecord(invoice.bankAccount) && Object.keys(bankDetails).length > 0) {
+    const withBank = { ...invoice, bankAccount: bankDetails };
+    return withRefrensDefaults(
+      (wrapped ? { ...root, invoice: withBank } : withBank) as T
+    );
+  }
   const options = asRecord(invoice.advanceOptions);
   const chosen = [
     "unitColumn",
@@ -5302,6 +5312,10 @@ const PAPER_WIDTH = 794;
  * figure pair per column, one under another (styles.css, "summaries on a phone"). Each body
  * and footer cell is given its column's heading, both heading rows joined ("IGST Rate"); the
  * footer's "Total" and the words row span the table and take none.
+ */
+/**
+ *
+ * @param table
  */
 function labelSummaryCells(table: HTMLTableElement): void {
   const labels: string[] = [];

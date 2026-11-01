@@ -2201,3 +2201,37 @@ describe("Professional Template — review round 5 (2026-10-24)", () => {
     expect(rule?.[2]).toMatch(/background: none;/);
   });
 });
+
+describe("sales order bank account from the PDF service's data", () => {
+  it("takes bankAccountDetails when bankAccount is only the account's id", () => {
+    const order = {
+      invoice: {
+        billType: "SALESORDER",
+        bankAccount: "000000000000000000000001",
+        bankAccountDetails: {
+          accountNo: "1234 5678 9012",
+          name: "Test Traders",
+          bank: "Example Bank",
+        },
+      },
+    };
+    const result = withRefrensDefaults(order) as {
+      invoice: Record<string, unknown>;
+    };
+    expect(result.invoice.bankAccount).toEqual({
+      accountNo: "1234 5678 9012",
+      name: "Test Traders",
+      bank: "Example Bank",
+    });
+    // An account already sent whole is kept.
+    const whole = {
+      invoice: {
+        bankAccount: { accountNo: "1" },
+        bankAccountDetails: { accountNo: "2" },
+      },
+    };
+    expect(
+      (withRefrensDefaults(whole) as typeof whole).invoice.bankAccount
+    ).toEqual({ accountNo: "1" });
+  });
+});
