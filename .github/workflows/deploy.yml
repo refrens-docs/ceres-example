@@ -56,6 +56,25 @@ jobs:
           }
           pin viraj-technologies 1.0.162
 
+      # A page that loaded a template's manifest just before a deploy (Pages caches it 10 min,
+      # Refrens may cache longer) asks for the previous version's files, which a deploy removes
+      # ("Failed to load CSS .../1.0.45/bundle.css"). Each template's last 20 versions are kept
+      # as copies of the latest build, so a stale manifest still loads (and gets the latest code).
+      - name: Keep recent template versions on the latest build
+        run: |
+          for m in dist/templates/*/manifest.json; do
+            dir=$(dirname "$m")
+            cur=$(node -p "require('./$m').version")
+            IFS=. read -r major minor patch <<< "$cur"
+            for i in $(seq 1 20); do
+              p=$((patch - i)); [ "$p" -lt 0 ] && break
+              v="$major.$minor.$p"
+              [ -e "$dir/$v" ] && continue
+              mkdir -p "$dir/$v"
+              cp -R "$dir/$cur/." "$dir/$v/"
+            done
+          done
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
