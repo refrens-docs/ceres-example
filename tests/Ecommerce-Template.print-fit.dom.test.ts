@@ -33,6 +33,8 @@ describe("Ecommerce template — print table fit", () => {
     const table = mount(1800, 1100);
     fitPrintTable();
     expect(table.classList.contains("is-print-compact")).toBe(true);
+    // Then the item column's content gives way and the padding goes to 1 px; text keeps its size.
+    expect(table.classList.contains("is-print-tight")).toBe(true);
     expect(table.getAttribute("style") ?? "").toBe("");
     expect(table.classList.contains("is-print-fit")).toBe(false);
   });
@@ -76,5 +78,6 @@ describe("Ecommerce template — print table fit", () => {
     printing(false);
     fitPrintTable();
     expect(table.classList.contains("is-print-compact")).toBe(false);
+    expect(table.classList.contains("is-print-tight")).toBe(false);
   });
 });

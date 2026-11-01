@@ -1345,6 +1345,13 @@ describe("Ecommerce template — files and CSS", () => {
     expect(a5.compactTable).toBe(true);
     expect(a5).not.toHaveProperty("tableFit");
     expect(render()).not.toContain("--ec-table-fit");
+    // Before a column is cut: the item column's content gives way, 1 px padding.
+    expect(print).toMatch(
+      /\.ec-items\.is-print-tight :is\(th, td\) \{\s*padding-inline: 1px;/
+    );
+    expect(print).toMatch(
+      /\.ec-items\.is-print-tight \.ec-item-desc table \{\s*width: 100%;\s*table-layout: fixed;/
+    );
   });
 
   it("lets stacked parties break between parties in print, each party whole", () => {

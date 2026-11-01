@@ -1301,6 +1301,38 @@
   /* The table's text keeps the document's text scale, never shrunk to fit the page (user,
      1 Nov 2026): a table still too wide is cut at the frame's edge (below). */
 
+  /*
+   * Too wide even with 4 px padding (helpers.ts fitPrintTable): before any column is cut, the
+   * item column's content gives way — a table in a description takes the column's width, its
+   * cells wrapping anywhere; a row of images wraps; a long word breaks — and the cells keep
+   * 1 px of padding. Text keeps its size.
+   */
+  .ec-items.is-print-tight :is(th, td) {
+    padding-inline: 1px;
+  }
+
+  .ec-items.is-print-tight :is(.ec-item-name, .ec-item-codes, .ec-item-desc) {
+    overflow-wrap: anywhere;
+  }
+
+  .ec-items.is-print-tight .ec-item-desc table {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .ec-items.is-print-tight .ec-item-desc :is(th, td) {
+    overflow-wrap: anywhere;
+  }
+
+  .ec-items.is-print-tight :is(.ceres-image-gallery, .ec-item-codes) {
+    flex-wrap: wrap;
+  }
+
+  .ec-items.is-print-tight td img {
+    max-width: 100%;
+    height: auto;
+  }
+
   .ec-items-scroll,
   .ec-summary {
     overflow: clip;
