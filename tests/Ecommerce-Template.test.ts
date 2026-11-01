@@ -1064,6 +1064,25 @@ describe("Ecommerce template — formula columns", () => {
     expect(html).not.toMatch(/data-col="txt">[^<]*0\.00/);
   });
 
+  it("prints a sales order's bank account sent as bankAccountDetails, its id in bankAccount", () => {
+    const withAccount = payload((invoice) => {
+      invoice.billType = "SALESORDER";
+      invoice.paymentOptions = { accountTransfer: true };
+      invoice.bankAccount = "000000000000000000000001";
+      invoice.bankAccountDetails = {
+        accountNo: "1234 5678 9012 34567",
+        name: "Test Traders",
+        bank: "Example Bank",
+        swift: "EXMPXXXX",
+      };
+    });
+    const html = template(
+      normalizeInvoiceTemplateState(withRefrensDefaults(withAccount) as never)
+    );
+    expect(section(html, "bank")).toContain("Example Bank");
+    expect(section(html, "bank")).toContain("Test Traders");
+  });
+
   it("prints a custom Currency column as money, totalled only when set to summarise", () => {
     const html = render((invoice) => {
       invoice.locale = "en-IN";

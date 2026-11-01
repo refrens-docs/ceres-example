@@ -3798,6 +3798,19 @@ export const withRefrensDefaults = <T>(payload: T): T => {
   const root = asRecord(payload);
   const wrapped = isRecord(root.invoice);
   const invoice = wrapped ? asRecord(root.invoice) : root;
+  // Refrens' PDF service reads a sales order from /salesorders/<id>, where bankAccount is only
+  // the account's id and the account itself is bankAccountDetails: the bank details went
+  // missing from real sales-order PDFs (inventoryinc A00009, 1 Nov 2026).
+  const bankDetails = asRecord(invoice.bankAccountDetails);
+  const withBank =
+    !isRecord(invoice.bankAccount) && Object.keys(bankDetails).length > 0
+      ? { ...invoice, bankAccount: bankDetails }
+      : invoice;
+  if (withBank !== invoice) {
+    return withRefrensDefaults(
+      (wrapped ? { ...root, invoice: withBank } : withBank) as T
+    );
+  }
   const options = asRecord(invoice.advanceOptions);
   const chosen = [
     "unitColumn",
