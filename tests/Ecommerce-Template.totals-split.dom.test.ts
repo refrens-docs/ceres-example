@@ -23,6 +23,30 @@ const mount = () => {
 };
 
 describe("Ecommerce template — totals in print", () => {
+  it("cuts the totals at the frame's edge when the table is wider than the frame", () => {
+    printing(true);
+    const table = mount();
+    Object.defineProperty(table, "offsetWidth", {
+      value: 825,
+      configurable: true,
+    });
+    Object.defineProperty(table.parentElement as HTMLElement, "clientWidth", {
+      value: 555,
+      configurable: true,
+    });
+    splitTotals();
+    const split = table.nextElementSibling as HTMLTableElement;
+    expect(split.style.clipPath).toBe("inset(-2px 270px -2px -2px)");
+    joinTotals();
+    // One that fits is not clipped.
+    Object.defineProperty(table, "offsetWidth", {
+      value: 500,
+      configurable: true,
+    });
+    splitTotals();
+    expect((table.nextElementSibling as HTMLElement).style.clipPath).toBe("");
+  });
+
   it("moves the totals into a table of their own, without the item headings", () => {
     printing(true);
     const table = mount();

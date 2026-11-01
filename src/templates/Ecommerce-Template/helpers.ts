@@ -5213,6 +5213,11 @@ export const splitTotals = (root: ParentNode = document): void => {
     if (style) split.setAttribute("style", style);
     split.style.tableLayout = "fixed";
     split.style.width = `${table.offsetWidth}px`;
+    // A table wider than the frame is cut at its edge (the text keeps its size, user rule);
+    // the totals' white ground is cut there too, or on the PDF service it covered the
+    // frame's right rule and ran off the paper (quotation A00052-E at print size 1.2).
+    const over = table.offsetWidth - table.parentElement.clientWidth;
+    if (over > 0) split.style.clipPath = `inset(-2px ${over}px -2px -2px)`;
     const cols = document.createElement("colgroup");
     Array.from(row.cells).forEach((cell) => {
       const col = document.createElement("col");
