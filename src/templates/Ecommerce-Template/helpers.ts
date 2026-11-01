@@ -4716,6 +4716,9 @@ export const flowFiller = (
   let index = 0;
   let shift: FlowLength = { c: start, k: 0 };
   const placed: { page: number; bottom: FlowLength; end: FlowLength }[] = [];
+  // A unit cut by a page break up to the table's end: where Chrome cuts it (an image or a
+  // line that will not split moves down whole) is not known, so neither is the room left.
+  let unsure = false;
   const pageStart = (at: number, unit: FlowUnit): FlowLength =>
     at === 0
       ? { c: start, k: 0 }
@@ -4724,7 +4727,7 @@ export const flowFiller = (
     c: -(unit.tail ? 0 : foot) - (unit.close || 0),
     k: at + 1,
   });
-  units.forEach((unit) => {
+  units.forEach((unit, at) => {
     const top = (): FlowLength => ({ c: unit.top + shift.c, k: shift.k });
     const bottom = (): FlowLength => ({ c: unit.bottom + shift.c, k: shift.k });
     for (
@@ -4745,6 +4748,7 @@ export const flowFiller = (
         // Breaks where the page ends and runs on at the next page's start (a table's heading
         // repeated), a line or two later for text (the line across the break, orphans).
         const cut = regionEnd(index, unit);
+        if (at <= anchor) unsure = true;
         index += 1;
         const next = {
           c: head + (unit.head || 0) + (unit.fluid ? 2 * (unit.line || 0) : 0),
@@ -4756,7 +4760,7 @@ export const flowFiller = (
     placed.push({ page: index, bottom: bottom(), end: regionEnd(index, unit) });
   });
   const at = placed[anchor];
-  if (!at) return undefined;
+  if (!at || unsure) return undefined;
   const room = (from: { bottom: FlowLength; end: FlowLength }): FlowLength => ({
     c: from.end.c - from.bottom.c,
     k: from.end.k - from.bottom.k,
