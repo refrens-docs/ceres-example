@@ -1624,3 +1624,17 @@
     background-color: #fff;
   }
 }
+
+/*
+ * A wide table's totals in print (helpers.ts splitTotals): in a table of the frame's width,
+ * the label across the row and the figure in a column of its own at the frame's edge.
+ */
+@media print {
+  .ec-items[data-ec-totals-fit] .ceres-subtotal-value {
+    width: 35%;
+  }
+
+  .ec-items[data-ec-totals-fit] .ec-fill {
+    display: none;
+  }
+}

@@ -5160,30 +5160,41 @@ const TOTALS_PIN = "data-ec-totals-pin";
 const TOTALS_GROUPS = ":scope > tbody.ec-items-total, :scope > tbody.ec-totals";
 
 export const joinTotals = (root: ParentNode = document): void => {
-  root
-    .querySelectorAll<HTMLTableElement>(`table[${TOTALS_SPLIT}]`)
-    .forEach((split) => {
-      const table = split.previousElementSibling;
-      const marker = Array.from(table?.childNodes || []).find(
-        (node) =>
-          node.nodeType === Node.COMMENT_NODE &&
-          node.textContent === TOTALS_SPLIT
-      );
-      if (table && marker) {
-        Array.from(split.querySelectorAll(TOTALS_GROUPS)).forEach((group) =>
-          table.insertBefore(group, marker)
+  const splits = Array.from(
+    root.querySelectorAll<HTMLTableElement>(`table[${TOTALS_SPLIT}]`)
+  );
+  // Each split table follows its item table (a wide table's totals in two: see splitTotals).
+  const owner = (split: Element): Element | null => {
+    let table = split.previousElementSibling;
+    while (table?.hasAttribute(TOTALS_SPLIT))
+      table = table.previousElementSibling;
+    return table;
+  };
+  const tables = Array.from(new Set(splits.map(owner)));
+  tables.forEach((table) => {
+    const marker = Array.from(table?.childNodes || []).find(
+      (node) =>
+        node.nodeType === Node.COMMENT_NODE && node.textContent === TOTALS_SPLIT
+    );
+    if (table && marker) {
+      splits
+        .filter((split) => owner(split) === table)
+        .forEach((split) =>
+          Array.from(split.querySelectorAll(TOTALS_GROUPS)).forEach((group) =>
+            table.insertBefore(group, marker)
+          )
         );
-        marker.remove();
-      }
-      if (table?.hasAttribute(TOTALS_PIN)) {
-        table.querySelector(`:scope > colgroup[${TOTALS_PIN}]`)?.remove();
-        const style = table.getAttribute(TOTALS_PIN) || "";
-        if (style) table.setAttribute("style", style);
-        else table.removeAttribute("style");
-        table.removeAttribute(TOTALS_PIN);
-      }
-      split.remove();
-    });
+      marker.remove();
+    }
+    if (table?.hasAttribute(TOTALS_PIN)) {
+      table.querySelector(`:scope > colgroup[${TOTALS_PIN}]`)?.remove();
+      const style = table.getAttribute(TOTALS_PIN) || "";
+      if (style) table.setAttribute("style", style);
+      else table.removeAttribute("style");
+      table.removeAttribute(TOTALS_PIN);
+    }
+  });
+  splits.forEach((split) => split.remove());
 };
 
 export const splitTotals = (root: ParentNode = document): void => {
@@ -5217,11 +5228,19 @@ export const splitTotals = (root: ParentNode = document): void => {
     if (style) split.setAttribute("style", style);
     split.style.tableLayout = "fixed";
     split.style.width = `${table.offsetWidth}px`;
-    // A table wider than the frame is cut at its edge (the text keeps its size, user rule);
-    // the totals' white ground is cut there too, or on the PDF service it covered the
-    // frame's right rule and ran off the paper (quotation A00052-E at print size 1.2).
-    const over = table.offsetWidth - table.parentElement.clientWidth;
-    if (over > 0) split.style.clipPath = `inset(-2px ${over}px -2px -2px)`;
+    // A table wider than the frame is cut at its edge (the text keeps its size, user rule).
+    // Its TOTAL row stays on its columns, cut with it (on either side, by the direction); the
+    // other totals and the amount in words take a table of the frame's width, or their
+    // figures and words were cut off and their white ground ran off the paper over the
+    // frame's rule (real PDFs at print size 1.2, quotation A00052-E, challan A00001 in RTL).
+    const room = table.parentElement.clientWidth;
+    const over = table.offsetWidth - room;
+    const rtl = getComputedStyle(table).direction === "rtl";
+    if (over > 0) {
+      split.style.clipPath = rtl
+        ? `inset(-2px -2px -2px ${over}px)`
+        : `inset(-2px ${over}px -2px -2px)`;
+    }
     const cols = document.createElement("colgroup");
     Array.from(row.cells).forEach((cell) => {
       const col = document.createElement("col");
@@ -5238,12 +5257,27 @@ export const splitTotals = (root: ParentNode = document): void => {
     table.style.tableLayout = "fixed";
     table.style.width = split.style.width;
     groups[0].before(document.createComment(TOTALS_SPLIT));
-    groups.forEach((group) => split.appendChild(group));
     const close = table.querySelector<HTMLElement>(
       ":scope > tfoot.ec-page-close"
     );
+    const fitted =
+      over > 0 ? groups.filter((group) => group.matches(".ec-totals")) : [];
+    groups
+      .filter((group) => !fitted.includes(group))
+      .forEach((group) => split.appendChild(group));
     if (close) split.appendChild(close.cloneNode(true));
     table.after(split);
+    if (fitted.length) {
+      const fit = document.createElement("table");
+      fit.className = table.className;
+      fit.setAttribute(TOTALS_SPLIT, "");
+      fit.setAttribute("data-ec-totals-fit", "");
+      fit.style.width = `${room}px`;
+      fitted.forEach((group) => fit.appendChild(group));
+      if (close) fit.appendChild(close.cloneNode(true));
+      (split.childElementCount > 1 ? split : table).after(fit);
+      if (split.querySelectorAll(TOTALS_GROUPS).length === 0) split.remove();
+    }
   });
 };
 

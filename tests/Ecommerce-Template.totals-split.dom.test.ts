@@ -37,7 +37,28 @@ describe("Ecommerce template — totals in print", () => {
     splitTotals();
     const split = table.nextElementSibling as HTMLTableElement;
     expect(split.style.clipPath).toBe("inset(-2px 270px -2px -2px)");
+    // The TOTAL row stays on the item columns; the other totals and the words fit the frame.
+    expect(split.querySelectorAll(".ec-items-total")).toHaveLength(1);
+    const fit = split.nextElementSibling as HTMLTableElement;
+    expect(fit.hasAttribute("data-ec-totals-fit")).toBe(true);
+    expect(fit.style.width).toBe("555px");
+    expect(fit.querySelectorAll(".ec-totals")).toHaveLength(1);
     joinTotals();
+    // Joined back in order, the split tables gone.
+    expect(Array.from(table.tBodies).map((body) => body.className)).toEqual([
+      "",
+      "ec-items-total",
+      "ec-totals",
+    ]);
+    expect(table.nextElementSibling).toBeNull();
+    // Right to left, the cut is on the left.
+    table.style.direction = "rtl";
+    splitTotals();
+    expect((table.nextElementSibling as HTMLElement).style.clipPath).toBe(
+      "inset(-2px -2px -2px 270px)"
+    );
+    joinTotals();
+    table.style.direction = "";
     // One that fits is not clipped.
     Object.defineProperty(table, "offsetWidth", {
       value: 500,
