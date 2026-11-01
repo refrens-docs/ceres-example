@@ -3705,8 +3705,11 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
   /*
    * The printable width in the document's own pixels, which caps the page in print
    * (styles.css): the PDF service lays the page out in a window wider than the paper before
-   * it prints. Side margins are xMargins centimetres (1 when unset), and Chrome scales them
-   * with the print zoom like the rest of the page; 4 px kept back for rounding.
+   * it prints. Side margins are xMargins centimetres (1 when unset). The page's margins stay
+   * their size in the PDF whatever the print zoom, so the zoom divides the width between them
+   * (real PDFs, 1 Nov 2026: subtracting the margins after the zoom left a 1 cm margin at 27 /
+   * 33 / 36 pt for print sizes 0.9 / 1.1 / 1.2; Refrens' own Enterprise keeps it at 28 pt, as
+   * the Professional template does); 4 px kept back for rounding.
    */
   // 0 cm is a real setting: the page runs to the paper's edges (it was read as unset, 1 cm).
   const margin = hasValue(pdfOptions.xMargins)
@@ -3714,12 +3717,12 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
     : NaN;
   const sideMarginCm = Number.isFinite(margin) && margin >= 0 ? margin : 1;
   const printWidth = Math.floor(
-    ((paperMm / 25.4) * 96) / rendererZoom - (2 * sideMarginCm * 96) / 2.54 - 4
+    ((paperMm / 25.4) * 96 - (2 * sideMarginCm * 96) / 2.54) / rendererZoom - 4
   );
   // A browser's own print (Lydia's print button, Ctrl+P) keeps its own 1 cm margins, whatever
   // xMargins says: the page is fitted for the narrower of the two (prepareBrowserPrint).
   const browserPrintWidth = Math.floor(
-    ((paperMm / 25.4) * 96) / rendererZoom - (2 * 96) / 2.54 - 4
+    ((paperMm / 25.4) * 96 - (2 * 96) / 2.54) / rendererZoom - 4
   );
   const rawScale =
     positiveNumber(pdfOptions.textScale) ?? positiveNumber(pdfOptions.scale);

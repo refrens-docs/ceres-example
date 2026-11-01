@@ -1317,7 +1317,9 @@ describe("Ecommerce template — files and CSS", () => {
     // 0 cm runs to the paper's edges; it is not "unset" (1 cm).
     expect(width({ xMargins: "0" })).toBe(789);
     expect(width({ xMargins: 0 })).toBe(789);
-    expect(width({ zoomSize: "0.9" })).toBe(802);
+    // The zoom divides the width between the margins, which keep their size (793.7 - 75.6) / 0.9 - 4.
+    expect(width({ zoomSize: "0.9" })).toBe(793);
+    expect(width({ zoomSize: "1.2" })).toBe(594);
     expect(width({ landscape: true })).toBe(1042);
     // Tabloid (11 × 17 in) is a paper of its own, not A4.
     expect(width({ format: "tabloid" })).toBe(976);
