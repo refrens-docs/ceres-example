@@ -6,6 +6,7 @@ import path from "path";
 import {
   drawRiyalSigns,
   fitTotals,
+  loadScriptFonts,
   placeFootersOnPageEdge,
   registerEcommerceLogo,
   respellTaxWords,
@@ -32,6 +33,37 @@ describe("Ecommerce template — after the render, in the browser", () => {
       document.getElementById("outside")?.classList.contains("is-broken")
     ).toBe(false);
     expect(css).toMatch(/\.ec-doc img\.is-broken \{\s*visibility: hidden;/);
+  });
+
+  it("asks for each script face as soon as its stylesheet is in, for the document's text", async () => {
+    const calls: string[] = [];
+    let ready = false;
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: {
+        load: (font: string, text: string) => {
+          calls.push(`${font}|${text.includes("\u1799") ? "khmer" : ""}`);
+          return Promise.resolve(ready ? [{}] : []);
+        },
+      },
+    });
+    document.body.innerHTML =
+      '<div class="ec-doc" style="--ec-script-font: \'Noto Sans Khmer\';">\u1799\u17C1</div>';
+    loadScriptFonts();
+    await Promise.resolve();
+    // No face yet (stylesheet still loading): asked again on the next run.
+    ready = true;
+    loadScriptFonts();
+    await Promise.resolve();
+    loadScriptFonts();
+    expect(calls).toEqual([
+      '400 16px "Noto Sans Khmer"|khmer',
+      '600 16px "Noto Sans Khmer"|khmer',
+      '700 16px "Noto Sans Khmer"|khmer',
+      '400 16px "Noto Sans Khmer"|khmer',
+      '600 16px "Noto Sans Khmer"|khmer',
+      '700 16px "Noto Sans Khmer"|khmer',
+    ]);
   });
 
   it("draws each Saudi riyal sign from an image, the empty box gone", () => {

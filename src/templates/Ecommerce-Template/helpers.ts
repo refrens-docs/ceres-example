@@ -5187,6 +5187,39 @@ export const equalizeSummaries = (root: ParentNode = document): void => {
 };
 
 /* Registers the browser-side fits: the summaries' equal columns, the print table and the totals. */
+
+/*
+ * A script face (mapScript: --ec-script-font) is only a fallback, and Chrome fetches a
+ * fallback face once it lays out text that needs it: the PDF service printed before that
+ * fetch ended, so a Khmer client name printed as empty boxes (real PDF, 1 Nov 2026). Each
+ * face is asked for as soon as its stylesheet is in, for the characters the document uses.
+ */
+const requestedScriptFonts = new Set<string>();
+export const loadScriptFonts = (): void => {
+  if (typeof document === "undefined" || !document.fonts?.load) return;
+  const doc = document.querySelector<HTMLElement>(".ec-doc");
+  const list = doc?.style.getPropertyValue("--ec-script-font") || "";
+  if (!doc || !list.trim()) return;
+  const sample = doc.textContent || "";
+  list
+    .split(",")
+    .map((name) => name.trim().replace(/^['"]|['"]$/g, ""))
+    .filter(Boolean)
+    .forEach((name) => {
+      [400, 600, 700].forEach((weight) => {
+        const key = `${weight} ${name}`;
+        if (requestedScriptFonts.has(key)) return;
+        document.fonts
+          .load(`${weight} 16px "${name}"`, sample)
+          // No face yet (its stylesheet still on the way): asked again on the next run.
+          .then((faces) => {
+            if (faces.length) requestedScriptFonts.add(key);
+          })
+          .catch(() => {});
+      });
+    });
+};
+
 export const registerEcommerceTotalsFit = (): void => {
   const state = window as typeof window & { ecTotalsFitRegistered?: boolean };
   if (state.ecTotalsFitRegistered || typeof document === "undefined") return;
@@ -5229,6 +5262,7 @@ export const registerEcommerceTotalsFit = (): void => {
   // The table first (its columns set the totals' room), then the totals.
   run = () => {
     observer?.disconnect();
+    loadScriptFonts();
     joinTotals();
     respellTaxWords();
     drawRiyalSigns();
