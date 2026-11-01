@@ -2220,7 +2220,10 @@ const columnKind = (column: UnknownRecord): ColumnKind => {
     MONEY_KEYS.includes(key) ||
     column.isCessColumn === true ||
     semantic === "currency" ||
-    text(column.fxReturnType).toLowerCase() === "currency"
+    text(column.fxReturnType).toLowerCase() === "currency" ||
+    // A custom column made as Currency (its formula may still say "number"): printed "10"
+    // instead of ₹10.00 on a real proforma (inventoryinc A00012, 1 Nov 2026).
+    text(column.dataType).toLowerCase() === "currency"
   ) {
     return "money";
   }
@@ -2235,8 +2238,12 @@ const columnKind = (column: UnknownRecord): ColumnKind => {
 const makeColumn = (column: UnknownRecord): ItemColumn => {
   const key = text(column.key);
   const kind = columnKind(column);
+  // A business's own money column adds up only when it is set to (summarise), like a number.
+  const custom = column.system === false;
   const summable =
-    (["qty", "money", "discount"].includes(kind) && key !== "rate") ||
+    (["qty", "money", "discount"].includes(kind) &&
+      key !== "rate" &&
+      !(custom && kind === "money" && column.summarise !== true)) ||
     (kind === "number" && column.summarise === true);
   return {
     key,

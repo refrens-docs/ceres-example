@@ -1061,6 +1061,23 @@ describe("Ecommerce template — formula columns", () => {
     expect(html).not.toMatch(/data-col="txt">[^<]*0\.00/);
   });
 
+  it("prints a custom Currency column as money, totalled only when set to summarise", () => {
+    const html = render((invoice) => {
+      invoice.locale = "en-IN";
+      invoice.columns.push({
+        key: "cur",
+        label: "Line Total",
+        dataType: "currency",
+        fxReturnType: "number",
+        system: false,
+        summarise: false,
+      });
+      invoice.items[0].custom = { cur: "10" };
+    });
+    expect(html).toMatch(/data-col="cur">[^]*?₹10\.00</);
+    expect(html).not.toMatch(/ec-items-total[^]*data-col="cur">[^<]*₹/);
+  });
+
   it("reads a figure saved as grouped text in full, not up to its first comma", () => {
     expect(groupedNumber("20,13,20,21,562")).toBe(2013202156 * 10 + 2);
     expect(groupedNumber("1,234,567.50")).toBe(1234567.5);
