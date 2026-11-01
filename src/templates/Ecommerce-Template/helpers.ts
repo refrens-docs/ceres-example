@@ -3599,6 +3599,9 @@ const PAPER_WIDTH_MM: Record<string, number> = {
   a5: 148,
   letter: 215.9,
   legal: 215.9,
+  // Refrens' sixth paper size (11 × 17 in): unknown formats fell back to A4, so a Tabloid
+  // page printed an A4-wide column with 4.5 cm of white each side (real PDF, 1 Nov 2026).
+  tabloid: 279.4,
 };
 
 const positiveNumber = (value: unknown): number | undefined => {
@@ -3613,6 +3616,7 @@ const PAPER_HEIGHT_MM: Record<string, number> = {
   a5: 210,
   letter: 279.4,
   legal: 355.6,
+  tabloid: 431.8,
 };
 
 /*

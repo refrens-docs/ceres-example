@@ -1265,6 +1265,9 @@ describe("Ecommerce template — files and CSS", () => {
     expect(width({ xMargins: 0 })).toBe(789);
     expect(width({ zoomSize: "0.9" })).toBe(802);
     expect(width({ landscape: true })).toBe(1042);
+    // Tabloid (11 × 17 in) is a paper of its own, not A4.
+    expect(width({ format: "tabloid" })).toBe(976);
+    expect(width({ format: "Tabloid", landscape: true })).toBe(1552);
     const print = css.slice(css.indexOf("@media print"));
     expect(print).toMatch(/max-width: var\(--ec-print-width, none\);/);
     expect(render()).toContain("--ec-print-width: 714px;");
