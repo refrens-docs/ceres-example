@@ -1032,7 +1032,11 @@
 
 .pt-totals-table .pt-totals {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+
+  /* The labels never narrower than their longest word, and the figures at most 60 % of the row:
+     a long custom total ("Custom Valuewswwwww BBVGUHUTTG") took nearly all of it and the labels
+     broke letter by letter ("CGS/T", "Tot/al"; real PDF, quotation A00052-E, 2026-11-01). */
+  grid-template-columns: minmax(min-content, 1fr) fit-content(60%);
   gap: 12px 20px;
 }
 
@@ -1114,6 +1118,13 @@
 }
 
 .pt-totals-table .pt-totals .pt-extra-row > td {
+  white-space: normal;
+  overflow-wrap: anywhere; /* a custom value wraps within its 60 %, however long its words */
+}
+
+/* A custom total's text value ("Custom Value …") wraps; its figures, if it has any, still do not
+   (only a figure carries data-testid="num", numbers never wrap). */
+.pt-totals-table .pt-totals .pt-extra-row .pt-num:not([data-testid="num"]) {
   white-space: normal;
 }
 

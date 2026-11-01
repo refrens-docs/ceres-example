@@ -828,7 +828,7 @@ describe("Professional Template — boolean settings", () => {
     });
     expect(mapScript(arabic)).toMatchObject({
       dir: "rtl",
-      font: "Noto Sans Arabic",
+      font: "'Noto Sans Arabic'",
     });
     const arabicHtml = template(arabic);
     expect(arabicHtml).toContain("--pt-script-font: 'Noto Sans Arabic'");
@@ -853,7 +853,7 @@ describe("Professional Template — boolean settings", () => {
           };
         })
       )
-    ).toMatchObject({ dir: "ltr", lang: "hi", font: "Noto Sans Devanagari" });
+    ).toMatchObject({ dir: "ltr", lang: "hi", font: "'Noto Sans Devanagari'" });
   });
 
   it("theme colour, text scale and the compact print table", () => {
@@ -2001,7 +2001,7 @@ describe("Professional Template — review round 6 (2026-10-24)", () => {
 
   it("spaces the totals with gaps, not padding", () => {
     expect(css()).toMatch(
-      /\.pt-totals-table \.pt-totals \{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\) auto;\s*gap: 12px 20px;/
+      /\.pt-totals-table \.pt-totals \{\s*display: grid;\s*[^}]*grid-template-columns: minmax\(min-content, 1fr\) fit-content\(60%\);\s*gap: 12px 20px;/
     );
     expect(css()).toMatch(
       /\.pt-totals-table \.pt-totals th,\s*\.pt-totals-table \.pt-totals td \{\s*padding: 0;/
@@ -2235,5 +2235,40 @@ describe("sales order bank account from the PDF service's data", () => {
     expect(
       (withRefrensDefaults(whole) as typeof whole).invoice.bankAccount
     ).toEqual({ accountNo: "1" });
+  });
+});
+
+describe("Professional Template — real PDF findings (2026-11-01)", () => {
+  // Khmer party names printed as boxes: the PDF service has no fallback fonts.
+  it("loads the Noto face of a script found in the document's text", () => {
+    const khmer = state((invoice) => {
+      (invoice.billedTo as Record<string, unknown>).name = "យេសរាល យេសរាល។";
+    });
+    expect(mapScript(khmer).font).toBe("'Noto Sans Khmer'");
+    expect(template(khmer)).toContain("--pt-script-font: 'Noto Sans Khmer';");
+    expect(mapScript(state()).font).toBe("");
+  });
+
+  // Tabloid fell back to A4: the page was laid out an A4 column wide.
+  it("lays a Tabloid page out at Tabloid width", () => {
+    const tabloid = mapPrint({
+      pdfOptions: { format: "tabloid", xMargins: 1 },
+    });
+    const a4 = mapPrint({ pdfOptions: { format: "a4", xMargins: 1 } });
+    expect(tabloid.printWidth).toBe(
+      Math.floor((279.4 / 25.4) * 96 - (2 * 96) / 2.54 - 4)
+    );
+    expect(tabloid.printWidth).toBeGreaterThan(a4.printWidth);
+  });
+
+  // Long custom totals took the whole row and the labels broke letter by letter (A00052-E).
+  it("keeps the totals' labels a word wide and lets a custom value wrap", () => {
+    const css = fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8");
+    expect(css).toMatch(
+      /grid-template-columns: minmax\(min-content, 1fr\) fit-content\(60%\);/
+    );
+    expect(css).toMatch(
+      /\.pt-extra-row \.pt-num:not\(\[data-testid="num"\]\) \{\s*white-space: normal;/
+    );
   });
 });

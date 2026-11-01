@@ -441,6 +441,67 @@ const optionalFlag = (value: unknown): boolean | undefined => {
   return undefined;
 };
 
+/*
+ * Text in a script Inter lacks prints as empty boxes in the PDF service, whose machine has no
+ * fallback fonts (Khmer party names on a real delivery challan, inventoryinc A00001, 1 Nov 2026),
+ * while the document's Language/Script stays at its Latin default. So the document's own text is
+ * scanned too and each script found brings its Noto face, as if it had been picked (as the
+ * E-commerce template does).
+ */
+const SCRIPT_RANGES: Array<[RegExp, string]> = [
+  [
+    /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/,
+    "Noto Sans Arabic",
+  ],
+  [/[\u0590-\u05FF]/, "Noto Sans Hebrew"],
+  [/[\u0530-\u058F]/, "Noto Sans Armenian"],
+  [/[\u0900-\u097F]/, "Noto Sans Devanagari"],
+  [/[\u0980-\u09FF]/, "Noto Sans Bengali"],
+  [/[\u0A00-\u0A7F]/, "Noto Sans Gurmukhi"],
+  [/[\u0A80-\u0AFF]/, "Noto Sans Gujarati"],
+  [/[\u0B00-\u0B7F]/, "Noto Sans Oriya"],
+  [/[\u0B80-\u0BFF]/, "Noto Sans Tamil"],
+  [/[\u0C00-\u0C7F]/, "Noto Sans Telugu"],
+  [/[\u0C80-\u0CFF]/, "Noto Sans Kannada"],
+  [/[\u0D00-\u0D7F]/, "Noto Sans Malayalam"],
+  [/[\u0D80-\u0DFF]/, "Noto Sans Sinhala"],
+  [/[\u0E00-\u0E7F]/, "Noto Sans Thai"],
+  [/[\u0E80-\u0EFF]/, "Noto Sans Lao"],
+  [/[\u1000-\u109F]/, "Noto Sans Myanmar"],
+  [/[\u10A0-\u10FF]/, "Noto Sans Georgian"],
+  [/[\u1200-\u137F]/, "Noto Sans Ethiopic"],
+  [/[\u1780-\u17FF\u19E0-\u19FF]/, "Noto Sans Khmer"],
+  [/[\u1100-\u11FF\uAC00-\uD7AF]/, "Noto Sans KR"],
+  [/[\u3040-\u30FF]/, "Noto Sans JP"],
+  [/[\u4E00-\u9FFF\u3400-\u4DBF]/, "Noto Sans SC"],
+];
+
+const collectText = (value: unknown, out: string[], depth = 0): void => {
+  if (depth > 8) return;
+  if (typeof value === "string") {
+    if (!/^https?:\/\//.test(value)) out.push(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectText(entry, out, depth + 1));
+    return;
+  }
+  if (isRecord(value)) {
+    Object.values(value).forEach((entry) => collectText(entry, out, depth + 1));
+  }
+};
+
+export const detectScriptFonts = (invoice: UnknownRecord): string[] => {
+  const parts: string[] = [];
+  collectText(invoice, parts);
+  const all = parts.join("\n");
+  // Everything Latin, Cyrillic, Greek or Vietnamese: nothing to load.
+  if (!/[^\t\n\r\u0020-\u052F\u1E00-\u1EFF\u2000-\u2BFF]/.test(all)) return [];
+  return SCRIPT_RANGES.filter(([range]) => range.test(all)).map(
+    ([, font]) => font
+  );
+};
+
 export const mapScript = (state: UnknownRecord) => {
   const invoice = asRecord(state.invoice);
   const template = asRecord(invoice.template);
@@ -470,17 +531,23 @@ export const mapScript = (state: UnknownRecord) => {
     .find((flag) => flag !== undefined);
   const direction = scriptKey(pick("direction", "textDirection", "dir"));
   const isRtl = rtlFlag ?? (direction === "rtl" || RTL_SCRIPTS.includes(key));
-  const font = SCRIPT_FONTS[key] || "";
+  const fonts = [
+    ...new Set(
+      [SCRIPT_FONTS[key] || "", ...detectScriptFonts(invoice)].filter(Boolean)
+    ),
+  ];
   return {
     dir: isRtl ? "rtl" : "ltr",
     lang: pick("languageCode", "lang", "locale"),
     script: key,
-    font,
-    fontUrl: font
-      ? `https://fonts.googleapis.com/css2?family=${font.replace(
-          / /g,
-          "+"
-        )}:wght@400;500;600;700&display=swap`
+    // A font-family list ("'Noto Sans Khmer', 'Noto Sans Thai'"), printed unescaped.
+    font: fonts.map((name) => `'${name}'`).join(", "),
+    fontUrl: fonts.length
+      ? `https://fonts.googleapis.com/css2?${fonts
+          .map(
+            (name) => `family=${name.replace(/ /g, "+")}:wght@400;500;600;700`
+          )
+          .join("&")}&display=swap`
       : "",
   };
 };
@@ -3844,6 +3911,9 @@ const PAPER_WIDTH_MM: Record<string, number> = {
   a5: 148,
   letter: 215.9,
   legal: 215.9,
+  // Refrens' sixth paper size (11 × 17 in): unknown formats fell back to A4, so a Tabloid page
+  // printed an A4-wide column (real PDF, proforma A00012, 1 Nov 2026).
+  tabloid: 279.4,
 };
 
 const positiveNumber = (value: unknown): number | undefined => {
@@ -3861,6 +3931,7 @@ const PAPER_HEIGHT_MM: Record<string, number> = {
   a5: 210,
   letter: 279.4,
   legal: 355.6,
+  tabloid: 431.8,
 };
 
 export const mapPrint = (state: UnknownRecord) => {
@@ -5315,6 +5386,38 @@ export const evenSummaryColumns = (root: ParentNode = document): void => {
   });
 };
 
+/*
+ * A script face (mapScript: --pt-script-font) is only a fallback, and Chrome fetches a fallback
+ * face once it lays out text that needs it: the PDF service printed before that fetch ended, so
+ * a Khmer party name printed as empty boxes (E-commerce, real PDF, 1 Nov 2026). Each face is
+ * asked for as soon as its stylesheet is in, for the characters the document uses.
+ */
+const requestedScriptFonts = new Set<string>();
+export const loadScriptFonts = (): void => {
+  if (typeof document === "undefined" || !document.fonts?.load) return;
+  const doc = document.querySelector<HTMLElement>(".pt-doc");
+  const list = doc?.style.getPropertyValue("--pt-script-font") || "";
+  if (!doc || !list.trim()) return;
+  const sample = doc.textContent || "";
+  list
+    .split(",")
+    .map((name) => name.trim().replace(/^['"]|['"]$/g, ""))
+    .filter(Boolean)
+    .forEach((name) => {
+      [400, 500, 600, 700].forEach((weight) => {
+        const key = `${weight} ${name}`;
+        if (requestedScriptFonts.has(key)) return;
+        document.fonts
+          .load(`${weight} 16px "${name}"`, sample)
+          // No face yet (its stylesheet still on the way): asked again on the next run.
+          .then((faces) => {
+            if (faces.length) requestedScriptFonts.add(key);
+          })
+          .catch(() => {});
+      });
+    });
+};
+
 export const registerProfessionalWords = (): void => {
   const state = window as typeof window & { ptWordsRegistered?: boolean };
   if (state.ptWordsRegistered || typeof document === "undefined") return;
@@ -5324,6 +5427,7 @@ export const registerProfessionalWords = (): void => {
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
       prepareReadableStylesheet();
+      loadScriptFonts();
       syncPrintWidths();
       respellTaxWords();
       evenSummaryColumns();
