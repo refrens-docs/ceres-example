@@ -3427,7 +3427,7 @@ describe("Modern Manufacturing template — view model", () => {
         })
       )
     ).toEqual({
-      theme: { accent: "#ff6600", tint: "#ffd7bd" },
+      theme: { accent: "#ff6600", tint: "#ffd7bd", light: false },
       transportInGrid: false,
       notesBeside: false,
     });
@@ -3463,7 +3463,26 @@ describe("Modern Manufacturing template — view model", () => {
       invoice.template = { primaryColor: "#ff6900" };
     });
     expect(html).toContain("--mm-theme: #ff6900; --mm-theme-tint: #ffd8bd;");
+    expect(html).not.toContain("data-mm-light-theme");
     expect(render()).not.toContain("--mm-theme");
+
+    // Lydia's picker saves {r, g, b, a}; white (or a pale pick) switches text on it to ink.
+    const white = (invoice: Record<string, unknown>) => {
+      invoice.template = { primaryColor: { r: 255, g: 255, b: 255, a: 1 } };
+    };
+    expect(mapSettings(state(white)).theme).toEqual({
+      accent: "#ffffff",
+      tint: themeTint("#ffffff"),
+      light: true,
+    });
+    expect(render(white)).toContain("data-mm-light-theme");
+    expect(
+      mapSettings(
+        state((invoice) => {
+          invoice.template = { primaryColor: { r: 254, g: 143, b: 62, a: 1 } };
+        })
+      ).theme
+    ).toEqual({ accent: "#fe8f3e", tint: themeTint("#fe8f3e"), light: false });
   });
 
   it("registers the view helper only when Handlebars is present", () => {
@@ -3834,7 +3853,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
   });
 
   it("colours the party and transport box titles with the theme", () => {
-    expect(rule(".mm-party-label")).toMatch(/color: var\(--mm-accent\);/);
+    expect(rule(".mm-party-label")).toMatch(/color: var\(--mm-accent-text\);/);
   });
 
   it("splits the HSN and tax tables' width equally between their columns", () => {
@@ -3960,7 +3979,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
         ".mm-doc .mm-item-desc .toastui-editor-contents th,\n.mm-doc .mm-note-body .toastui-editor-contents th"
       )
     ).toMatch(
-      /border-color: var\(--mm-line\);\s*background: var\(--mm-title-bar\);\s*color: var\(--mm-accent\);\s*font-weight: 600;/
+      /border-color: var\(--mm-line\);\s*background: var\(--mm-title-bar\);\s*color: var\(--mm-accent-text\);\s*font-weight: 600;/
     );
     // Headings and cells read from the left (user request).
     expect(
@@ -3970,7 +3989,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     ).toMatch(/text-align: start;/);
     // The same bar and text colour as the HSN summary's heading.
     expect(rule(".mm-hsn-table thead th")).toMatch(
-      /background: var\(--mm-title-bar\);\s*color: var\(--mm-accent\);/
+      /background: var\(--mm-title-bar\);\s*color: var\(--mm-accent-text\);/
     );
   });
 

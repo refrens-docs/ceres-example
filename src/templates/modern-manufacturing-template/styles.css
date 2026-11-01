@@ -37,6 +37,7 @@
   --mm-signature-ink: #1e293b;
   --mm-signature-muted: #64748b;
   --mm-on-accent: #fff;
+  --mm-accent-text: var(--mm-accent);
 
   /* The script's face (Lydia's "Change Script") follows the body font, for the glyphs it lacks. */
   --mm-font: var(--subtitle-font, "Inter", sans-serif), var(--mm-script-font, sans-serif);
@@ -78,6 +79,12 @@
   line-height: 1.5385;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
+}
+
+/* A very light pick (white, pale yellow): text on it and the titles use the ink colour. */
+.mm-doc[data-mm-light-theme] {
+  --mm-on-accent: var(--mm-ink);
+  --mm-accent-text: var(--mm-ink);
 }
 
 /* The heaviest weight is 600 (user request): text the browser makes bold by default, such as
@@ -188,7 +195,7 @@
 }
 
 .mm-section-title {
-  color: var(--mm-accent);
+  color: var(--mm-accent-text);
   font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
   font-weight: 600;
   line-height: 1.5385;
@@ -530,7 +537,7 @@
 /* Party and transport box titles (Billed To, Shipped From …) in the theme colour, like the
    other section titles. */
 .mm-party-label {
-  color: var(--mm-accent);
+  color: var(--mm-accent-text);
   font-weight: 600;
 }
 
@@ -1067,7 +1074,7 @@
 }
 
 .mm-upi-note {
-  color: var(--mm-accent);
+  color: var(--mm-accent-text);
   font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
   line-height: 1.5385;
 }
@@ -1179,7 +1186,7 @@
 }
 
 .mm-words-label {
-  color: var(--mm-accent);
+  color: var(--mm-accent-text);
   font-weight: 600;
 }
 
@@ -1348,7 +1355,7 @@
 
 .mm-widget-table .ceres-table thead th {
   background: var(--mm-title-bar);
-  color: var(--mm-accent);
+  color: var(--mm-accent-text);
   font-weight: 600;
 }
 
@@ -1632,7 +1639,7 @@
   margin: 0;
   padding: 6px;
   border-bottom: 1px solid var(--mm-line);
-  color: var(--mm-accent);
+  color: var(--mm-accent-text);
   font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
   line-height: 1.5385;
   font-weight: 600;
@@ -1779,7 +1786,7 @@
 .mm-doc .mm-note-body .toastui-editor-contents th {
   border-color: var(--mm-line);
   background: var(--mm-title-bar);
-  color: var(--mm-accent);
+  color: var(--mm-accent-text);
   font-weight: 600;
 }
 
@@ -1839,7 +1846,7 @@
 
 .mm-hsn-table thead th {
   background: var(--mm-title-bar);
-  color: var(--mm-accent);
+  color: var(--mm-accent-text);
   font-weight: 600;
 }
 
@@ -1924,7 +1931,7 @@
 }
 
 .mm-signature-banner {
-  color: var(--mm-accent);
+  color: var(--mm-accent-text);
   font-weight: 600;
 }
 

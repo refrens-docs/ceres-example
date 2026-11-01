@@ -445,11 +445,39 @@ const heading = (labels: UnknownRecord, key: string, fallback: string) =>
 const DEFAULT_THEME = "#013d7f";
 
 const hexColor = (value: unknown): string => {
+  // Lydia's picker saves {r, g, b, a}; a see-through colour is read as it shows on the white page.
+  if (value && typeof value === "object" && "r" in value) {
+    const { r, g, b, a } = asRecord(value);
+    const alpha = Number.isFinite(Number(a))
+      ? Math.min(1, Math.max(0, Number(a)))
+      : 1;
+    const channels = [r, g, b].map((channel) =>
+      Math.round(Number(channel) * alpha + 255 * (1 - alpha))
+    );
+    if (channels.some((channel) => !Number.isFinite(channel))) return "";
+    return `#${channels
+      .map((channel) =>
+        Math.min(255, Math.max(0, channel)).toString(16).padStart(2, "0")
+      )
+      .join("")}`;
+  }
   const raw = text(value).toLowerCase();
   if (/^#[0-9a-f]{6}$/.test(raw)) return raw;
   return /^#[0-9a-f]{3}$/.test(raw)
     ? `#${Array.from(raw.slice(1), (digit) => digit + digit).join("")}`
     : "";
+};
+
+/*
+ * A very light theme colour (white, a pale yellow) would leave white text unreadable on the
+ * banner and table header and the titles invisible on the page: those then use the ink colour.
+ */
+export const isLightTheme = (hex: string): boolean => {
+  const [r, g, b] = [1, 3, 5].map((start) => {
+    const c = parseInt(hex.slice(start, start + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6;
 };
 
 /* The light tint of a theme colour used for the dividers between table header cells. */
@@ -498,7 +526,7 @@ export const mapSettings = (state: UnknownRecord) => {
     // colour is set inline with its own tint.
     theme:
       theme && theme !== DEFAULT_THEME
-        ? { accent: theme, tint: themeTint(theme) }
+        ? { accent: theme, tint: themeTint(theme), light: isLightTheme(theme) }
         : null,
     transportInGrid:
       text(template.transportPosition).toLowerCase() !== "section",
@@ -4240,11 +4268,10 @@ export const applyTemplateUpdate = (data: unknown): void => {
   const template = asRecord(message.template);
   const docs = Array.from(document.querySelectorAll<HTMLElement>(".mm-doc"));
 
+  const picked =
+    asRecord(template.templateColor).primaryColor ?? template.primaryColor;
   const color = hexColor(
-    firstText(
-      asRecord(template.templateColor).primaryColor,
-      template.primaryColor
-    )
+    picked && typeof picked === "object" ? picked : firstText(picked)
   );
   if (color) {
     docs.forEach((doc) => {
@@ -4255,6 +4282,7 @@ export const applyTemplateUpdate = (data: unknown): void => {
         doc.style.setProperty("--mm-theme", color);
         doc.style.setProperty("--mm-theme-tint", themeTint(color));
       }
+      doc.toggleAttribute("data-mm-light-theme", isLightTheme(color));
     });
   }
 };
