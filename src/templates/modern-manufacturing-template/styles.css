@@ -344,6 +344,7 @@
 
 .mm-banner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -369,8 +370,11 @@
    together at the start, 12 px apart (the banner's gap); the subtitle takes the free space. */
 
 /* The title 20 px on 24 px lines (user, 2026-10-28). */
+
+/* The title never narrows below its longest word (it ran into the subtitle on a narrow page);
+   when title and subtitle do not fit side by side, the subtitle goes to the next line. */
 .mm-banner .mm-banner-title {
-  min-width: 0;
+  min-width: auto;
   margin-inline-end: 0;
   font-family: var(--mm-title-font);
   font-size: calc(var(--mm-font-size-xl) * var(--mm-text-scale, 1));
@@ -647,6 +651,16 @@
   border-bottom: 1px solid var(--mm-line);
 }
 
+/* Measured with whole words only: a name or value that cannot fit a word stacks the pair. */
+.mm-notes.is-measuring :is(.mm-info-label, .mm-info-value) {
+  overflow-wrap: normal;
+}
+
+.mm-notes.is-stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mm-notes.is-stacked > .mm-pair-box + .mm-pair-box,
 .mm-dispatch.is-stacked > .mm-pair-box + .mm-pair-box {
   border-top: 1px solid var(--mm-line);
   border-inline-start: 0;
@@ -815,8 +829,19 @@
 
 .mm-items .mm-group-row td {
   background: var(--mm-title-bar);
-  font-weight: 600;
   text-align: start;
+}
+
+.mm-group-name {
+  display: block;
+  font-weight: 600;
+}
+
+/* A group's description and pictures under its name, spaced as an item's (user, 2026-11-01). */
+.mm-group-row .mm-item-desc,
+.mm-group-row .ceres-image-gallery {
+  margin-top: 8px;
+  font-weight: 400;
 }
 
 .mm-item-name {
@@ -2245,6 +2270,11 @@
   .mm-hsn-table tr,
   .mm-widget-box .ceres-table tr {
     break-inside: avoid;
+  }
+
+  /* A group heading (and its pictures) never ends a page: it moves on with its first item. */
+  .mm-items :is(.mm-group-row, .mm-group-image-row) {
+    break-after: avoid;
   }
 
   /* Each line item prints whole: its description and image rows move to the next page with

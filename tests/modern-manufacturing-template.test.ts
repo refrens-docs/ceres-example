@@ -524,7 +524,8 @@ describe("Modern Manufacturing template — render", () => {
       "data-ceres-hsn-summary",
       "data-ceres-subtotal",
     ].forEach((hook) => expect(html).toContain(hook));
-    expect(html).not.toContain("data-ceres-tax-summary");
+    // Off but with data: rendered hidden, so Lydia's live toggle can show it.
+    expect(html).toContain('data-ceres-tax-summary style="display:none"');
     expect(html).not.toContain("data-ceres-payment-table");
 
     const withSummaries = render((invoice) => {
@@ -532,9 +533,11 @@ describe("Modern Manufacturing template — render", () => {
       invoice.allPayments = [{ amount: 100, paymentDate: "2026-09-22" }];
       invoice.advanceOptions.showHsnSummary = false;
     });
-    expect(withSummaries).toContain("data-ceres-tax-summary");
-    expect(withSummaries).toContain("data-ceres-payment-table");
-    expect(withSummaries).not.toContain('data-section="hsn"');
+    expect(withSummaries).toContain("data-ceres-tax-summary>");
+    expect(withSummaries).toContain("data-ceres-payment-table>");
+    expect(withSummaries).toContain(
+      'data-ceres-hsn-summary style="display:none"'
+    );
 
     // The tax summary and payment record sit below the HSN summary, above the signature.
     const allTables = render((invoice) => {
@@ -2218,6 +2221,28 @@ describe("Modern Manufacturing template — view model", () => {
       isGroupHeader: true,
       name: "Group A",
       colspan: table.colspan,
+      description: "",
+      images: [],
+      originalImages: [],
+      imageRow: false,
+    });
+    // A group's own thumbnail and images print as a gallery under its name, its original
+    // images in a row across the table (Lydia's group row, user 2026-11-01).
+    const pictured = buildModernManufacturingView(
+      state((invoice) => {
+        invoice.items.unshift({
+          group: true,
+          name: "Pictured",
+          thumbnail: "https://cdn.example/g.png",
+          images: ["https://cdn.example/g.png", "https://cdn.example/g2.png"],
+          originalImages: ["https://cdn.example/big.png"],
+        });
+      })
+    ).table.rows[0];
+    expect(pictured).toMatchObject({
+      images: ["https://cdn.example/g.png", "https://cdn.example/g2.png"],
+      originalImages: ["https://cdn.example/big.png"],
+      imageRow: true,
     });
     const groupTotal = rows[rows.length - 1];
     expect(groupTotal.isGroupTotal).toBe(true);
@@ -3258,7 +3283,7 @@ describe("Modern Manufacturing template — view model", () => {
           invoice.allPayments = [{ amount: 10 }];
         })
       ).payments
-    ).toEqual({ show: true, heading: "Payments" });
+    ).toEqual({ available: true, show: true, heading: "Payments" });
     expect(
       buildModernManufacturingView(
         state((invoice) => {

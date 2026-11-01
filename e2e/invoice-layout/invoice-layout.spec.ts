@@ -103,9 +103,10 @@ async function measure(page: Page) {
       ).size;
     };
 
-    const sections = q('[data-testid="section"]').map(
-      (s) => s.dataset.section ?? ""
-    );
+    // A summary switched off stays in the page, hidden, for Lydia's live toggles.
+    const sections = q('[data-testid="section"]')
+      .filter((s) => s.getClientRects().length > 0)
+      .map((s) => s.dataset.section ?? "");
 
     // K2: pairs — boxes that share a row
     const pairs = q("[data-pair]").map((row) => {
@@ -161,7 +162,9 @@ async function measure(page: Page) {
     );
     const sigBlock =
       sig?.closest<HTMLElement>('[data-testid="section"]') ?? sig;
-    const prev = sigBlock?.previousElementSibling as HTMLElement | null;
+    let prev = sigBlock?.previousElementSibling as HTMLElement | null;
+    while (prev && prev.getClientRects().length === 0)
+      prev = prev.previousElementSibling as HTMLElement | null;
 
     return {
       sections,

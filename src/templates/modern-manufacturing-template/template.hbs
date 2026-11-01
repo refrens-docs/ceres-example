@@ -116,7 +116,7 @@
           {{/if}}
 
           {{#if view.meta.length}}
-            <section class="mm-box mm-details" data-testid="section" data-section="details" style="--mm-detail-columns: {{view.detailColumns}}">
+            <section class="mm-box mm-details" data-testid="section" data-section="details" data-mm-columns="{{view.detailColumns}}" style="--mm-detail-columns: {{view.detailColumns}}">
               {{#each view.meta}}
                 <div class="mm-detail mm-detail-{{key}}"{{#if attr}} {{attr}}{{/if}}{{#if isHidden}} style="display:none"{{/if}}>
                   <span class="mm-label">{{label}}</span>
@@ -237,8 +237,19 @@
                   {{#each view.table.rows}}
                     {{#if isGroupHeader}}
                       <tr class="mm-group-row">
-                        <td colspan="{{colspan}}">{{name}}</td>
+                        <td colspan="{{colspan}}">
+                          <span class="mm-group-name">{{name}}</span>
+                          {{#if description}}<div class="mm-item-desc">{{> MarkdownViewer (prepareMarkdownViewerData description) }}</div>{{/if}}
+                          {{#if images.length}}{{> CeresImageGallery (prepareImageGallery images variant="thumbnail" alt=name) }}{{/if}}
+                        </td>
                       </tr>
+                      {{#if imageRow}}
+                        <tr class="mm-image-row mm-group-image-row">
+                          <td colspan="{{colspan}}">
+                            {{#each originalImages}}<img class="mm-large-image" data-testid="large-image" src="{{this}}" alt="{{../name}}" referrerpolicy="no-referrer" />{{/each}}
+                          </td>
+                        </tr>
+                      {{/if}}
                     {{else}}
                       <tr class="mm-item-row{{#if isStripe}} is-stripe{{/if}}{{#if isRich}} is-rich{{/if}}{{#if isGroupTotal}} mm-group-total-row{{/if}}" data-testid="item-row" data-item-index="{{itemIndex}}">
                         <td class="mm-col-serial is-fixed" data-col="sr">{{#if serial}}<span class="mm-num" data-testid="num">{{serial}}</span>{{/if}}</td>
@@ -470,8 +481,8 @@
             </section>
           {{/if}}
 
-          {{#if view.showHsn}}
-            <section class="mm-box mm-hsn" data-testid="section" data-section="hsn" data-ceres-hsn-summary>
+          {{#if view.hsn.hasRows}}
+            <section class="mm-box mm-hsn" data-testid="section" data-section="hsn" data-ceres-hsn-summary{{#unless view.showHsn}} style="display:none"{{/unless}}>
               <h3 class="ceres-table-heading">{{view.hsn.title}}</h3>
               <table class="mm-hsn-table">
                 <thead>
@@ -546,9 +557,10 @@
             </section>
           {{/if}}
 
-          {{!-- The optional tax summary and payment record follow the HSN summary. --}}
-          {{#if view.showTaxSummary}}
-            <div class="mm-widget-box mm-widget-table" data-ceres-tax-summary>
+          {{!-- The optional tax summary and payment record follow the HSN summary; with data they
+               are always rendered, hidden while switched off, for Lydia's live toggles. --}}
+          {{#if view.taxSummaryAvailable}}
+            <div class="mm-widget-box mm-widget-table" data-ceres-tax-summary{{#unless view.showTaxSummary}} style="display:none"{{/unless}}>
               <h3 class="ceres-table-heading">{{view.taxSummaryTitle}}</h3>
               {{> TaxSummaryTable (computeTaxSummary @root.invoice.items isIgst=(showIgst @root.invoice) isUtgst=(showUtgst @root.invoice)) }}
             </div>
@@ -573,8 +585,8 @@
             </div>
           {{/if}}
 
-          {{#if view.payments.show}}
-            <div class="mm-widget-box mm-widget-table" data-ceres-payment-table>
+          {{#if view.payments.available}}
+            <div class="mm-widget-box mm-widget-table" data-ceres-payment-table{{#unless view.payments.show}} style="display:none"{{/unless}}>
               {{> PaymentTable (computePaymentColumns @root.invoice.allPayments businessCurrency=@root.invoice.businessCurrency currency=@root.invoice.currency)
                   ownerOffset=@root.invoice.ownerOffset
                   heading=view.payments.heading

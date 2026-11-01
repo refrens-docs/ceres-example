@@ -2393,7 +2393,21 @@ export const mapItemTable = (state: UnknownRecord, ctx: FormatContext) => {
     )
     .map((item) => {
       if (item.group === true) {
-        return { isGroupHeader: true, name: text(item.name), colspan };
+        // A group carries its own description and pictures (Lydia's group row): the thumbnail
+        // and images[] as a gallery under its name, originalImages[] across the table below.
+        const groupImages = [text(item.thumbnail), ...imageList(item.images)]
+          .filter(Boolean)
+          .filter((src, index, all) => all.indexOf(src) === index);
+        const groupOriginals = imageList(item.originalImages);
+        return {
+          isGroupHeader: true,
+          name: text(item.name),
+          colspan,
+          description: text(item.description),
+          images: groupImages,
+          originalImages: groupOriginals,
+          imageRow: groupOriginals.length > 0,
+        };
       }
       itemIndex += 1;
       const isGroupTotal = item.isGroupItemTotalRow === true;
@@ -3460,9 +3474,16 @@ export const buildModernManufacturingView = (root: unknown) => {
       show: !!additional || !!notes.attachments,
     },
     notesRow: settings.notesBeside ? null : notes.notes,
-    // Sections that are switched off are not rendered at all (spec check K1).
+    // A summary with data is always rendered, hidden while its toggle is off, so Lydia's live
+    // toggles (the renderer shows or hides [data-ceres-tax-summary], [data-ceres-hsn-summary],
+    // [data-ceres-payment-table]) work without a reload; hidden, it prints nothing.
     hsn,
     showHsn: hsn.hasRows && !hsn.isHidden,
+    taxSummaryAvailable: asArray(invoice.items).some((item) =>
+      ["gstRate", "igst", "cgst", "sgst", "vatRate", "taxRate"].some(
+        (key) => Number(asRecord(item)[key]) > 0
+      )
+    ),
     showTaxSummary: Boolean(visibility.showTaxTable),
     taxSummaryTitle: labelOr(
       asRecord(invoice.customLabels),
@@ -3473,6 +3494,7 @@ export const buildModernManufacturingView = (root: unknown) => {
     // Printed only when the document turns "Show Payments Table" on, as refrens.com does (all
     // 54 test-janvi documents with payments), under its "Payments" title.
     payments: {
+      available: payments.length > 0,
       show:
         payments.length > 0 &&
         (asRecord(state.advanceOptions).showPaymentsTable === true ||
@@ -4433,6 +4455,18 @@ export const stackCrampedFields = (root: ParentNode = document): void => {
   root
     .querySelectorAll<HTMLElement>(".mm-id-line.is-stacked")
     .forEach((line) => line.classList.remove("is-stacked"));
+  // The details box drops a column at a time while its values do not fit (a long number on a
+  // narrow page: A5 at zoom 1.2 cut the date off and lost the last cells).
+  root
+    .querySelectorAll<HTMLElement>(".mm-details[data-mm-columns]")
+    .forEach((grid) => {
+      let columns = Number(grid.dataset.mmColumns) || 1;
+      grid.style.setProperty("--mm-detail-columns", String(columns));
+      while (columns > 1 && grid.scrollWidth > grid.clientWidth + 1) {
+        columns -= 1;
+        grid.style.setProperty("--mm-detail-columns", String(columns));
+      }
+    });
   root.querySelectorAll<HTMLElement>(".mm-seller-fields").forEach((grid) => {
     grid.classList.remove("is-stacked");
     const wraps = [...grid.querySelectorAll<HTMLElement>(".mm-field > *")].some(
@@ -4460,6 +4494,21 @@ export const stackCrampedPairs = (root: ParentNode = document): void => {
         row.classList.add("is-stacked");
       }
     });
+  // Additional Info | Attachments: stacked when an info name or value would break inside a word
+  // two across (A5 at zoom 1.2 broke "Sahil Tadavi" every two letters).
+  root.querySelectorAll<HTMLElement>(".mm-notes").forEach((pair) => {
+    pair.classList.remove("is-stacked");
+    const cells = [
+      ...pair.querySelectorAll<HTMLElement>(".mm-info-label, .mm-info-value"),
+    ];
+    if (cells.length === 0) return;
+    pair.classList.add("is-measuring");
+    const cramped = cells.some(
+      (cell) => cell.scrollWidth > cell.clientWidth + 1
+    );
+    pair.classList.remove("is-measuring");
+    if (cramped) pair.classList.add("is-stacked");
+  });
 };
 
 export const fitItemsToScreen = (root: ParentNode = document): void => {
