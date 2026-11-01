@@ -234,32 +234,20 @@ describe("Modern Manufacturing template — render", () => {
     expect(letterheads(firstPage)).toBe(1);
   });
 
-  it("takes Lydia's colour settings: text, page and box backgrounds", () => {
+  it("takes only the picked colour from Lydia: the page, text and boxes keep their own", () => {
     const styles = fs.readFileSync(
       path.join(TEMPLATE_DIR, "styles.css"),
       "utf8"
     );
-    // Secondary colour → text; primary background → page; secondary background → boxes.
-    expect(styles).toContain("--mm-ink: var(--secondary-color, #1a2130);");
-    expect(styles).toMatch(/background: var\(--primary-background, #fff\);/);
-    [
-      ".mm-box",
-      ".mm-pair",
-      ".mm-summary-row:has(> .mm-bank)",
-      ".mm-summary-spacer + .mm-totals",
-      ".mm-widget-box",
-    ].forEach((selector) => {
-      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      expect(styles).toMatch(
-        new RegExp(
-          `\\n${escaped} \\{[^}]*background: var\\(--secondary-background, transparent\\);`
-        )
-      );
-    });
-    // The theme colour: the accent, with the renderer's --primary-color underneath.
+    // Refrens fills the secondary colour and both backgrounds from the same pick, so the
+    // template reads only the primary colour (user, 2026-11-01).
     expect(styles).toContain(
       "--mm-accent: var(--mm-theme, var(--primary-color, #013d7f));"
     );
+    expect(styles).not.toMatch(
+      /--secondary-color|--primary-background|--secondary-background/
+    );
+    expect(styles).toContain("--mm-ink: #1a2130;");
   });
 
   it("hides every totals row with the totals, additional charges included", () => {
@@ -3502,8 +3490,8 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       // The document's theme colour first, then the renderer's, then the v2 default blue.
       "--mm-accent: var(--mm-theme, var(--primary-color, #013d7f));",
       "--mm-accent-200: var(--mm-theme-tint, #bddcff);",
-      "--mm-ink: var(--secondary-color, #1a2130);",
-      "--mm-strong: var(--secondary-color, #282828);",
+      "--mm-ink: #1a2130;",
+      "--mm-strong: #282828;",
       "--mm-muted: #666670;",
       "--mm-line: #d1d6e0;",
       "--mm-table-outline: #dcdcdc;",

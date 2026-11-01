@@ -17,16 +17,17 @@
  */
 
 /*
- * Lydia's "Change Color & Font" (applied by the renderer as root variables, live too):
- * primary colour → the accent (bars, headings, table header); secondary colour → the text;
- * primary background → the page; secondary background → the boxes and sections — the same
- * reading as the Solvin and SR Trading 2.0 templates. Unset, the design's own colours stay.
+ * Lydia's "Change Color & Font" (applied by the renderer as root variables, live too): only
+ * the colour picked there changes, and only what is blue in the design (banner, table header,
+ * box titles, grand total bar, UPI note, words label, header dividers). The page stays white,
+ * the text and boxes keep their own colours: Refrens fills the secondary colour and both
+ * backgrounds from the same pick, which turned the whole page that colour (user, 2026-11-01).
  */
 .mm-doc {
   --mm-accent: var(--mm-theme, var(--primary-color, #013d7f));
   --mm-accent-200: var(--mm-theme-tint, #bddcff);
-  --mm-ink: var(--secondary-color, #1a2130);
-  --mm-strong: var(--secondary-color, #282828);
+  --mm-ink: #1a2130;
+  --mm-strong: #282828;
   --mm-muted: #666670;
   --mm-line: #d1d6e0;
   --mm-table-outline: #dcdcdc;
@@ -69,7 +70,7 @@
   max-width: 100%;
   margin: 0 auto;
   padding: 0 var(--mm-gutter);
-  background: var(--primary-background, #fff);
+  background: #fff;
   color: var(--mm-ink);
   font-family: var(--mm-font);
   font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
@@ -175,7 +176,6 @@
 .mm-box {
   border: 1px solid var(--mm-line);
   border-radius: 6px;
-  background: var(--secondary-background, transparent);
   overflow: hidden;
 }
 
@@ -496,7 +496,6 @@
   align-items: stretch;
   border: 1px solid var(--mm-line);
   border-radius: 6px;
-  background: var(--secondary-background, transparent);
   overflow: hidden;
 }
 
@@ -940,7 +939,6 @@
 .mm-summary-row:has(> .mm-bank) {
   border: 1px solid var(--mm-line);
   border-radius: 6px;
-  background: var(--secondary-background, transparent);
   overflow: hidden;
 }
 
@@ -962,7 +960,6 @@
 .mm-summary-spacer + .mm-totals {
   border: 1px solid var(--mm-line);
   border-radius: 6px;
-  background: var(--secondary-background, transparent);
   overflow: hidden;
 }
 
@@ -1171,7 +1168,6 @@
   overflow-x: auto;
   border: 1px solid var(--mm-line);
   border-radius: 6px;
-  background: var(--secondary-background, transparent);
 }
 
 .mm-widget-box:not(:has(.ceres-table)) {
@@ -2449,7 +2445,7 @@
 
   /* One solid ground under the totals, so no hairline seams show between their empty cells. */
   .mm-items[data-mm-totals-split] {
-    background-color: var(--primary-background, #fff);
+    background-color: #fff;
   }
 }
 
