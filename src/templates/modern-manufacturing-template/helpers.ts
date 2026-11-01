@@ -2167,8 +2167,8 @@ const isRealItem = (item: UnknownRecord) =>
  * Table layout (INVOICE_TEMPLATE_SPEC §5, layout rule 6). Columns start at their Figma widths
  * and grow only when their widest value needs it; Description takes the rest of the 936 px
  * design width and keeps at least 22% of the table. When it would fall below that, the spec's
- * fallbacks apply in order: columns shrink to their content, headers wrap (after "/"), Unit
- * merges into Qty, numbers get 10% smaller. Below the table's minimum width the table
+ * fallbacks apply in order: columns shrink to their content, headers wrap (after "/"). Figures
+ * never get smaller than the rest of the text (user, 2026-11-01: one text size). Below the table's minimum width the table
  * scrolls inside its own box. Widths are estimated from the text at Inter 12px.
  */
 /* 936 px of content less the table's own 1 px outline on each side. */
@@ -2282,17 +2282,19 @@ interface WidthInput {
   values: string[];
 }
 
-/* The narrowest one-line width a column's content needs, at a given figure scale. */
-const contentWidth = (
-  { column, values }: { column: ItemColumn; values: string[] },
-  scale: number
-): number =>
+/* The narrowest one-line width a column's content needs. */
+const contentWidth = ({
+  column,
+  values,
+}: {
+  column: ItemColumn;
+  values: string[];
+}): number =>
   Math.max(
     headerWidth(column.label),
     ...values.map(
       (value) =>
-        (column.kind === "text" ? longestWordWidth(value) : textWidth(value)) *
-          scale +
+        (column.kind === "text" ? longestWordWidth(value) : textWidth(value)) +
         CELL_PADDING
     )
   );
@@ -2300,7 +2302,6 @@ const contentWidth = (
 export interface TableLayout {
   /* Final width per column key, in px. */
   widths: Record<string, number>;
-  smallNumbers: boolean;
   /* Description's width at the design width, and the minimum it is held to. */
   descriptionWidth: number;
   descriptionMin: number;
@@ -2312,10 +2313,10 @@ export const planTableLayout = (inputs: WidthInput[]): TableLayout => {
     (COLUMN_SPEC[column.key] || { width: CUSTOM_COLUMN_WIDTH }).width;
   const minDescription = DESIGN_TABLE_WIDTH * MIN_DESCRIPTION_SHARE;
 
-  const attempt = (shrink: boolean, scale: number) => {
+  const attempt = (shrink: boolean) => {
     const widths: Record<string, number> = {};
     fixed.forEach((input) => {
-      const needed = Math.ceil(contentWidth(input, scale));
+      const needed = Math.ceil(contentWidth(input));
       widths[input.column.key] = shrink
         ? needed
         : Math.max(startOf(input.column), needed);
@@ -2327,16 +2328,15 @@ export const planTableLayout = (inputs: WidthInput[]): TableLayout => {
       (total, width) => total + width,
       SERIAL_WIDTH
     );
-    return { widths, others, smallNumbers: scale < 1 };
+    return { widths, others };
   };
 
   // Unit stays a column of its own, as refrens.com prints it (252 test-janvi documents): the
   // planner shrinks columns and figures but never folds Unit into Quantity. Only the
   // account's own "unit in quantity" setting does that.
   const steps = [
-    attempt(false, 1),
-    attempt(true, 1), // shrink to content; headers already wrap after "/"
-    attempt(true, 0.9),
+    attempt(false),
+    attempt(true), // shrink to content; headers already wrap after "/"
   ];
   const chosen =
     steps.find((step) => DESIGN_TABLE_WIDTH - step.others >= minDescription) ||
@@ -2344,7 +2344,6 @@ export const planTableLayout = (inputs: WidthInput[]): TableLayout => {
 
   return {
     widths: chosen.widths,
-    smallNumbers: chosen.smallNumbers,
     descriptionWidth: DESIGN_TABLE_WIDTH - chosen.others,
     // Content width that holds the Description cell at ≥ 22% of the table even when the
     // table must scroll (2 px spare for rounding); the cell adds its own padding and rule.
@@ -2550,7 +2549,6 @@ export const mapItemTable = (state: UnknownRecord, ctx: FormatContext) => {
     serialLabel: labelOr(labels, "serialNumber", "Sr."),
     serialWidth: SERIAL_WIDTH,
     mergeUnit,
-    smallNumbers: layout.smallNumbers,
     descriptionMin: layout.descriptionMin,
     footer: {
       show: Boolean(visibility.showTotalsRow) && realItems.length > 0,
@@ -3266,8 +3264,7 @@ export const mapFooter = (state: UnknownRecord) => {
 /*
  * Print and PDF print at true size (design-to-template §4a): no page-fit zoom, so 13 px text
  * prints at 13 px. zoomSize is the print size picked in Lydia (0.8 smaller … 1.2 larger),
- * applied by the renderer; textScale scales text only. A table wider than its page is fitted
- * when the print layout applies (fitPrintTable), measured rather than estimated.
+ * applied by the renderer; textScale scales text only, tables included (never fitted).
  */
 const positiveNumber = (value: unknown): number | undefined => {
   const parsed = hasValue(value) ? Number(text(value)) : NaN;
@@ -3281,9 +3278,11 @@ const compactDecimal = (value: number): string =>
  * The printable width in the document's own pixels, which caps the page in print
  * (styles.css): Refrens' PDF service lays the page out in a window wider than the paper
  * before it prints, and a table fitted there was clipped on the page (user report). Side
- * margins are xMargins centimetres (1 when unset); Chrome scales them with the print zoom
- * like the rest of the page (zoomSize, 0.8 is the renderer's unzoomed default); 4 px kept
- * back for rounding. Ported from the Ecommerce template.
+ * margins are xMargins centimetres (1 when unset) of the paper itself, at every print size:
+ * they come off the paper before the print zoom (zoomSize, 0.8 is the renderer's unzoomed
+ * default), so 1 cm prints as 28 pt at 0.9/1.1/1.2 as at 1, like Refrens' Enterprise and the
+ * Professional template (real PDFs, 2026-11-01; Ecommerce 3125801); 4 px kept back for
+ * rounding.
  */
 const PAPER_MM: Record<string, [number, number]> = {
   a3: [297, 420],
@@ -3305,7 +3304,7 @@ export const printWidth = (pdfOptions: UnknownRecord): number => {
     : NaN;
   const sideMarginCm = Number.isFinite(margin) && margin >= 0 ? margin : 1;
   return Math.floor(
-    ((paperMm / 25.4) * 96) / rendererZoom - (2 * sideMarginCm * 96) / 2.54 - 4
+    ((paperMm / 25.4) * 96 - (2 * sideMarginCm * 96) / 2.54) / rendererZoom - 4
   );
 };
 
@@ -3698,45 +3697,13 @@ export const placeFootersOnPageEdge = (root: ParentNode = document): void => {
   });
 };
 
-/* ------------------------------------------------------------------ print: fit a wide table */
+/* ------------------------------------------------------------------ print: wide tables */
 
 /*
- * A table wider than its page once laid out for print (many columns, long figures) takes the
- * tight print padding (is-print-fit), then its text shrinks just enough to fit (--mm-print-fit),
- * never under the 10 px floor (CSS). Measured rather than estimated, so every paper, margin and
- * print size fits; ported from the Ecommerce template. Back on screen it reads as before.
+ * A table prints at the document's own text size (the text scale), like everything else on
+ * the page: it is never shrunk or zoomed to fit (user, 2026-11-01: a wider table may run off a
+ * portrait page; landscape shows it whole). It replaces the fit ported from Ecommerce.
  */
-const MIN_PRINT_FIT = 0.6;
-// Sub-pixel rounding is not an overflow.
-const PRINT_SLACK = 0.5;
-// The share of the page's width a fitted table may take (see fitPrintTable).
-const PRINT_ROOM = 0.99;
-
-/*
- * Chrome before 128 (Refrens' PDF service runs 122) reports the size of anything inside a
- * CSS-zoomed element divided by that zoom; later Chrome reports what is drawn. The print fit
- * zooms the table it measures, so it measures through this: read as Chrome 122 gives it, the
- * squeeze never seemed to take and an A5 table was zoomed to 0.01 (2026-10-24, as Apex
- * 2026-10-23). Elsewhere it returns the rect unchanged.
- */
-const legacyZoom = (): boolean =>
-  typeof Element !== "undefined" && !("currentCSSZoom" in Element.prototype);
-
-const zoomWithin = (element: Element): number => {
-  let zoom = 1;
-  for (
-    let node: Element | null = element;
-    node && node !== document.documentElement;
-    node = node.parentElement
-  ) {
-    zoom *= parseFloat(getComputedStyle(node).zoom) || 1;
-  }
-  return zoom;
-};
-
-export const drawnWidth = (element: Element): number =>
-  element.getBoundingClientRect().width *
-  (legacyZoom() ? zoomWithin(element) : 1);
 
 /*
  * The totals carry on without the item headings (user, 2026-10-19): in print, the rows after
@@ -3833,111 +3800,6 @@ export const splitTotals = (root: ParentNode = document): void => {
     groups.forEach((group) => split.appendChild(group));
     table.after(split);
   });
-};
-
-export const fitPrintTable = (
-  root: ParentNode = document,
-  force = false
-): void => {
-  const printing =
-    force ||
-    (typeof window.matchMedia === "function" &&
-      window.matchMedia("print").matches);
-  root.querySelectorAll<HTMLElement>(".mm-items").forEach((table) => {
-    table.classList.remove("is-print-fit");
-    table.style.removeProperty("--mm-print-fit");
-    table.style.removeProperty("--mm-print-squeeze");
-    const box = table.parentElement;
-    if (!printing || !box) return;
-    // 1 % kept back: Chrome sets the PDF's text a little wider than the layout measured it, and a
-    // word on the table's edge ("Amount", "Expiry") was cut there.
-    const room = () => box.getBoundingClientRect().width * PRINT_ROOM;
-    // The table fills its box (width 100 %), so its own width always exceeds 99 % of it: what
-    // counts is how narrow its columns can go, measured at width 0 (a table is never narrower
-    // than its content). Read as it stood, a table that fit was shrunk to the 10 px floor.
-    const need = () => {
-      const { width } = table.style;
-      table.style.width = "0px";
-      const narrowest = drawnWidth(table);
-      table.style.width = width;
-      return narrowest;
-    };
-    const overflow = () => need() - room();
-    if (overflow() <= PRINT_SLACK) return;
-    table.classList.add("is-print-fit");
-    let fit = 1;
-    // By the measured ratio, and at least a step each time, so the last pixel or two of
-    // overflow (floors, padding and rules do not scale exactly) still goes.
-    for (let step = 0; step < 20 && overflow() > PRINT_SLACK; step += 1) {
-      const ratio = room() / need();
-      fit = Math.max(
-        MIN_PRINT_FIT,
-        Math.min(fit - 0.01, Math.floor(fit * ratio * 100) / 100)
-      );
-      table.style.setProperty("--mm-print-fit", String(fit));
-      if (fit === MIN_PRINT_FIT) break;
-    }
-    // The text at its floor and still too wide: the whole table scales, never cut off.
-    let squeeze = 1;
-    for (let step = 0; step < 10 && overflow() > PRINT_SLACK; step += 1) {
-      const ratio = room() / need();
-      squeeze = Math.min(
-        squeeze - 0.01,
-        Math.floor(squeeze * ratio * 100) / 100
-      );
-      table.style.setProperty("--mm-print-squeeze", String(squeeze));
-    }
-  });
-};
-
-/*
- * The summary tables (HSN, Tax, Batch, Payments) in print: one wider than its box (an A5 page:
- * the tax summary's Total, the batch summary's Expiry Date, the payments' last column were cut)
- * scales down as a whole, just enough, to the same 99 % of the box as the items table.
- */
-export const fitSummaryTables = (
-  root: ParentNode = document,
-  force = false
-): void => {
-  const printing =
-    force ||
-    (typeof window.matchMedia === "function" &&
-      window.matchMedia("print").matches);
-  root
-    .querySelectorAll<HTMLElement>(
-      ".mm-widget-table .ceres-table, .mm-hsn-table"
-    )
-    .forEach((table) => {
-      table.classList.remove("is-print-fit");
-      table.style.removeProperty("--mm-print-squeeze");
-      const box = table.parentElement;
-      if (!printing || !box) return;
-      const room = () => box.getBoundingClientRect().width * PRINT_ROOM;
-      // As the items table: each fills its box, so what counts is its narrowest width, at
-      // width 0. Their columns are fixed shares, which at width 0 would read as no width at
-      // all, so the measure sizes them by their content (auto layout) for that moment.
-      const need = () => {
-        const { width, tableLayout } = table.style;
-        table.style.width = "0px";
-        table.style.tableLayout = "auto";
-        const narrowest = drawnWidth(table);
-        table.style.width = width;
-        table.style.tableLayout = tableLayout;
-        return narrowest;
-      };
-      const overflow = () => need() - room();
-      if (overflow() <= PRINT_SLACK) return;
-      table.classList.add("is-print-fit");
-      let squeeze = 1;
-      for (let step = 0; step < 10 && overflow() > PRINT_SLACK; step += 1) {
-        const ratio = room() / need();
-        squeeze = Math.min(
-          squeeze - 0.01,
-          Math.floor(squeeze * ratio * 100) / 100
-        );
-        table.style.setProperty("--mm-print-squeeze", String(squeeze));
-      }
-    });
 };
 
 /* ------------------------------------------------------------------ print: a browser's own print */
@@ -4124,15 +3986,13 @@ export const prepareBrowserPrint = (
   withReadableStylesheet(() =>
     withPrintRules(width, () => {
       doc.style.width = `${width}px`;
-      withPrintMedia(() => (layout ? layout() : fitPrintTable(root, true)));
+      withPrintMedia(() => layout?.());
     })
   );
   doc.style.width = docWidth;
   fitted.forEach(([table, className]) => {
     // eslint-disable-next-line no-param-reassign
-    table.className = `${className}${
-      table.classList.contains("is-print-fit") ? " is-print-fit" : ""
-    }`;
+    table.className = className;
   });
 };
 
@@ -4144,7 +4004,10 @@ export const prepareBrowserPrint = (
  * 2026-10-31): on a one-page printout the items table takes the page's spare height, so the
  * totals, notes and footer below it end at the page's foot (user request). The spare height
  * goes to the last item row, whose cells and column rules run down to the table's Total row.
- * A document longer than a page prints as it is. The page carries the setting as
+ * On a longer document, when the block after the table (the bank and totals box) does not fit
+ * under it and moves to the next page anyway, the table fills the rest of its page instead,
+ * its Total row closing it at the page's foot (user report, A00052-E, 2026-11-01: the page
+ * under a one-item table stayed blank with the toggle on). The page carries the setting as
  * data-mm-stretch-table. The preview has a stretch of its own (stretchItemsToSheet).
  */
 const STRETCH_ATTR = "data-mm-stretch-table";
@@ -4157,6 +4020,41 @@ export const resetItemsTableStretch = (root: ParentNode = document): void => {
       row.style.removeProperty("height");
       row.removeAttribute("data-mm-stretched");
     });
+};
+
+/*
+ * A paginated print of a longer document: the page holding the table's end ends where a forced
+ * break after the table would start; when the next block starts on a later page, the last row
+ * takes the space between, and goes back should the table then reach past its page.
+ */
+const stretchToTablePageEnd = (
+  doc: HTMLElement,
+  row: HTMLElement,
+  scale: number
+): void => {
+  const section = row.closest<HTMLElement>(".mm-items-section");
+  let next = section?.nextElementSibling as HTMLElement | null;
+  while (next && !next.getClientRects().length) {
+    next = next.nextElementSibling as HTMLElement | null;
+  }
+  if (!section || !next) return;
+  const marker = document.createElement("div");
+  marker.style.cssText = "break-before: page; height: 0; margin: 0;";
+  section.after(marker);
+  const pageEnd = pageTop(marker);
+  marker.remove();
+  const tableEnd = section.getBoundingClientRect().bottom + window.scrollY;
+  if (pageTop(next) < pageEnd - PAGE_EDGE_SLACK) return;
+  const spare = pageEnd - tableEnd - PAGE_EDGE_SLACK;
+  if (spare <= 0) return;
+  row.style.height = `${
+    (row.getBoundingClientRect().height + spare) / scale
+  }px`;
+  row.setAttribute("data-mm-stretched", "");
+  if (section.getBoundingClientRect().bottom + window.scrollY > pageEnd) {
+    row.style.removeProperty("height");
+    row.removeAttribute("data-mm-stretched");
+  }
 };
 
 export const stretchItemsTable = (root: ParentNode = document): void => {
@@ -4185,32 +4083,57 @@ export const stretchItemsTable = (root: ParentNode = document): void => {
          * Laid out for print but not paginated: Refrens' PDF service, which lays the page out
          * in a window shorter than the paper and only then prints, so the window's height is
          * not the page's (the table never stretched in the PDF, user report). The page's
-         * height is left to CSS, 100vh being the page area when the PDF is made: the row
-         * takes what the rest of the document leaves of it, never less than its own height
-         * (a document longer than a page prints as it is). Under the print zoom Chrome
-         * scales the margins as well, hence 100vh / zoom; 16 px kept back, more above a zoom
-         * of 1. As the Ecommerce template does.
+         * height is left to CSS, 100vh being the page area when the PDF is made (its bottom
+         * margin differs per document, 34 mm on A00052-E): the row takes what the rest of
+         * the document leaves of it, never less than its own height. Under the print zoom
+         * Chrome scales the margins as well, hence 100vh / zoom; 16 px kept back, more above
+         * a zoom of 1. As the Ecommerce template does.
          */
         const zoom =
           parseFloat(getComputedStyle(document.documentElement).zoom || "1") ||
           1;
-        const docHeight = doc.getBoundingClientRect().height / scale;
-        // Taller than the paper: more than a page, printed as it is (a stretched row there
-        // added a page of its own).
-        const paper = Number(doc.dataset.mmPaperHeight) || Infinity;
-        if (docHeight > paper / zoom) return;
-        const rowHeight = height / scale;
-        const slack = 16 + (zoom > 1 ? 160 * (1 - 1 / zoom) : 0);
-        row.style.height = `max(${Math.ceil(
-          rowHeight
-        )}px, calc(100vh / ${compactDecimal(zoom)} - ${Math.ceil(
+        const page = `100vh / ${compactDecimal(zoom)}`;
+        const docRect = doc.getBoundingClientRect();
+        const docHeight = docRect.height / scale;
+        const rowHeight = Math.ceil(height / scale);
+        const slack = Math.ceil(16 + (zoom > 1 ? 160 * (1 - 1 / zoom) : 0));
+        // One page: everything ends at the page's foot.
+        const onePage = `calc(${page} - ${Math.ceil(
           docHeight - rowHeight + slack
-        )}px))`;
+        )}px)`;
+        /*
+         * Longer: the table ends on the first page (tableEnd under the page's height) and
+         * the block after it needs more than the page has left (left = page - tableEnd), so
+         * it goes to the next page whatever happens: the row takes what is left. As a CSS
+         * step: (need - left) × 1000 clamped to [0, left] is all of `left` when the block
+         * does not fit and 0 when it does (or when the table ends further down).
+         */
+        let restOfPage = "0px";
+        const section = row.closest<HTMLElement>(".mm-items-section");
+        let next = section?.nextElementSibling as HTMLElement | null;
+        while (next && !next.getClientRects().length) {
+          next = next.nextElementSibling as HTMLElement | null;
+        }
+        if (section && next) {
+          const tableEnd = Math.ceil(
+            (section.getBoundingClientRect().bottom - docRect.top) / scale +
+              slack
+          );
+          const need = Math.ceil(
+            (next.getBoundingClientRect().bottom - docRect.top) / scale + slack
+          );
+          restOfPage = `clamp(0px, calc((${need}px - ${page}) * 1000), calc(${page} - ${tableEnd}px))`;
+        }
+        row.style.height = `max(${rowHeight}px, ${onePage}, calc(${rowHeight}px + ${restOfPage}))`;
         row.setAttribute("data-mm-stretched", "");
         return;
       }
-      // Paginated (the browser's print): one page only; a longer document prints as it is.
-      if (pageEnd > pageHeight + PAGE_EDGE_SLACK) return;
+      // Paginated (the browser's print). Longer than a page: the table fills the rest of its
+      // page when the block after it has moved to the next page (see above).
+      if (pageEnd > pageHeight + PAGE_EDGE_SLACK) {
+        stretchToTablePageEnd(doc, row, scale);
+        return;
+      }
       const limit = pageEnd;
       const spare = limit - docEnd - PAGE_EDGE_SLACK;
       if (spare <= 0) return;
@@ -4584,8 +4507,6 @@ export const registerModernManufacturingPrint = (): void => {
     joinTotals();
     resetItemsTableStretch();
     resetFootersOnPageEdge();
-    fitPrintTable();
-    fitSummaryTables();
     fitItemsToScreen();
     stackCrampedFields();
     // The preview's own stretch back (none until afterprint after a browser print).
@@ -4596,8 +4517,6 @@ export const registerModernManufacturingPrint = (): void => {
     fitItemsToScreen();
     stackCrampedFields();
     joinTotals();
-    fitPrintTable();
-    fitSummaryTables();
     splitTotals();
     stretchItemsTable();
   };

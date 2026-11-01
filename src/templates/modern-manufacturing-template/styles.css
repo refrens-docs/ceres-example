@@ -626,9 +626,23 @@
   overflow-wrap: break-word;
 }
 
-.mm-field .mm-value {
+/*
+ * Name/value fields (header, parties, supply, transport, additional info, bank): the name is
+ * dark at 600, the value grey at 400 (user, 2026-11-01: reversed from grey names, bold values).
+ * The details box (label above value) keeps its own style.
+ */
+.mm-field .mm-label,
+.mm-kv-label,
+.mm-info-label {
   color: var(--mm-ink);
-  font-weight: 600; /* user, 2026-10-27: party values stand out from their grey names */
+  font-weight: 600;
+}
+
+.mm-field .mm-value,
+.mm-kv-value,
+.mm-info-value {
+  color: var(--mm-muted);
+  font-weight: 400;
 }
 
 /* An email has no spaces: it breaks anywhere, and only when its column is too narrow. */
@@ -683,13 +697,9 @@
   grid-template-columns: repeat(2, minmax(min-content, 1fr));
 }
 
-.mm-kv-label {
-  color: var(--mm-muted);
-}
+
 
 .mm-kv-value {
-  color: var(--mm-strong);
-  font-weight: 600; /* Transport and Bank values at 600, as the party values (user, 2026-10-28) */
   overflow-wrap: break-word;
 }
 
@@ -827,11 +837,6 @@
 /* One-word values in text columns (a date, a code) stay on one line. */
 .mm-items td.is-word {
   white-space: nowrap;
-}
-
-/* Last width fallback: figures 10% smaller. */
-.mm-items.has-small-numbers td .mm-num {
-  font-size: 0.9em;
 }
 
 .mm-items .mm-group-row td {
@@ -1726,14 +1731,10 @@
 
 .mm-info-label {
   min-width: 100px;
-  color: var(--mm-muted);
-  font-weight: 400;
   overflow-wrap: break-word;
 }
 
 .mm-info-value {
-  color: var(--mm-strong);
-  font-weight: 500;
   overflow-wrap: anywhere;
 }
 
@@ -1790,9 +1791,13 @@
   font-weight: 600;
 }
 
-/* Its headings and cells read from the left (user request), not centred. */
+/*
+ * Its headings and cells read from the left (user request), not centred. A word longer than its
+ * cell breaks there, so the text never pushes the item table past the page (2026-11-01).
+ */
 .mm-doc .mm-item-desc .toastui-editor-contents :is(th, td),
 .mm-doc .mm-note-body .toastui-editor-contents :is(th, td) {
+  overflow-wrap: anywhere;
   text-align: start;
 }
 
@@ -2218,41 +2223,10 @@
     display: none;
   }
 
-  /*
-   * A table wider than its page (fitPrintTable, measured once the print layout applies) takes
-   * tight padding, then its text shrinks just enough to fit by --mm-print-fit, never under the
-   * 10 px floor (ported from the Ecommerce template; it was cut off at the page edge).
-   */
-  .mm-items.is-print-fit :is(th, td) {
-    padding-right: 4px;
-    padding-left: 4px;
-    font-size: inherit;
-  }
-
-  .mm-items.is-print-fit {
-    font-size: max(10px, calc(var(--mm-font-size-base) * var(--mm-text-scale, 1) * var(--mm-print-fit, 1)));
-  }
-
-  .mm-items.is-print-fit .mm-item-code {
-    font-size: max(10px, calc(var(--mm-font-size-s) * var(--mm-text-scale, 1) * var(--mm-print-fit, 1)));
-  }
-
-  /* Still wider at the 10 px floor (many columns on A5, a large print zoom): the whole table
-     scales down just enough rather than lose its edge (user rule, 2026-10-20: nothing cut off
-     or overlapping). Its split-off Total table carries the same style. */
-  .mm-items.is-print-fit {
-    zoom: var(--mm-print-squeeze, 1);
-  }
-
   /* The summary tables (HSN, Tax, Batch, Payments) take the page's width, not their 560 px
-     screen minimum, and one still wider than the page (an A5 page) scales down just enough
-     (fitSummaryTables) rather than lose its last column at the page edge. */
+     screen minimum; their text stays at the document's size (never scaled to fit). */
   .mm-widget-table .ceres-table {
     min-width: 0;
-  }
-
-  :is(.mm-widget-table .ceres-table, .mm-hsn-table).is-print-fit {
-    zoom: var(--mm-print-squeeze, 1);
   }
 
   /* clip is not a scroll container, so a preview scroll offset cannot shift the printout. */
@@ -2374,8 +2348,15 @@
     break-inside: avoid;
   }
 
-  .mm-section-title {
+  .mm-section-title,
+  .mm-widget-box .ceres-table-heading {
     break-after: avoid-page;
+  }
+
+  /* A summary table box (tax summary, payments, batches) moves to a page whole, so its heading
+     never sits alone in an empty box at a page foot (A00052-E, 2026-11-01). */
+  .mm-widget-box {
+    break-inside: avoid;
   }
 
   /*

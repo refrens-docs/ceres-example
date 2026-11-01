@@ -458,8 +458,9 @@ test("D1: tokens, typography, spacing and column widths match Figma", async ({
     ['[data-section="parties"] [data-role="address"]', "13px", "400"],
     // The copy tag reads like the subtitle (user request).
     ['[data-section="banner"] [data-role="tag"]', "13px", "400"],
-    ['[data-section="additional"] [data-role="ai-label"]', "13px", "400"],
-    ['[data-section="additional"] [data-role="ai-value"]', "13px", "500"],
+    // Names ink at 600, values grey at 400 (user, 2026-11-01).
+    ['[data-section="additional"] [data-role="ai-label"]', "13px", "600"],
+    ['[data-section="additional"] [data-role="ai-value"]', "13px", "400"],
   ];
   for (const [sel, size, weight] of type) {
     expect(await style(sel, "font-size"), `size ${sel}`).toBe(size);

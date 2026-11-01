@@ -4,7 +4,6 @@
 import {
   applyInvoiceUpdate,
   applyTemplateUpdate,
-  fitPrintTable,
   loadScriptFont,
   resetItemsTableStretch,
   stretchItemsTable,
@@ -396,8 +395,11 @@ describe("Modern Manufacturing — table stretched to fill the page", () => {
         if (value.startsWith("max(")) heights.push(value);
       });
     stretchItemsTable();
-    // The row takes what the rest of the document (700 − 40 px) and 16 px leave of the page.
-    expect(heights).toEqual(["max(40px, calc(100vh / 1 - 676px))"]);
+    // The row takes what the rest of the document (700 − 40 px) and 16 px leave of the page;
+    // with no block after the table, nothing more.
+    expect(heights).toEqual([
+      "max(40px, calc(100vh / 1 - 676px), calc(40px + 0px))",
+    ]);
     expect(lastRow().hasAttribute("data-mm-stretched")).toBe(true);
 
     // Under a print zoom above 1, the page in the row's pixels and more kept back.
@@ -406,19 +408,9 @@ describe("Modern Manufacturing — table stretched to fill the page", () => {
       .spyOn(window, "getComputedStyle")
       .mockReturnValue({ zoom: "1.25" } as CSSStyleDeclaration);
     stretchItemsTable();
-    expect(heights).toEqual(["max(40px, calc(100vh / 1.25 - 708px))"]);
-
-    // Taller than the paper: more than a page, left as it is.
-    heights.length = 0;
-    (document.querySelector(".mm-doc") as HTMLElement).dataset.mmPaperHeight =
-      "600";
-    jest
-      .spyOn(window, "getComputedStyle")
-      .mockReturnValue({ zoom: "1" } as CSSStyleDeclaration);
-    stretchItemsTable();
-    expect(heights).toEqual([]);
-    delete (document.querySelector(".mm-doc") as HTMLElement).dataset
-      .mmPaperHeight;
+    expect(heights).toEqual([
+      "max(40px, calc(100vh / 1.25 - 708px), calc(40px + 0px))",
+    ]);
 
     // A zoom that is not a number reads as 1.
     heights.length = 0;
@@ -426,7 +418,117 @@ describe("Modern Manufacturing — table stretched to fill the page", () => {
       .spyOn(window, "getComputedStyle")
       .mockReturnValue({ zoom: "normal" } as CSSStyleDeclaration);
     stretchItemsTable();
-    expect(heights).toEqual(["max(40px, calc(100vh / 1 - 676px))"]);
+    expect(heights).toEqual([
+      "max(40px, calc(100vh / 1 - 676px), calc(40px + 0px))",
+    ]);
+  });
+
+  /*
+   * A longer document (A00052-E, 2026-11-01): the table ends on page 1 and the bank and totals
+   * box after it does not fit there, so the table fills the rest of its page.
+   */
+  const longer = () => {
+    document.body.innerHTML =
+      '<div class="mm-doc" data-mm-stretch-table><section class="mm-items-section"><table class="mm-items"><tbody><tr><td>1</td></tr></tbody></table></section><section class="mm-hidden"></section><section class="mm-summary-row"></section></div>';
+  };
+  const mockLonger = (
+    sectionEnd: number,
+    nextTop: number,
+    nextEnd: number,
+    paginated?: { pageEnd: number; pageHeight: number; tablePageEnd: number }
+  ) => {
+    let markers = 0;
+    jest
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function measure(this: HTMLElement) {
+        if (this.style.breakBefore === "page") {
+          if (!paginated) return rect(0, 0);
+          // After the table: the end of the table's page; after the document: its pages.
+          if (
+            this.previousElementSibling?.classList.contains("mm-items-section")
+          ) {
+            return rect(paginated.tablePageEnd, 0);
+          }
+          markers += 1;
+          return rect(
+            markers % 2 === 1
+              ? paginated.pageEnd
+              : paginated.pageEnd + paginated.pageHeight,
+            0
+          );
+        }
+        if (this.style.height === "1000px") return rect(0, 1000);
+        if (this.classList.contains("mm-doc")) return rect(0, 2400);
+        if (this.classList.contains("mm-items-section")) {
+          const set = parseFloat(lastRow().style.height);
+          return rect(0, sectionEnd + (set ? set - 40 : 0));
+        }
+        if (this.classList.contains("mm-summary-row")) {
+          return rect(nextTop, nextEnd - nextTop);
+        }
+        if (this === lastRow()) return rect(0, 40);
+        return rect(0, 0);
+      });
+    jest
+      .spyOn(HTMLElement.prototype, "getClientRects")
+      .mockImplementation(function rects(this: HTMLElement) {
+        return (this.classList.contains("mm-hidden")
+          ? []
+          : [rect(0, 1)]) as unknown as DOMRectList;
+      });
+  };
+
+  it("fills the rest of the table's page when the next block moves on (PDF service)", () => {
+    longer();
+    mockLonger(600, 616, 1100);
+    const heights: string[] = [];
+    jest
+      .spyOn(CSSStyleDeclaration.prototype, "height", "set")
+      .mockImplementation((value: string) => {
+        if (value.startsWith("max(")) heights.push(value);
+      });
+    stretchItemsTable();
+    // The hidden section is skipped: the block after the table ends at 1100 (+16 kept back);
+    // when that is more than the page holds, the row takes the page less the table's 616.
+    expect(heights).toEqual([
+      "max(40px, calc(100vh / 1 - 2376px), calc(40px + clamp(0px, calc((1116px - 100vh / 1) * 1000), calc(100vh / 1 - 616px))))",
+    ]);
+  });
+
+  it("fills the rest of the table's page in a paginated print when the next block moved on", () => {
+    longer();
+    // The table ends at 600 on a page ending at 1000; the summary starts the next page.
+    mockLonger(600, 1000, 1400, {
+      pageEnd: 3000,
+      pageHeight: 1000,
+      tablePageEnd: 1000,
+    });
+    stretchItemsTable();
+    expect(lastRow().style.height).toBe("438px");
+    expect(lastRow().hasAttribute("data-mm-stretched")).toBe(true);
+  });
+
+  it("leaves the table when the next block still fits under it, or the table ends lower", () => {
+    longer();
+    mockLonger(600, 616, 900, {
+      pageEnd: 3000,
+      pageHeight: 1000,
+      tablePageEnd: 1000,
+    });
+    stretchItemsTable();
+    expect(lastRow().style.height).toBe("");
+
+    jest.restoreAllMocks();
+    longer();
+    // Stretched, the table would reach past its page: back as it was.
+    mockLonger(1200, 2000, 2400, {
+      pageEnd: 3000,
+      pageHeight: 1000,
+      tablePageEnd: 1000,
+    });
+    stretchItemsTable();
+    expect(lastRow().style.height).toBe("");
+    expect(lastRow().hasAttribute("data-mm-stretched")).toBe(false);
   });
 
   it("undoes a stretch that would push the page over", () => {
@@ -683,91 +785,38 @@ describe("Modern Manufacturing — the preview's table stretched to an A4 sheet"
   });
 });
 
-describe("Modern Manufacturing — a wide table fitted to the printed page", () => {
-  // The table is `natural` px wide at full size and shrinks with --mm-print-fit; its box is `room`.
-  const mockWidths = (natural: number, room: number) =>
-    jest
-      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockImplementation(function measure(this: HTMLElement) {
-        const fit =
-          parseFloat(this.style.getPropertyValue("--mm-print-fit")) || 1;
-        const width = this.classList.contains("mm-items")
-          ? natural * fit
-          : room;
-        return { width } as DOMRect;
-      });
-  const printing = (matches: boolean) => {
-    window.matchMedia = jest.fn().mockReturnValue({ matches });
-  };
-  const table = () =>
-    document.querySelector<HTMLElement>(".mm-items") as HTMLElement;
-
-  beforeEach(() => {
-    document.body.innerHTML =
-      '<div class="mm-items-scroll"><table class="mm-items"></table></div>';
-  });
-
-  it("tightens the padding, then shrinks the text just enough to fit", () => {
-    printing(true);
-    mockWidths(1000, 900);
-    fitPrintTable();
-    expect(table().classList.contains("is-print-fit")).toBe(true);
-    // To 99 % of the box: 1 % is kept back for the PDF's slightly wider text.
-    expect(table().style.getPropertyValue("--mm-print-fit")).toBe("0.89");
-  });
-
-  it("never shrinks below 60 %", () => {
-    printing(true);
-    mockWidths(1000, 400);
-    fitPrintTable();
-    expect(table().style.getPropertyValue("--mm-print-fit")).toBe("0.6");
-  });
-
-  it("leaves a table that fits, the screen, and a detached table as they are", () => {
-    printing(true);
-    mockWidths(891, 900.4);
-    fitPrintTable();
-    expect(table().classList.contains("is-print-fit")).toBe(false);
-
-    // Back on screen: the fit is cleared.
-    table().classList.add("is-print-fit");
-    table().style.setProperty("--mm-print-fit", "0.8");
-    printing(false);
-    fitPrintTable();
-    expect(table().classList.contains("is-print-fit")).toBe(false);
-    expect(table().style.getPropertyValue("--mm-print-fit")).toBe("");
-
-    printing(true);
-    const fragment = document.createDocumentFragment();
-    const loose = document.createElement("table");
-    loose.className = "mm-items";
-    fragment.appendChild(loose);
-    expect(() => fitPrintTable(fragment)).not.toThrow();
-    expect(loose.classList.contains("is-print-fit")).toBe(false);
-
-    (window as { matchMedia?: unknown }).matchMedia = undefined;
-    fitPrintTable();
-    expect(table().classList.contains("is-print-fit")).toBe(false);
-  });
-
-  it("fits before a browser's own print, but not again when the PDF service is already in print", () => {
+describe("Modern Manufacturing — a wide table prints at the document's text size", () => {
+  // User, 2026-11-01: the table keeps the text scale like the rest of the page (it may run off a
+  // portrait page; landscape shows it whole). No print step shrinks or zooms it.
+  it("leaves a table wider than its page as it is, before a browser print and in print", () => {
     const state = window as typeof window & { mmPrintRegistered?: boolean };
     delete state.mmPrintRegistered;
     document.body.innerHTML =
       '<div class="mm-doc" style="--mm-print-width: 714px;"><div class="mm-items-scroll"><table class="mm-items"></table></div></div>';
-    mockWidths(1000, 900);
-    window.matchMedia = jest
-      .fn()
-      .mockReturnValue({ matches: true, addEventListener: () => undefined });
+    jest
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function measure(this: HTMLElement) {
+        return {
+          width: this.classList.contains("mm-items") ? 1400 : 714,
+        } as DOMRect;
+      });
+    let onChange: ((event: { matches: boolean }) => void) | undefined;
+    window.matchMedia = jest.fn().mockReturnValue({
+      matches: false,
+      addEventListener: (_: string, listener: typeof onChange) => {
+        onChange = listener;
+      },
+    });
     registerModernManufacturingPrint();
     window.dispatchEvent(new Event("beforeprint"));
-    expect(table().classList.contains("is-print-fit")).toBe(false);
-
-    window.matchMedia = jest
-      .fn()
-      .mockReturnValue({ matches: false, addEventListener: () => undefined });
-    window.dispatchEvent(new Event("beforeprint"));
-    expect(table().classList.contains("is-print-fit")).toBe(true);
+    onChange?.({ matches: true });
+    const table = document.querySelector<HTMLElement>(
+      ".mm-items"
+    ) as HTMLElement;
+    expect(table.classList.contains("is-print-fit")).toBe(false);
+    expect(table.style.getPropertyValue("--mm-print-fit")).toBe("");
+    expect(table.style.getPropertyValue("--mm-print-squeeze")).toBe("");
+    jest.restoreAllMocks();
   });
 });
 

@@ -2383,9 +2383,8 @@ describe("Modern Manufacturing template — view model", () => {
     });
     // 934 px inside the table's outline, less Sr (30 + 8) and the other columns.
     expect(figma.descriptionWidth).toBe(934 - 38 - 573);
-    expect(figma).toMatchObject({ smallNumbers: false });
 
-    // Too wide: shrink to content, then smaller numbers. Unit stays its own column, as on
+    // Too wide: shrink to content (figures never get smaller). Unit stays its own column, as on
     // refrens.com (the planner no longer folds it into Qty).
     const wide = (count: number, value: string, withUnit = true) => [
       name,
@@ -2397,20 +2396,7 @@ describe("Modern Manufacturing template — view model", () => {
         money(`c${index}`, `Col ${index}`, value)
       ),
     ];
-    expect(planTableLayout(wide(8, "1,250.00"))).toMatchObject({
-      smallNumbers: false,
-    });
     expect(planTableLayout(wide(8, "1,250.00")).widths.c0).toBe(70);
-    expect(planTableLayout(wide(6, "12,50,000.00"))).toMatchObject({
-      smallNumbers: true,
-    });
-    expect(planTableLayout(wide(10, "1,23,45,67,890.00"))).toMatchObject({
-      smallNumbers: true,
-    });
-    // Without a Unit column, the same.
-    expect(planTableLayout(wide(10, "12,50,000.00", false))).toMatchObject({
-      smallNumbers: true,
-    });
     // Description is held to ≥ 22% of the table, even past the last fallback.
     const tight = planTableLayout(wide(14, "1,23,45,67,890.00"));
     const others = Object.values(tight.widths).reduce((a, b) => a + b, 38);
@@ -3334,7 +3320,11 @@ describe("Modern Manufacturing template — view model", () => {
     expect(photoCap({ landscape: true })).toBe(415);
     expect(photoCap({ zoomSize: "1.2" })).toBe(496);
     expect(photoCap({ zoomSize: "0.8" })).toBe(596);
-    expect(printWidth({ zoomSize: "1.1", format: "unknown" })).toBe(641);
+    // The side margins come off the paper before the print zoom: 1 cm prints as 1 cm at
+    // every print size (real PDFs: it grew to ~33/36 pt at 1.1/1.2 when taken off after).
+    expect(printWidth({ zoomSize: "1.1", format: "unknown" })).toBe(648);
+    expect(printWidth({ zoomSize: "1.2" })).toBe(594);
+    expect(printWidth({ zoomSize: "0.9" })).toBe(793);
     // The letterhead and footer repeated on every page stay under a quarter of a browser
     // print's page (1 cm margins), less their 16 px gap and 4 px: Chrome stops repeating a
     // taller table header or footer, and the fixed footer then covered the content.
@@ -3590,9 +3580,13 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       /\.mm-doc :is\(strong, b, th\),\s*\.mm-doc \.toastui-editor-contents :is\(strong, b\) \{\s*font-weight: 600;/
     );
     expect(rule(".mm-party-label")).toMatch(/font-weight: 600;/);
-    // Field values (transport, bank, additional information) at 500 (user request).
-    expect(rule(".mm-kv-value")).toMatch(/font-weight: 600;/);
-    expect(rule(".mm-info-value")).toMatch(/font-weight: 500;/);
+    // Name/value fields: the name ink at 600, the value grey at 400 (user, 2026-11-01).
+    expect(rule(".mm-field .mm-label,\n.mm-kv-label,\n.mm-info-label")).toMatch(
+      /color: var\(--mm-ink\);\s*font-weight: 600;/
+    );
+    expect(rule(".mm-field .mm-value,\n.mm-kv-value,\n.mm-info-value")).toMatch(
+      /color: var\(--mm-muted\);\s*font-weight: 400;/
+    );
     expect(css).toMatch(
       /600, not the shared widget's 700\. \*\/\n\.mm-totals \.ceres-subtotal-row-grand > \.ceres-subtotal-value \{\s*font-weight: 600;/
     );
@@ -3674,7 +3668,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
       /grid-template-columns: fit-content\(50%\) minmax\(0, 1fr\);\s*gap: 6px 8px;/
     );
     expect(rule(".mm-info-row")).toMatch(/display: contents;/);
-    expect(rule(".mm-info-label")).toMatch(/min-width: 100px;/);
+    expect(css).toMatch(/\n\.mm-info-label \{\s*min-width: 100px;/);
     // Summary tables (HSN, tax summary, payment record): cells 6 × 8 px, the same at the
     // row ends (user request).
     expect(css).toMatch(
@@ -3749,13 +3743,13 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     const sizes = Array.from(
       source.matchAll(/(?:^|[\s;{])font-size:\s*([^;]+);/g),
       (m) => m[1]
-      // Relative sizes (inherit, 0.9em for squeezed figures) follow their parent's step.
+      // inherit and em sizes follow their parent's step.
     ).filter((size) => size !== "inherit" && !/^[\d.]+em$/.test(size));
     expect(sizes.length).toBeGreaterThan(15);
     sizes.forEach((size) =>
       expect(size).toMatch(
-        // A wide printed table also shrinks by its fit (--mm-print-fit), never under 10 px.
-        /^(calc\(var\(--mm-font-size-(xs|s|base|m|lg|xl)\) \* var\(--mm-text-scale, 1\)\)|max\(10px, calc\(var\(--mm-font-size-(s|base)\) \* var\(--mm-text-scale, 1\) \* var\(--mm-print-fit, 1\)\)\))$/
+        // Tables too: nothing shrinks to fit (user, 2026-11-01: one text scale for the page).
+        /^calc\(var\(--mm-font-size-(xs|s|base|m|lg|xl)\) \* var\(--mm-text-scale, 1\)\)$/
       )
     );
   });
@@ -3782,27 +3776,19 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     );
     expect(all.length).toBeGreaterThanOrEqual(6);
     all.forEach((size) => expect(size).toBeGreaterThanOrEqual(10));
-    // No page-fit zoom: print is true size; the renderer's print size does the scaling. The one
-    // zoom is the last resort of a table still too wide at the 10 px floor, never cut off.
-    expect(source.match(/zoom:[^;]*;/g)).toEqual([
-      "zoom: var(--mm-print-squeeze, 1);",
-      "zoom: var(--mm-print-squeeze, 1);",
-    ]);
+    // No zoom at all: print is true size, tables too; the renderer's print size does the scaling.
+    expect(source.match(/zoom:[^;]*;/g)).toBeNull();
+    expect(source).not.toContain("--mm-print-fit");
   });
 
-  it("prints at true size on the full printable width, fitting a wide table", () => {
+  it("prints at true size on the full printable width, a wide table too", () => {
     const print = source.slice(source.indexOf("@media print"));
     expect(print).toMatch(/\.mm-doc \{[^}]*width: 100%;[^}]*margin: 0 auto;/);
-    // The planner's screen widths give way to the page; a table wider than it fits by shrinking.
+    // The planner's screen widths give way to the page; a wider table is never shrunk.
     expect(print).toMatch(
       /\.mm-doc \.mm-items th\[style\] \{\s*width: auto !important;/
     );
-    expect(print).toMatch(
-      /\.mm-items\.is-print-fit \{\s*font-size: max\(10px, calc\(var\(--mm-font-size-base\) \* var\(--mm-text-scale, 1\) \* var\(--mm-print-fit, 1\)\)\);/
-    );
-    expect(print).toMatch(
-      /\.mm-items\.is-print-fit :is\(th, td\) \{\s*padding-right: 4px;\s*padding-left: 4px;/
-    );
+    expect(source).not.toContain("is-print-fit");
     expect(source).not.toContain("is-print-compact");
     expect(print).toMatch(
       /\.mm-items thead,[^{]*\{\s*display: table-header-group;/
@@ -3903,7 +3889,9 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(rule(".mm-parties > .mm-party,\n.mm-dispatch > .mm-party")).toMatch(
       /gap: 4px;/
     );
-    expect(rule(".mm-field .mm-value")).toMatch(/font-weight: 600;/);
+    expect(rule(".mm-field .mm-value,\n.mm-kv-value,\n.mm-info-value")).toMatch(
+      /font-weight: 400;/
+    );
     // Header and IRN lines ("GSTIN: …") read the same way: the name 400 grey, the value 500 ink.
     expect(rule(".mm-id-label")).toMatch(
       /color: var\(--mm-muted\);\s*font-weight: 400;/
