@@ -491,7 +491,7 @@ describe("Ecommerce template — settings and data", () => {
       invoice.letterHead = "https://example.com/head.png";
       invoice.letterHeadFooter = "https://example.com/foot.png";
     });
-    expect(every).toContain("ec-page-frame-header");
+    expect(every).toMatch(/<thead class="ec-page-frame-header">\s*<tr>\s*<td>/);
     expect(every).toContain("ec-footer-fixed");
     expect(every).toContain('data-ceres-page-policy="all"');
 
@@ -502,7 +502,10 @@ describe("Ecommerce template — settings and data", () => {
         pdfOptions: { letterHeadOnFirstPage: true, footerOnLastPage: true },
       };
     });
-    expect(once).not.toContain("ec-page-frame-header");
+    // The header keeps only the frame's top edge.
+    expect(once).toMatch(
+      /<thead class="ec-page-frame-header">\s*<tr class="ec-frame-edge is-top"/
+    );
     expect(once).not.toContain("ec-footer-fixed");
     expect(once).toContain('data-ceres-page-policy="first"');
     expect(once).toContain('data-ceres-page-policy="last"');
@@ -1305,22 +1308,24 @@ describe("Ecommerce template — files and CSS", () => {
     expect(render()).toContain("--ec-print-width: 714px;");
   });
 
-  it("keeps the print table's 10 px text floor at 10 px on paper, whatever the print zoom", () => {
+  it("prints every table at the document's text scale, never shrunk to fit the page", () => {
     const zoom = (pdfOptions: Record<string, unknown>) =>
       mapPrint({ pdfOptions }).printZoom;
     expect(zoom({})).toBe("1");
     expect(zoom({ zoomSize: "1.2" })).toBe("1.2");
     // The renderer applies no zoom for 0.8.
     expect(zoom({ zoomSize: "0.8" })).toBe("1");
-    expect(render()).toContain("--ec-print-zoom: 1;");
     const print = css.slice(css.indexOf("@media print"));
-    expect(print).not.toMatch(/font-size: max\(\s*10px,/);
-    // The item table's four floors and the summaries' two.
-    expect(
-      print.match(
-        /font-size: max\(\s*calc\(10px \/ var\(--ec-print-zoom, 1\)\),/g
-      )
-    ).toHaveLength(6);
+    // No print rule sets a table's text by a fit factor, a floor or a zoom.
+    expect(print).not.toMatch(
+      /--ec-(print|table)-fit|--ec-table-zoom|font-size: max\(/
+    );
+    expect(print).not.toMatch(/\bzoom:/);
+    // A wide A5 table only tightens its padding.
+    const a5 = mapPrint({ pdfOptions: { format: "a5" } }, 900);
+    expect(a5.compactTable).toBe(true);
+    expect(a5).not.toHaveProperty("tableFit");
+    expect(render()).not.toContain("--ec-table-fit");
   });
 
   it("lets stacked parties break between parties in print, each party whole", () => {
@@ -1453,8 +1458,40 @@ describe("Ecommerce template — files and CSS", () => {
 
   it("keeps an every-page footer within a quarter page, so Chrome repeats its spacer", () => {
     expect(css).toMatch(
-      /\.ec-page-frame-footer \.ec-letterhead-footer img,\s*\.ec-letterhead-footer\.ec-footer-fixed img \{[^}]*max-height: min\(22vh, calc\(25vh - 28px\)\);/
+      /\.ec-page-frame-footer \.ec-letterhead-footer img,\s*\.ec-letterhead-footer\.ec-footer-fixed img \{[^}]*max-height: min\(22vh, calc\(25vh - 29px\)\);/
     );
+  });
+
+  it("closes the frame at every page break with rows the page-frame table repeats on each page", () => {
+    [true, false].forEach((everyPage) => {
+      const html = render((invoice) => {
+        invoice.template = {
+          pdfOptions: {
+            letterHeadOnFirstPage: !everyPage,
+            footerOnLastPage: !everyPage,
+          },
+        };
+      });
+      expect(html).toMatch(
+        /<tr class="ec-frame-edge is-top"[^>]*><td><\/td><\/tr>\s*<\/thead>/
+      );
+      expect(html).toMatch(
+        /<tfoot class="ec-page-frame-footer">\s*<tr class="ec-frame-edge is-bottom"/
+      );
+    });
+    expect(css).toMatch(
+      /\.ec-doc \.ec-frame \{\s*padding-top: 0;\s*border-top-width: 0;\s*border-bottom-width: 0;/
+    );
+    expect(css).toMatch(
+      /tr\.ec-frame-edge\.is-top > td \{\s*height: 12px;[^}]*border-top-width: max\(1px/
+    );
+    expect(css).toMatch(
+      /tr\.ec-frame-edge\.is-bottom > td \{\s*height: 0;\s*border-bottom-width: max\(1px/
+    );
+    expect(css).toMatch(
+      /\.ec-page-frame \{[^}]*border-collapse: separate;\s*border-spacing: 0;/
+    );
+    expect(css).toContain("max-height: min(22vh, calc(25vh - 41px));");
   });
 
   it("prints the every-page letterhead and footer full width as on screen, whatever the image's own size", () => {

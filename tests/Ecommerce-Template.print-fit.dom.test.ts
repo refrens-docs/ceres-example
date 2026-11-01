@@ -28,19 +28,13 @@ const mount = (natural: number, atFloor: number) => {
 };
 
 describe("Ecommerce template — print table fit", () => {
-  it("scales a table still a little too wide at its floors, rather than cutting its last column", () => {
-    printing(true);
-    const table = mount(700, 449);
-    fitPrintTable();
-    expect(table.style.getPropertyValue("--ec-print-fit")).toBe("0.5");
-    expect(table.style.getPropertyValue("--ec-table-zoom")).toBe("0.952"); // 99 % of the 432 px box: 1 % kept back for the PDF
-  });
-
-  it("scales even a far wider table to the page rather than cutting it off", () => {
+  it("tightens a table too wide for the page but never shrinks its text", () => {
     printing(true);
     const table = mount(1800, 1100);
     fitPrintTable();
-    expect(table.style.getPropertyValue("--ec-table-zoom")).toBe("0.388");
+    expect(table.classList.contains("is-print-compact")).toBe(true);
+    expect(table.getAttribute("style") ?? "").toBe("");
+    expect(table.classList.contains("is-print-fit")).toBe(false);
   });
 
   it("keeps the screen's padding for a table the estimate marked compact but that fits", () => {
@@ -63,33 +57,16 @@ describe("Ecommerce template — print table fit", () => {
     expect(table.classList.contains("is-print-compact")).toBe(true);
   });
 
-  it("shrinks a summary too wide for the page (the payments on A5), and leaves one that fits", () => {
+  it("leaves a summary too wide for the page at its own text size", () => {
     printing(true);
-    document.body.innerHTML = `<section class="ec-summary"><div><table class="ceres-table" id="wide"></table></div></section><section class="ec-summary"><div><table class="ceres-table" id="fits"></table></div></section>`;
-    const sized = (id: string, natural: number) => {
-      const table = document.getElementById(id)!;
-      table.parentElement!.getBoundingClientRect = () =>
-        ({ width: 432 } as DOMRect);
-      table.getBoundingClientRect = () => {
-        const fit =
-          parseFloat(table.style.getPropertyValue("--ec-print-fit")) || 1;
-        return { width: natural * fit } as DOMRect;
-      };
-      return table;
-    };
-    const wide = sized("wide", 470);
-    const fits = sized("fits", 400);
+    document.body.innerHTML = `<section class="ec-summary"><div><table class="ceres-table" id="wide"></table></div></section>`;
+    const wide = document.getElementById("wide")!;
+    wide.parentElement!.getBoundingClientRect = () =>
+      ({ width: 432 } as DOMRect);
+    wide.getBoundingClientRect = () => ({ width: 470 } as DOMRect);
     fitPrintTable();
-    expect(wide.classList.contains("is-print-fit")).toBe(true);
-    expect(
-      parseFloat(wide.style.getPropertyValue("--ec-print-fit"))
-    ).toBeLessThan(1);
-    expect(wide.getBoundingClientRect().width).toBeLessThanOrEqual(432 * 0.99);
-    expect(fits.classList.contains("is-print-fit")).toBe(false);
-    printing(false);
-    fitPrintTable();
-    expect(wide.classList.contains("is-print-fit")).toBe(false);
-    expect(wide.style.getPropertyValue("--ec-print-fit")).toBe("");
+    expect(wide.className).toBe("ceres-table");
+    expect(wide.getAttribute("style")).toBeNull();
   });
 
   it("does nothing outside print, and clears an earlier fit", () => {
@@ -98,8 +75,6 @@ describe("Ecommerce template — print table fit", () => {
     fitPrintTable();
     printing(false);
     fitPrintTable();
-    expect(table.style.getPropertyValue("--ec-table-zoom")).toBe("");
-    expect(table.style.getPropertyValue("--ec-print-fit")).toBe("");
-    expect(table.classList.contains("is-print-fit")).toBe(false);
+    expect(table.classList.contains("is-print-compact")).toBe(false);
   });
 });

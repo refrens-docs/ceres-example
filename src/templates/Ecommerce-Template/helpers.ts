@@ -3691,20 +3691,7 @@ const PAPER_HEIGHT_MM: Record<string, number> = {
   tabloid: 431.8,
 };
 
-/*
- * The Description cell's floor on a page too narrow for the table (A5, a large print size):
- * a readable column of about 12 characters with its padding.
- */
-const PRINT_DESCRIPTION_FLOOR = 120;
-/* 13 px × 0.77 = 10 px: the repo preset's floor (design-to-template §4a); below it, wrap. */
-const MIN_TABLE_FIT = 0.77;
-const COMPACT_PADDING_SAVING = 4; // 6 → 4 px each side
-
-export const mapPrint = (
-  state: UnknownRecord,
-  tableFixedWidth = 0,
-  fixedColumns = 0
-) => {
+export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
   const pdfOptions = asRecord(state.pdfOptions);
   const invoice = asRecord(state.invoice);
   const format = text(pdfOptions.format).toLowerCase();
@@ -3740,23 +3727,10 @@ export const mapPrint = (
   const ratio =
     rawScale !== undefined && rawScale > 2 ? rawScale / 100 : rawScale;
   const textScale = Math.min(2, Math.max(0.3, ratio ?? 1));
+  // Tight padding only: the table's text keeps the document's text scale whatever its width
+  // (user, 1 Nov 2026: a wide table may be cut at the page's edge, landscape shows it whole).
   const compactTable =
     tableFixedWidth * textScale > pageWidth * (1 - MIN_DESCRIPTION_SHARE);
-  // Last resort, only when even compact padding leaves Description under its floor: the
-  // table's text shrinks just enough to fit the page (never below MIN_TABLE_FIT), rather than
-  // the page clipping its last columns. A4 at the normal print size never gets here.
-  const compactWidth =
-    (tableFixedWidth - fixedColumns * COMPACT_PADDING_SAVING) * textScale;
-  const tableFit =
-    compactTable && compactWidth > 0
-      ? Math.min(
-          1,
-          Math.max(
-            MIN_TABLE_FIT,
-            (pageWidth - PRINT_DESCRIPTION_FLOOR) / compactWidth
-          )
-        )
-      : 1;
   return {
     textScale: compactDecimal(textScale),
     printWidth,
@@ -3764,8 +3738,6 @@ export const mapPrint = (
     // The renderer's print zoom: the print table's 10 px text floor is 10 px on paper.
     printZoom: compactDecimal(rendererZoom),
     compactTable,
-    tableFit:
-      tableFit < 1 ? compactDecimal(Math.floor(tableFit * 100) / 100) : "",
     /*
      * "Stretch invoice & quotation tables to fill the page" (Settings > Experimental,
      * owner.configuration.experimental.stretchInvoiceTable): on a one-page printout the item
@@ -4312,11 +4284,7 @@ export const buildEcommerceView = (root: unknown) => {
       compliance.qr.document
   );
   const status = statusTag(invoice);
-  const print = mapPrint(
-    state,
-    table.printFixedWidth,
-    table.columns.filter((column) => column.kind !== "name").length
-  );
+  const print = mapPrint(state, table.printFixedWidth);
   const bank = mapBank(state);
   const additional = mapAdditionalInfo(state, formatContext(invoice));
   const words = mapWords(state, options);
@@ -4601,14 +4569,12 @@ export const fitTotals = (root: ParentNode = document): void => {
 };
 
 /*
- * Print: the item table must fit the page whatever the paper, margins or print size. The
- * columns size to their content, so the table is measured once laid out for print rather than
- * estimated: a table wider than its page takes the tight print padding (is-print-fit), then
- * its text shrinks just enough to fit (--ec-print-fit), never under the 10 px floor (CSS).
- * Back on screen, it reads as before. The text stops at its floor first; the factor goes on
- * down to 0.5 for the empty columns' floors (A5 at print size 1.2 still cut its last column).
+ * Print: a table wider than its page takes the tight print padding (is-print-compact), and
+ * nothing more. Its text keeps the document's text scale, like everything else on the page
+ * (user, 1 Nov 2026: the tables printed smaller than the rest, 7 pt against 10 pt on A4); a
+ * table still too wide is cut at the frame's edge, and prints whole on a landscape page. The
+ * columns size to their content, so the table is measured once laid out for print.
  */
-const MIN_PRINT_FIT = 0.5;
 // Sub-pixel rounding is not an overflow.
 const PRINT_SLACK = 0.5;
 // The share of the page's width a fitted table may take (see fitPrintTable).
@@ -4864,42 +4830,6 @@ export const splitTotals = (root: ParentNode = document): void => {
   });
 };
 
-/*
- * A table wider than its room in print: the tight padding (is-print-fit), then its text
- * scaled by --ec-print-fit down to the 10 px floor (CSS), then the whole table zoomed.
- */
-const shrinkToRoom = (
-  table: HTMLElement,
-  room: () => number,
-  need: () => number
-): void => {
-  const overflow = () => need() - room();
-  table.classList.add("is-print-fit");
-  let fit = 1;
-  // Shrinks by the measured ratio, and by at least a step each time, so the last pixel or
-  // two of overflow (the floors, padding and rules do not scale exactly) still goes.
-  for (let step = 0; step < 20 && overflow() > PRINT_SLACK; step += 1) {
-    const ratio = room() / need();
-    fit = Math.max(
-      MIN_PRINT_FIT,
-      Math.min(fit - 0.01, Math.floor(fit * ratio * 100) / 100)
-    );
-    table.style.setProperty("--ec-print-fit", String(fit));
-    if (fit === MIN_PRINT_FIT) break;
-  }
-  // Text and columns at their floors and the table still too wide (ten columns on A5 at
-  // print size 1.2, fourteen on A5): the whole table is scaled down to the page's width,
-  // however far, rather than its last columns cut off (user rule, 2026-10-20: nothing cut
-  // off or overlapping; it replaces cutting a thirty-column table as refrens.com does).
-  const ratio = room() / need();
-  if (ratio < 1) {
-    table.style.setProperty(
-      "--ec-table-zoom",
-      String(Math.floor(ratio * 1000) / 1000)
-    );
-  }
-};
-
 export const fitPrintTable = (
   root: ParentNode = document,
   force = false
@@ -4909,9 +4839,6 @@ export const fitPrintTable = (
     (typeof window.matchMedia === "function" &&
       window.matchMedia("print").matches);
   root.querySelectorAll<HTMLElement>(".ec-items").forEach((table) => {
-    table.classList.remove("is-print-fit");
-    table.style.removeProperty("--ec-print-fit");
-    table.style.removeProperty("--ec-table-zoom");
     // mapPrint's estimate (data-ec-print-compact) holds wherever the table is not measured.
     const estimated = table.hasAttribute("data-ec-print-compact");
     table.classList.toggle("is-print-compact", estimated);
@@ -4936,33 +4863,7 @@ export const fitPrintTable = (
     table.classList.remove("is-print-compact");
     if (overflow() <= PRINT_SLACK) return;
     table.classList.add("is-print-compact");
-    if (overflow() <= PRINT_SLACK) return;
-    shrinkToRoom(table, room, need);
   });
-  /*
-   * The summaries (HSN, tax, batch, payments) are clipped to the frame in print, and a narrow
-   * page (A5) cut their last column off: the payments' TDS. One that fits prints as on screen;
-   * one that does not shrinks as the item table does.
-   */
-  root
-    .querySelectorAll<HTMLElement>(".ec-summary .ceres-table")
-    .forEach((table) => {
-      table.classList.remove("is-print-fit");
-      table.style.removeProperty("--ec-print-fit");
-      table.style.removeProperty("--ec-table-zoom");
-      const box = table.parentElement;
-      if (!printing || !box) return;
-      const room = () => box.getBoundingClientRect().width * PRINT_ROOM;
-      const need = () => {
-        const { width } = table.style;
-        table.style.width = "0px";
-        const narrowest = table.getBoundingClientRect().width;
-        table.style.width = width;
-        return narrowest;
-      };
-      if (need() - room() <= PRINT_SLACK) return;
-      shrinkToRoom(table, room, need);
-    });
 };
 
 /* ------------------------------------------------------------------ print: a browser's own print */
@@ -5161,9 +5062,7 @@ export const prepareBrowserPrint = (
   doc.style.width = docWidth;
   fitted.forEach(([table, className]) => {
     // eslint-disable-next-line no-param-reassign
-    table.className = `${className}${
-      table.classList.contains("is-print-fit") ? " is-print-fit" : ""
-    }`;
+    table.className = className;
   });
 };
 

@@ -37,8 +37,8 @@
     content never runs under it.
   --}}
   <table class="ec-page-frame" role="presentation">
+    <thead class="ec-page-frame-header">
     {{#if view.letterheadEveryPage}}
-      <thead class="ec-page-frame-header">
         <tr>
           <td>
             <div class="no-dibella invoice-letterhead ec-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}" data-ceres-page-header data-ceres-page-policy="all">
@@ -50,10 +50,15 @@
             </div>
           </td>
         </tr>
-      </thead>
     {{/if}}
+      {{!-- The frame's top and bottom rules, repeated on every printed page so a page break
+           closes the frame at the page foot and reopens it at the next page's top (user rule;
+           the PDF service's Chrome does not clone a split box's borders). --}}
+      <tr class="ec-frame-edge is-top" aria-hidden="true"><td></td></tr>
+    </thead>
+    <tfoot class="ec-page-frame-footer">
+      <tr class="ec-frame-edge is-bottom" aria-hidden="true"><td></td></tr>
     {{#if view.footerEveryPage}}
-      <tfoot class="ec-page-frame-footer">
         <tr>
           <td>
             <div class="{{#if view.serviceFooter}}no-dibella {{/if}}invoice-letterhead-footer ec-letterhead-footer ec-footer-spacer{{#unless @root.invoice.letterHeadFooter}} is-empty{{/unless}}" aria-hidden="true">
@@ -61,8 +66,8 @@
             </div>
           </td>
         </tr>
-      </tfoot>
     {{/if}}
+    </tfoot>
     <tbody>
       <tr>
         <td class="ec-page-frame-cell">
@@ -182,7 +187,7 @@
 
             <section class="ec-items-section" data-testid="section" data-section="items">
               <div class="ec-items-scroll" data-testid="items-scroll">
-                <table class="ec-items{{#if view.print.compactTable}} is-print-compact{{/if}}{{#if view.table.showThumbnail}} has-thumbnails{{/if}}"{{#if view.print.compactTable}} data-ec-print-compact{{/if}} data-testid="items-table"{{#if view.print.tableFit}} style="--ec-table-fit: {{view.print.tableFit}};"{{/if}}>
+                <table class="ec-items{{#if view.print.compactTable}} is-print-compact{{/if}}{{#if view.table.showThumbnail}} has-thumbnails{{/if}}"{{#if view.print.compactTable}} data-ec-print-compact{{/if}} data-testid="items-table">
                   <thead>
                     <tr data-testid="items-header">
                       <th class="ec-col-serial" data-col="sr" style="width: {{view.table.serialWidth}}px">{{view.table.serialLabel}}</th>
@@ -530,13 +535,14 @@
               </section>
             {{/if}}
           </div>
-
-          {{> RefrensBranding @root.invoice}}
           </div>
         </td>
       </tr>
     </tbody>
   </table>
+
+  {{!-- Outside the frame's table, so the frame's closing rule sits under the frame itself. --}}
+  {{> RefrensBranding @root.invoice}}
 
   <div class="{{#if view.serviceFooter}}no-dibella {{/if}}invoice-letterhead-footer ec-letterhead-footer{{#if view.footerEveryPage}} ec-footer-fixed{{/if}}{{#unless @root.invoice.letterHeadFooter}} is-empty{{/unless}}" data-ceres-page-footer data-ceres-page-policy="{{#if view.footerEveryPage}}all{{else}}last{{/if}}">
     {{#if @root.invoice.letterHeadFooter}}
