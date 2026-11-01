@@ -10,6 +10,8 @@ import {
   placeFootersOnPageEdge,
   registerEcommerceLogo,
   respellTaxWords,
+  flowAtHeight,
+  flowFiller,
   stretchItemTable,
 } from "../src/templates/Ecommerce-Template/helpers";
 
@@ -164,6 +166,41 @@ describe("Ecommerce template — after the render, in the browser", () => {
   });
 
   describe("the item table's stretch", () => {
+    // Units a page break cannot split, laid on pages (Chrome 122's page heights): the filler
+    // under the last item takes what is left of the page that item ends on.
+    it("finds the room left on the page where the item table ends, on any page", () => {
+      const layout = { head: 13, foot: 1, start: 0 };
+      const units = [
+        { top: 0, bottom: 600 }, // header and parties
+        { top: 616, bottom: 900 }, // item 1
+        { top: 900, bottom: 1300 }, // item 2: over the page's foot, moves to page 2
+        { top: 1316, bottom: 2000 }, // the totals: too tall for page 2's rest, to page 3
+      ];
+      const room = flowFiller(units, 2, { ...layout, page: 1000 });
+      // Item 2 on page 2 at 1013..1413; page 2 ends at 1999: 586 px left, the totals moved on.
+      expect(room && room.c + room.k * 1000).toBe(586);
+      // A taller page: everything on page 1, the room after the totals.
+      const tall = flowFiller(units, 2, { ...layout, page: 2500 });
+      expect(tall && tall.c + tall.k * 2500).toBe(499);
+    });
+
+    it("sizes page-height images for the page they print on, not the window", () => {
+      const units = [
+        {
+          top: 0,
+          bottom: 300,
+          images: [{ top: 10, measured: 270, natural: 600 }],
+        },
+        { top: 300, bottom: 400 },
+      ];
+      // 45% of a 1000 px page: 450 px, 180 px taller than the window's 270.
+      const sized = flowAtHeight(units, 1000);
+      expect(sized[0].bottom).toBe(480);
+      expect(sized[1].top).toBe(480);
+      // Never over 490 px, nor over the image's own height.
+      expect(flowAtHeight(units, 2000)[0].bottom).toBe(520);
+    });
+
     const realMatchMedia = window.matchMedia;
     const media = (print: boolean) => {
       window.matchMedia = ((query: string) =>
@@ -175,17 +212,22 @@ describe("Ecommerce template — after the render, in the browser", () => {
     const sheet = (className: string, width: number, height: number) => {
       document.body.innerHTML =
         `<div class="${className}"><table class="ec-page-frame"><tbody><tr><td>` +
-        '<div class="ec-items-scroll"><table class="ec-items"><tbody>' +
+        '<div class="ec-frame"><div class="ec-items-scroll"><table class="ec-items"><tbody>' +
         '<tr class="ec-item-row"><td>1</td></tr>' +
         '<tr class="ec-filler"><td class="ec-col-serial"></td></tr>' +
-        "</tbody></table></div></td></tr></tbody></table></div>";
+        "</tbody></table></div></div></td></tr></tbody></table></div>";
       const doc = document.querySelector(".ec-doc") as HTMLElement;
+      const at = (selector: string, top: number, bottom: number) => {
+        const el = document.querySelector(selector) as HTMLElement;
+        el.getBoundingClientRect = () =>
+          ({ top, bottom, width, height: bottom - top } as DOMRect);
+      };
       // The sheet's height without the filler: the filler's own height never counts.
-      doc.getBoundingClientRect = () =>
-        ({
-          width,
-          height: doc.classList.contains("is-screen-stretch") ? 9999 : height,
-        } as DOMRect);
+      at(".ec-doc", 0, height);
+      at(".ec-frame", 0, height);
+      at(".ec-items-scroll", 100, 200);
+      at(".ec-items", 100, 200);
+      at(".ec-item-row", 100, 200);
       return {
         doc,
         filler: document.querySelector(".ec-filler") as HTMLElement,
@@ -212,10 +254,9 @@ describe("Ecommerce template — after the render, in the browser", () => {
       expect(filler.style.getPropertyValue("--ec-filler-height")).toBe("");
     });
 
-    it("leaves a long, narrow or pageless preview as it is", () => {
+    it("leaves a narrow or pageless preview as it is", () => {
       media(false);
       const cases: Array<[string, number, number]> = [
-        ["ec-doc is-stretch", 1000, 1500],
         ["ec-doc", 500, 300],
         ["ec-doc is-pageless", 1000, 300],
       ];
@@ -239,9 +280,13 @@ describe("Ecommerce template — after the render, in the browser", () => {
       expect(off.filler.style.getPropertyValue("--ec-filler-height")).toBe("");
       const on = sheet("ec-doc is-stretch", 714, 900);
       stretchItemTable();
-      expect(on.filler.style.getPropertyValue("--ec-filler-height")).toMatch(
-        /^max\(0px, calc\(100vh \/ 1 - \d+px\)\)$/
+      // In print, the filler's height per page height: one media rule per range of heights.
+      const rules =
+        document.getElementById("ec-stretch-pages")?.textContent || "";
+      expect(rules).toMatch(
+        /@media print and \(min-height: \d+px\) and \(max-height: [\d.]+px\) \{ \.ec-doc\.is-stretch \.ec-items \.ec-filler \{ --ec-filler-height: max\(0px, calc\(1 \* 100vh \/ 1 - 916px\)\); \} \}/
       );
+      expect(on.filler.style.getPropertyValue("--ec-filler-height")).toBe("");
       // Back on screen, the preview's stretch returns.
       media(false);
       stretchItemTable();

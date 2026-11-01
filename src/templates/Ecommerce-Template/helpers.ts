@@ -3740,8 +3740,8 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
     compactTable,
     /*
      * "Stretch invoice & quotation tables to fill the page" (Settings > Experimental,
-     * owner.configuration.experimental.stretchInvoiceTable): on a one-page printout the item
-     * table runs down to the footer (helpers.ts stretchItemTable). The business toggle alone
+     * owner.configuration.experimental.stretchInvoiceTable): the item table runs down to the
+     * foot of the page it ends on, one page or more (helpers.ts stretchItemTable). The toggle alone
      * decides; the document's own pdfOptions.fullHeightTable is ignored, on, off or missing
      * (user, 2026-10-31). Every document type, not only invoices and quotations as
      * refrens.com does (user request). The preview stretches whatever the toggles say.
@@ -4581,19 +4581,16 @@ const PRINT_SLACK = 0.5;
 const PRINT_ROOM = 0.99;
 
 /*
- * Stretch the item table to the page (view.print.stretchTable): in print, while the whole
- * document fits on one page, its empty filler row takes the page's spare height so the footer
- * sits at the page's foot, the column rules running down through it. A document longer than
- * a page prints exactly as with the stretch off (Refrens stretches single-page PDFs only).
+ * Stretch the item table to the page (view.print.stretchTable): in print, the empty filler
+ * row under the last item takes what is left of the page that item ends on, so the column
+ * rules run down to the page's foot, on a one-page document and a longer one alike (user,
+ * 1 Nov 2026; it was one-page only). What follows the table on that page is pushed down with
+ * it, never over to the next page (the slack below is kept back for that).
  *
- * The page's height is left to CSS (100vh): Refrens' PDF service lays the page out in a
- * window shorter than the paper and only then prints, so a height measured here was the
- * window's and the table never stretched in the PDF (user report). 100vh is the page area
- * when the PDF is made; the content's own height is measured here (the width is the
- * paper's already, styles.css). Under the print zoom Chrome scales the page margins as well,
- * so 100vh / zoom is a few px off: kept back with the slack. A document longer than a page
- * comes out at 0, and at 0 the filler's rules are 0 wide too (styles.css), so it draws
- * nothing.
+ * The page's height is left to CSS (100vh, matched by media queries): Refrens' PDF service
+ * lays the page out in a window shorter than the paper and only then prints, so a height
+ * measured here was the window's. Under the print zoom Chrome scales the page margins as
+ * well, so 100vh / zoom is a few px off: kept back with the slack.
  */
 const STRETCH_SLACK = 16;
 // The error under a zoom above 1 grows with it: 2 × the margin × (1 − 1 / zoom), for margins
@@ -4623,9 +4620,358 @@ const layoutScale = (parent: HTMLElement, before: Element): number => {
 };
 
 /*
+ * Pages, simulated (user, 1 Nov 2026: the stretch must work on a document longer than a page,
+ * in the preview and the PDF). The document is cut into the units a page break cannot split
+ * (a section, a line item with its rows, a totals group) and the units that break line by
+ * line (terms, notes, an item taller than a page), in order, as laid out in one long column.
+ * Laid on pages of `page` px, they show where the item table ends and how much of that page is
+ * left: the filler row takes it, so the table's column rules run down to the page's foot (or
+ * to what follows the table on that page, pushed down to the foot).
+ *
+ * Every position is c + k × page (FlowLength), so the filler's height comes out as a formula
+ * of the page's height: in the PDF service the page's height is known only when it prints
+ * (100vh), never while the template lays out (a shorter window).
+ */
+export interface FlowUnit {
+  top: number;
+  bottom: number;
+  // Breaks line by line (text, an item taller than a page) rather than moving whole.
+  fluid?: boolean;
+  line?: number;
+  // A table's repeated heading (on every page it continues on) and its page-foot rule.
+  head?: number;
+  close?: number;
+  // The first unit of its table (carries the heading itself).
+  first?: boolean;
+  // After the frame (the page frame's footer, a last-page footer): runs to the page's foot.
+  tail?: boolean;
+  // Images sized by the page's height (45vh, styles.css), as measured and uncapped.
+  images?: FlowImage[];
+}
+
+// The 490 px cap of styles.css .ec-large-image in print.
+const LARGE_IMAGE_CAP = 490;
+
+export interface FlowImage {
+  top: number;
+  measured: number;
+  natural: number;
+}
+
+/*
+ * An item's original images are capped at 45% of the page's height (and 490 px), so their
+ * height is the page's, not the window's the layout was measured in (the PDF service lays out
+ * in a window shorter than the paper). Each unit is resized for a page `vh` px tall (100vh),
+ * images on one line taking the tallest's height, and every unit after it moved with it.
+ */
+export const flowAtHeight = (units: FlowUnit[], vh: number): FlowUnit[] => {
+  let moved = 0;
+  return units.map((unit) => {
+    const top = unit.top + moved;
+    const lines = new Map<number, { measured: number; now: number }>();
+    (unit.images || []).forEach((image) => {
+      const key = Math.round(image.top);
+      const line = lines.get(key) || { measured: 0, now: 0 };
+      line.measured = Math.max(line.measured, image.measured);
+      line.now = Math.max(
+        line.now,
+        Math.min(image.natural, 0.45 * vh, LARGE_IMAGE_CAP)
+      );
+      lines.set(key, line);
+    });
+    lines.forEach((line) => {
+      moved += line.now - line.measured;
+    });
+    return { ...unit, top, bottom: unit.bottom + moved };
+  });
+};
+
+export interface FlowLength {
+  c: number;
+  k: number;
+}
+
+export interface FlowLayout {
+  // The page's height, the page frame's repeated header and footer, the first page's start.
+  page: number;
+  head: number;
+  foot: number;
+  start: number;
+}
+
+const flowAt = (length: FlowLength, page: number): number =>
+  length.c + length.k * page;
+
+/*
+ * The filler's height for the unit `anchor` (the last line item, the filler under it): the room
+ * left on its page by it and every unit after it on that page. Undefined: no room (the table
+ * ends right at a page's foot) — the stretch then does nothing.
+ */
+export const flowFiller = (
+  units: FlowUnit[],
+  anchor: number,
+  layout: FlowLayout
+): FlowLength | undefined => {
+  const { page, head, foot, start } = layout;
+  let index = 0;
+  let shift: FlowLength = { c: start, k: 0 };
+  const placed: { page: number; bottom: FlowLength; end: FlowLength }[] = [];
+  const pageStart = (at: number, unit: FlowUnit): FlowLength =>
+    at === 0
+      ? { c: start, k: 0 }
+      : { c: head + (unit.head && !unit.first ? unit.head : 0), k: at };
+  const regionEnd = (at: number, unit: FlowUnit): FlowLength => ({
+    c: -(unit.tail ? 0 : foot) - (unit.close || 0),
+    k: at + 1,
+  });
+  units.forEach((unit) => {
+    const top = (): FlowLength => ({ c: unit.top + shift.c, k: shift.k });
+    const bottom = (): FlowLength => ({ c: unit.bottom + shift.c, k: shift.k });
+    for (
+      let guard = 0;
+      guard < 200 &&
+      flowAt(bottom(), page) > flowAt(regionEnd(index, unit), page) + 0.5;
+      guard += 1
+    ) {
+      const begin = pageStart(index, unit);
+      const firstOnPage = flowAt(top(), page) <= flowAt(begin, page) + 1;
+      if (!unit.fluid && !firstOnPage) {
+        // Moves whole to the next page, its spacing above it dropped.
+        index += 1;
+        const next = pageStart(index, unit);
+        const was = top();
+        shift = { c: shift.c + next.c - was.c, k: shift.k + next.k - was.k };
+      } else {
+        // Breaks where the page ends and runs on at the next page's start (a table's heading
+        // repeated), a line or two later for text (the line across the break, orphans).
+        const cut = regionEnd(index, unit);
+        index += 1;
+        const next = {
+          c: head + (unit.head || 0) + (unit.fluid ? 2 * (unit.line || 0) : 0),
+          k: index,
+        };
+        shift = { c: shift.c + next.c - cut.c, k: shift.k + next.k - cut.k };
+      }
+    }
+    placed.push({ page: index, bottom: bottom(), end: regionEnd(index, unit) });
+  });
+  const at = placed[anchor];
+  if (!at) return undefined;
+  const room = (from: { bottom: FlowLength; end: FlowLength }): FlowLength => ({
+    c: from.end.c - from.bottom.c,
+    k: from.end.k - from.bottom.k,
+  });
+  const after = placed
+    .slice(anchor + 1)
+    .filter((unit) => unit.page === at.page);
+  const best = (after.length ? after : [at])
+    .map(room)
+    .reduce((least, next) =>
+      flowAt(next, page) < flowAt(least, page) ? next : least
+    );
+  return flowAt(best, page) > 0 ? best : undefined;
+};
+
+/* The units of an element's content, in order, positions relative to `origin` (layout px / scale). */
+const flowUnits = (
+  container: Element,
+  origin: number,
+  scale: number,
+  filler: Element
+): { units: FlowUnit[]; anchor: number } => {
+  const units: FlowUnit[] = [];
+  let anchor = -1;
+  const box = (el: Element) => {
+    const rect = el.getBoundingClientRect();
+    return {
+      top: (rect.top - origin) / scale,
+      bottom: (rect.bottom - origin) / scale,
+    };
+  };
+  const avoids = (value: string) => value.startsWith("avoid");
+  const imagesIn = (els: Element[]): FlowImage[] =>
+    els.flatMap((el) =>
+      Array.from(
+        el.querySelectorAll<HTMLImageElement>("img.ec-large-image")
+      ).map((img) => {
+        const at = box(img);
+        const room =
+          (img.parentElement?.getBoundingClientRect().width || 0) / scale;
+        const natural =
+          img.naturalWidth > 0
+            ? img.naturalHeight * Math.min(1, room / img.naturalWidth)
+            : at.bottom - at.top;
+        return { top: at.top, measured: at.bottom - at.top, natural };
+      })
+    );
+  const push = (unit: FlowUnit, joinPrevious: boolean, els: Element[] = []) => {
+    const images = imagesIn(els);
+    const last = units[units.length - 1];
+    if (joinPrevious && last) {
+      last.bottom = Math.max(last.bottom, unit.bottom);
+      last.fluid = Boolean(last.fluid && unit.fluid);
+      if (images.length) last.images = [...(last.images || []), ...images];
+      return;
+    }
+    units.push(images.length ? { ...unit, images } : unit);
+  };
+  const lineOf = (style: CSSStyleDeclaration) =>
+    parseFloat(style.lineHeight) || (parseFloat(style.fontSize) || 13) * 1.4;
+  const table = (el: HTMLTableElement, joinPrevious: boolean) => {
+    const head =
+      el.tHead && getComputedStyle(el.tHead).display === "table-header-group"
+        ? box(el.tHead).bottom - box(el.tHead).top
+        : 0;
+    const closer = el.querySelector(":scope > tfoot.ec-page-close");
+    const close =
+      closer && getComputedStyle(closer).display === "table-footer-group"
+        ? Math.max(0, box(closer).bottom - box(closer).top)
+        : 0;
+    let first = true;
+    let afterAvoid = joinPrevious;
+    Array.from(el.tBodies).forEach((body) => {
+      const bodyStyle = getComputedStyle(body);
+      if (bodyStyle.display === "none") return;
+      const rows = avoids(bodyStyle.breakInside)
+        ? [body]
+        : Array.from(body.rows).filter((row) => row !== filler);
+      rows.forEach((row) => {
+        const style = getComputedStyle(row);
+        if (style.display === "none") return;
+        const at = box(row);
+        if (at.bottom - at.top <= 0) return;
+        const join = !first && (afterAvoid || avoids(style.breakBefore));
+        push(
+          {
+            top: first && el.tHead ? box(el.tHead).top : at.top,
+            bottom: at.bottom,
+            fluid: row.classList.contains("is-tall"),
+            line: lineOf(style),
+            head,
+            close,
+            first,
+          },
+          join || (first && joinPrevious),
+          [row]
+        );
+        first = false;
+        afterAvoid = avoids(style.breakAfter);
+      });
+      if (body.contains(filler)) anchor = units.length - 1;
+    });
+  };
+  const walk = (parent: Element) => {
+    const children = Array.from(parent.children).filter((child) => {
+      if (child === filler) return false;
+      const style = getComputedStyle(child);
+      if (style.display === "none" || style.position === "fixed") return false;
+      const at = box(child);
+      return at.bottom - at.top > 0 || style.display === "contents";
+    });
+    let afterAvoid = false;
+    let i = 0;
+    while (i < children.length) {
+      // Side by side (two parties in a row): one unit, a break only above or below the row.
+      const row = [children[i]];
+      let rowBottom = box(children[i]).bottom;
+      while (
+        i + row.length < children.length &&
+        box(children[i + row.length]).top < rowBottom - 1
+      ) {
+        rowBottom = Math.max(rowBottom, box(children[i + row.length]).bottom);
+        row.push(children[i + row.length]);
+      }
+      const child = row[0];
+      const style = getComputedStyle(child);
+      const join = afterAvoid || avoids(style.breakBefore);
+      if (row.length > 1) {
+        push({ top: box(child).top, bottom: rowBottom }, join, row);
+        if (row.some((el) => el.contains(filler))) anchor = units.length - 1;
+      } else if (child instanceof HTMLTableElement) {
+        table(child, join);
+      } else if (avoids(style.breakInside)) {
+        push({ ...box(child) }, join, [child]);
+        if (child.contains(filler)) anchor = units.length - 1;
+      } else if (
+        Array.from(child.children).some(
+          (el) => !["inline", "none"].includes(getComputedStyle(el).display)
+        )
+      ) {
+        const before = units.length;
+        walk(child);
+        if (join && units.length > before + 1 && before > 0) {
+          // The first unit inside goes with what came before.
+          const firstInside = units.splice(before, 1)[0];
+          push(firstInside, true);
+          if (anchor >= before) anchor -= 1;
+        }
+      } else {
+        push({ ...box(child), fluid: true, line: lineOf(style) }, join, [
+          child,
+        ]);
+      }
+      afterAvoid = avoids(getComputedStyle(row[row.length - 1]).breakAfter);
+      i += row.length;
+    }
+  };
+  walk(container);
+  return { units, anchor };
+};
+
+/* The filler's room from the document as laid out, on pages of the given layout. */
+const measureFlow = (
+  doc: HTMLElement,
+  filler: HTMLElement,
+  printing: boolean
+):
+  | {
+      units: FlowUnit[];
+      anchor: number;
+      layout: Omit<FlowLayout, "page">;
+      scale: number;
+    }
+  | undefined => {
+  const frame = doc.querySelector<HTMLElement>(".ec-frame");
+  if (!frame?.parentElement) return undefined;
+  const scale = layoutScale(frame.parentElement, frame);
+  const origin = printing
+    ? document.documentElement.getBoundingClientRect().top
+    : doc.getBoundingClientRect().top;
+  const frameBox = frame.getBoundingClientRect();
+  const height = (el: Element | null | undefined) =>
+    el ? el.getBoundingClientRect().height / scale : 0;
+  const pageFrame = doc.querySelector(".ec-page-frame");
+  const head = printing
+    ? height(pageFrame?.querySelector(":scope > thead"))
+    : 0;
+  const foot = printing
+    ? height(pageFrame?.querySelector(":scope > tfoot"))
+    : 0;
+  const { units, anchor } = flowUnits(frame, frameBox.top, scale, filler);
+  if (anchor < 0 || !units.length) return undefined;
+  // The frame's bottom padding and rule go with its last unit; what follows the frame (the
+  // page frame's footer, a last-page footer) runs to the page's foot.
+  units[units.length - 1].bottom = frameBox.height / scale;
+  const docBottom = (doc.getBoundingClientRect().bottom - frameBox.top) / scale;
+  if (docBottom > units[units.length - 1].bottom + 0.5) {
+    units.push({
+      top: frameBox.height / scale,
+      bottom: docBottom - (printing ? foot : 0),
+      tail: true,
+    });
+  }
+  return {
+    units,
+    anchor,
+    layout: { head, foot, start: (frameBox.top - origin) / scale },
+    scale,
+  };
+};
+
+/*
  * The preview's stretch: measured with the filler out of the layout, so the height Lydia
  * syncs (ceres:content-height) never feeds back into it — the sheet's height follows from its
- * width alone. Set and cleared in one go, so no height in between is ever reported.
+ * width alone. A4 sheets as tall as the drawn width × 297 / 210, laid on as in print.
  */
 const stretchOnScreen = (doc: HTMLElement, filler: HTMLElement): void => {
   const box = doc.getBoundingClientRect();
@@ -4633,10 +4979,70 @@ const stretchOnScreen = (doc: HTMLElement, filler: HTMLElement): void => {
     box.width < SCREEN_STRETCH_MIN_WIDTH ||
     doc.querySelector(".ec-items:is(.is-cards, .is-grid)") !== null;
   if (doc.classList.contains("is-pageless") || narrow) return;
-  const spare = Math.floor(box.width * A4_RATIO - box.height);
+  const flow = measureFlow(doc, filler, false);
+  if (!flow) return;
+  const page = (box.width * A4_RATIO) / flow.scale;
+  const room = flowFiller(flowAtHeight(flow.units, page), flow.anchor, {
+    ...flow.layout,
+    page,
+  });
+  const spare = room ? Math.floor(flowAt(room, page)) : 0;
   if (spare <= 0) return;
   filler.style.setProperty("--ec-screen-filler-height", `${spare}px`);
   doc.classList.add("is-screen-stretch");
+};
+
+/*
+ * Print: the page's height (page area, CSS px) is matched with a media query per pixel over
+ * every size a page can be, each giving the filler its formula of 100vh.
+ */
+const STRETCH_STYLE_ID = "ec-stretch-pages";
+const PAGE_HEIGHTS: [number, number] = [280, 1700];
+
+export const stretchPrintRules = (
+  units: FlowUnit[],
+  anchor: number,
+  layout: Omit<FlowLayout, "page">,
+  zoom: number,
+  slack: number
+): string => {
+  const rules: string[] = [];
+  let open: { from: number; to: number; room: FlowLength } | undefined;
+  const close = () => {
+    if (!open) return;
+    const { from, to, room } = open;
+    const k = compactDecimal(room.k);
+    const c = Math.floor(room.c - slack);
+    rules.push(
+      `@media print and (min-height: ${from}px) and (max-height: ${
+        to + 0.999
+      }px) { .ec-doc.is-stretch .ec-items .ec-filler { --ec-filler-height: max(0px, calc(${k} * 100vh / ${compactDecimal(
+        zoom
+      )} ${c < 0 ? "-" : "+"} ${Math.abs(c)}px)); } }`
+    );
+    open = undefined;
+  };
+  for (let height = PAGE_HEIGHTS[0]; height <= PAGE_HEIGHTS[1]; height += 1) {
+    const page = height / zoom;
+    const room = flowFiller(flowAtHeight(units, height), anchor, {
+      ...layout,
+      page,
+    });
+    const same =
+      open &&
+      room &&
+      open.room.k === room.k &&
+      Math.abs(open.room.c - room.c) < 0.5;
+    if (same && open) {
+      open.to = height;
+    } else {
+      close();
+      if (room && flowAt(room, page) > slack)
+        open = { from: height, to: height, room };
+    }
+  }
+  close();
+  return rules.join("\n");
 };
 
 export const stretchItemTable = (root: ParentNode = document): void => {
@@ -4655,22 +5061,24 @@ export const stretchItemTable = (root: ParentNode = document): void => {
     stretchOnScreen(doc, filler);
     return;
   }
-  if (!doc.classList.contains("is-stretch") || !frame.parentElement) return;
+  if (!doc.classList.contains("is-stretch")) return;
   const zoom =
     parseFloat(getComputedStyle(document.documentElement).zoom || "1") || 1;
-  // The whole document: the frame, and the letterhead footer after it when it prints on the
-  // last page only (on every page it sits in the frame's repeating footer space).
-  const content =
-    doc.getBoundingClientRect().height /
-    layoutScale(frame.parentElement, frame);
+  // Measured with the filler at 0 whatever an earlier run's rules give it.
+  filler.style.setProperty("--ec-filler-height", "0px");
+  const flow = measureFlow(doc, filler, true);
+  filler.style.removeProperty("--ec-filler-height");
   const slack =
     STRETCH_SLACK + (zoom > 1 ? STRETCH_ZOOM_SLACK * (1 - 1 / zoom) : 0);
-  filler.style.setProperty(
-    "--ec-filler-height",
-    `max(0px, calc(100vh / ${compactDecimal(zoom)} - ${Math.ceil(
-      content + slack
-    )}px))`
-  );
+  let style = document.getElementById(STRETCH_STYLE_ID);
+  if (!style) {
+    style = document.createElement("style");
+    style.id = STRETCH_STYLE_ID;
+    document.head.appendChild(style);
+  }
+  style.textContent = flow
+    ? stretchPrintRules(flow.units, flow.anchor, flow.layout, zoom, slack)
+    : "";
 };
 
 /*
@@ -5185,11 +5593,26 @@ export const registerEcommerceTotalsFit = (): void => {
   // An image or font arriving after the render changes the columns.
   document.addEventListener("load", schedule, true);
   if (typeof window.matchMedia === "function") {
-    window.matchMedia("print").addEventListener("change", run);
+    /*
+     * While Chrome prints, the layout is cut into pages, and a run then measures the cut
+     * layout: the stretch filler came out a page break too tall and pushed the TOTAL row over
+     * (page.pdf straight after switching to print media). Nothing re-runs between beforeprint
+     * and afterprint; the PDF service's switch to print media runs it before that.
+     */
+    let printingNow = false;
+    window.matchMedia("print").addEventListener("change", () => {
+      if (!printingNow) run();
+    });
     // The fits as print runs them (run), so the page count is taken from the printed layout.
-    window.addEventListener("beforeprint", () => prepareBrowserPrint(run));
+    window.addEventListener("beforeprint", () => {
+      prepareBrowserPrint(run);
+      printingNow = true;
+    });
     // The preview's stretch back after a print (or a cancelled print dialog).
-    window.addEventListener("afterprint", schedule);
+    window.addEventListener("afterprint", () => {
+      printingNow = false;
+      schedule();
+    });
   }
   /*
    * Fonts: a face (Inter Bold for the grand total) can start loading after fonts.ready has
