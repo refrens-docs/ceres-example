@@ -1094,6 +1094,21 @@ describe("Ecommerce template — Change Script", () => {
     expect(html).toContain("fonts.googleapis.com");
   });
 
+  it("loads the Noto face for a script found in the document's own text", () => {
+    const html = render((invoice) => {
+      invoice.billedTo.name = "យេសរាល យេសរាល។";
+      invoice.items[0].name = "مكتب";
+    });
+    expect(html).toContain(
+      "--ec-script-font: 'Noto Sans Arabic', 'Noto Sans Khmer'"
+    );
+    expect(html).toMatch(
+      /family(=|&#x3D;)Noto\+Sans\+Arabic:wght@[^"]*family(=|&#x3D;)Noto\+Sans\+Khmer/
+    );
+    // Latin-only documents load nothing extra.
+    expect(render()).not.toContain("--ec-script-font");
+  });
+
   it("isolates every piece of the business's text, so its punctuation stays put", () => {
     const html = render();
     [
