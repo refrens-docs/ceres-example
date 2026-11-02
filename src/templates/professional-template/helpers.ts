@@ -4746,8 +4746,10 @@ const markJointCorners = (
   if (!cells.length) return;
   const bottom = Math.max(...cells.map(({ box }) => box.bottom));
   const last = cells.filter(({ box }) => bottom - box.bottom < 1.5);
-  const left = last.reduce((a, b) => (b.box.left < a.box.left ? b : a));
-  const right = last.reduce((a, b) => (b.box.right > a.box.right ? b : a));
+  // On a tie the later row wins: a stretched table's filler (or a Sub total under it) ends the
+  // table even while the page rules have not given the filler its height yet.
+  const left = last.reduce((a, b) => (b.box.left <= a.box.left ? b : a));
+  const right = last.reduce((a, b) => (b.box.right >= a.box.right ? b : a));
   // A table too wide for the page is cut off at its box (user, 2026-11-01): a corner past that
   // edge is not on the paper, and Chrome 122 let its mark escape the cut, so the PDF service
   // shrank the whole page to show it (2026-11-01: 13 px text printed at 9.9 px).
@@ -4774,6 +4776,23 @@ const markJointCorners = (
         "--pt-joint-side",
         style[side as "borderLeftWidth" | "borderRightWidth"]
       );
+    });
+};
+
+/*
+ * The joint marked again once the stretch shows its filler: the totals are split (and the
+ * joint marked) before the stretch runs, so the marks sat on the last item and the filler,
+ * the table's real last row, ended in the page-break curve above the totals (user,
+ * 2026-11-02).
+ */
+const remarkJointCorners = (root: ParentNode): void => {
+  root
+    .querySelectorAll<HTMLTableElement>(`table[${TOTALS_SPLIT}]`)
+    .forEach((split) => {
+      const table = split.previousElementSibling;
+      if (!(table instanceof HTMLTableElement)) return;
+      clearJointCorners(table);
+      markJointCorners(table, split);
     });
 };
 
@@ -5368,13 +5387,18 @@ const flowUnits = (
         return { top: at.top, measured: at.bottom - at.top, natural };
       })
     );
+  const mergeInto = (into: FlowUnit, unit: FlowUnit, images: FlowImage[]) => {
+    /* eslint-disable no-param-reassign */
+    into.bottom = Math.max(into.bottom, unit.bottom);
+    into.fluid = Boolean(into.fluid && unit.fluid);
+    if (images.length) into.images = [...(into.images || []), ...images];
+    /* eslint-enable no-param-reassign */
+  };
   const push = (unit: FlowUnit, joinPrevious: boolean, els: Element[] = []) => {
     const images = imagesIn(els);
     const last = units[units.length - 1];
     if (joinPrevious && last) {
-      last.bottom = Math.max(last.bottom, unit.bottom);
-      last.fluid = Boolean(last.fluid && unit.fluid);
-      if (images.length) last.images = [...(last.images || []), ...images];
+      mergeInto(last, unit, images);
       return;
     }
     units.push(images.length ? { ...unit, images } : unit);
@@ -5464,9 +5488,11 @@ const flowUnits = (
         const before = units.length;
         walk(child);
         if (join && units.length > before + 1 && before > 0) {
-          // The first unit inside goes with what came before.
+          // The first unit inside goes with what came before it (the unit before `before`;
+          // joined to the last unit inside, a whole line item and its images went missing
+          // and the stretch filled a page too many, 2026-11-02).
           const firstInside = units.splice(before, 1)[0];
-          push(firstInside, true);
+          mergeInto(units[before - 1], firstInside, firstInside.images || []);
           if (anchor >= before) anchor -= 1;
         }
       } else {
@@ -5640,11 +5666,26 @@ const printZoom = (): number => {
  * its tables, and on screen while a sheet has room to fill. Each run starts from no filler:
  * when print starts the print rules decide, and when it ends the screen's comes back.
  */
+/*
+ * The summary rows never stretch (user, 2026-11-02): a group's Sub total closing the item list
+ * stays on the Total row, and the empty space goes above it, under the last item.
+ */
+const placeFiller = (filler: HTMLElement): void => {
+  let before: Element | null = filler;
+  while (
+    before?.previousElementSibling?.classList.contains("pt-group-total-row")
+  ) {
+    before = before.previousElementSibling;
+  }
+  if (before && before !== filler) before.before(filler);
+};
+
 export const stretchItemTable = (root: ParentNode = document): void => {
   const doc = root.querySelector<HTMLElement>(".pt-doc");
   const filler = doc?.querySelector<HTMLElement>(".pt-items .pt-filler");
   const frame = doc?.querySelector<HTMLElement>(".pt-page-frame");
   if (!doc || !filler || !frame) return;
+  placeFiller(filler);
   const printing =
     typeof window.matchMedia === "function" &&
     window.matchMedia("print").matches;
@@ -5663,6 +5704,7 @@ export const stretchItemTable = (root: ParentNode = document): void => {
   // Measured without the filler (is-filled off), then shown with the rules' height.
   const flow = measureFlow(doc, filler, true);
   doc.classList.add("is-filled");
+  remarkJointCorners(doc);
   const rules = wrap && table ? columnRules(wrap, table) : undefined;
   if (wrap && rules) {
     wrap.style.setProperty("--pt-column-rules", rules.layers);

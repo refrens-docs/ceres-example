@@ -1834,6 +1834,14 @@
   padding-block: 0;
 }
 
+/* A Sub total under the space (helpers.ts placeFiller) stays with it: the summary rows never
+   stretch, nor move to a page of their own (user, 2026-11-02). */
+@media print {
+  .pt-items .pt-filler + .pt-group-total-row {
+    break-before: avoid;
+  }
+}
+
 /* The space carries on the last item's zebra colour, so it reads as that row running on
    (user, 2026-10-26). */
 .pt-doc.is-filled .pt-items > tbody > tr.is-stripe + .pt-filler > td,

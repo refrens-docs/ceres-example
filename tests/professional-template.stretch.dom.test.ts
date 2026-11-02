@@ -157,6 +157,24 @@ describe("Professional Template — the preview's A4 sheet", () => {
     expect(doc.classList.contains("is-filled")).toBe(true);
   });
 
+  // User (2026-11-02): the summary rows never stretch; the space goes under the last item.
+  it("puts the space above a closing Sub total row", () => {
+    media(false);
+    mount();
+    const filler = document.querySelector(".pt-filler") as HTMLElement;
+    filler.insertAdjacentHTML(
+      "beforebegin",
+      '<tr class="pt-item-row pt-group-total-row"><td>Sub total</td></tr>'
+    );
+    stretchItemTable();
+    const rows = Array.from(document.querySelectorAll(".pt-items tr"));
+    expect(rows.map((row) => row.className)).toEqual([
+      "pt-item-row",
+      "pt-filler",
+      "pt-item-row pt-group-total-row",
+    ]);
+  });
+
   it("leaves a Pageless document as it is", () => {
     media(false);
     const { doc, filler } = mount(" is-pageless");
