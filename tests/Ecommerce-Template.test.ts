@@ -491,7 +491,9 @@ describe("Ecommerce template — settings and data", () => {
       invoice.letterHead = "https://example.com/head.png";
       invoice.letterHeadFooter = "https://example.com/foot.png";
     });
-    expect(every).toMatch(/<thead class="ec-page-frame-header">\s*<tr>\s*<td>/);
+    expect(every).toMatch(
+      /<thead class="ec-page-frame-header">\s*<tr class="ec-page-margin"[^>]*><td><\/td><\/tr>\s*<tr>\s*<td>/
+    );
     expect(every).toContain("ec-footer-fixed");
     expect(every).toContain('data-ceres-page-policy="all"');
 
@@ -504,7 +506,7 @@ describe("Ecommerce template — settings and data", () => {
     });
     // The header keeps only the frame's top edge.
     expect(once).toMatch(
-      /<thead class="ec-page-frame-header">\s*<tr class="ec-frame-edge is-top"/
+      /<thead class="ec-page-frame-header">\s*<tr class="ec-page-margin"[^>]*><td><\/td><\/tr>\s*<tr class="ec-frame-edge is-top"/
     );
     expect(once).not.toContain("ec-footer-fixed");
     expect(once).toContain('data-ceres-page-policy="first"');
@@ -1347,9 +1349,16 @@ describe("Ecommerce template — files and CSS", () => {
     expect(a5.compactTable).toBe(true);
     expect(a5).not.toHaveProperty("tableFit");
     expect(render()).not.toContain("--ec-table-fit");
-    // Before a column is cut: the item column's content gives way, 1 px padding.
+    // Before a column is cut: the item column's content gives way; the padding stays 4 px
+    // (user, 2 Nov 2026: 1 px was too tight).
+    expect(print).not.toMatch(/\.ec-items\.is-print-tight :is\(th, td\)/);
     expect(print).toMatch(
-      /\.ec-items\.is-print-tight :is\(th, td\) \{\s*padding-inline: 1px;/
+      /\.ec-items\.is-print-compact :is\(th, td\) \{\s*padding-inline: 4px;/
+    );
+    // A browser's own print: 0 top and bottom page margins (no Chrome stamps), the page
+    // frame's margin rows give the 1 cm back.
+    expect(print).toMatch(
+      /\.ec-doc\.is-browser-print \.ec-page-frame > \* > tr\.ec-page-margin > td \{\s*height: 1cm;/
     );
     expect(print).toMatch(
       /\.ec-items\.is-print-tight \.ec-item-desc table \{\s*width: 100%;\s*table-layout: fixed;/

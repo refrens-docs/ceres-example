@@ -38,6 +38,10 @@
   --}}
   <table class="ec-page-frame" role="presentation">
     <thead class="ec-page-frame-header">
+      {{!-- The page's top margin in a browser's own print, whose page margins are 0 there so
+           Chrome prints no date / title / URL / page-number stamps (helpers.ts
+           prepareBrowserPrint). Hidden otherwise. --}}
+      <tr class="ec-page-margin" aria-hidden="true"><td></td></tr>
     {{#if view.letterheadEveryPage}}
         <tr>
           <td>
@@ -67,6 +71,7 @@
           </td>
         </tr>
     {{/if}}
+      <tr class="ec-page-margin" aria-hidden="true"><td></td></tr>
     </tfoot>
     <tbody>
       <tr>

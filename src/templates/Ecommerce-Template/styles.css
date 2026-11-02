@@ -363,6 +363,11 @@
   display: none;
 }
 
+/* The page margin rows of a browser's own print only (print rules below). */
+.ec-page-frame > * > tr.ec-page-margin {
+  display: none;
+}
+
 .ec-doc .ec-items-scroll .ec-items .ec-filler > td {
   padding-block: 0;
   border-top: 0;
@@ -1305,11 +1310,9 @@
    * Too wide even with 4 px padding (helpers.ts fitPrintTable): before any column is cut, the
    * item column's content gives way — a table in a description takes the column's width, its
    * cells wrapping anywhere; a row of images wraps; a long word breaks — and the cells keep
-   * 1 px of padding. Text keeps its size.
+   * the 4 px padding of a compact table (user, 2 Nov 2026: 1 px was too tight). Text keeps its
+   * size.
    */
-  .ec-items.is-print-tight :is(th, td) {
-    padding-inline: 1px;
-  }
 
   .ec-items.is-print-tight :is(.ec-item-name, .ec-item-codes, .ec-item-desc) {
     overflow-wrap: anywhere;
@@ -1613,6 +1616,30 @@
     bottom: 0;
     left: 0;
     width: 100%;
+  }
+
+  /*
+   * A browser's own print (Refrens' Print button, Ctrl+P): the page's top and bottom margins
+   * are 0 (helpers.ts prepareBrowserPrint), which keeps Chrome from printing its date, title,
+   * URL and page-number stamps there (user, 2 Nov 2026). The template gives every page its 1 cm
+   * back: a row at the top and foot of the page frame, repeated on each page.
+   */
+  .ec-doc.is-browser-print .ec-page-frame > * > tr.ec-page-margin {
+    display: table-row;
+  }
+
+  .ec-doc.is-browser-print .ec-page-frame > * > tr.ec-page-margin > td {
+    height: 1cm;
+    padding: 0;
+    border: 0;
+  }
+
+  .ec-doc.is-browser-print > .ec-letterhead:not(.is-empty) {
+    margin-top: 1cm;
+  }
+
+  .ec-doc.is-browser-print .ec-letterhead-footer.ec-footer-fixed {
+    bottom: 1cm;
   }
 
   /*

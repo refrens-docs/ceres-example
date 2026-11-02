@@ -13,6 +13,8 @@ import {
   flowAtHeight,
   flowFiller,
   flowBreakFills,
+  prepareBrowserPrint,
+  endBrowserPrint,
   stretchPrintRules,
   stretchItemTable,
 } from "../src/templates/Ecommerce-Template/helpers";
@@ -214,6 +216,22 @@ describe("Ecommerce template — after the render, in the browser", () => {
       const printed = stretchPrintRules(units, 4, layout, 1, 16);
       expect(printed).toContain('tr[data-ec-break="1"] > td::after');
       expect(printed).toContain('tr[data-ec-break="2"] > td::after');
+    });
+
+    it("zeroes a browser print's top and bottom page margins, and only for its run", () => {
+      document.body.innerHTML = '<div class="ec-doc"></div>';
+      prepareBrowserPrint(() => undefined);
+      expect(document.querySelector(".ec-doc.is-browser-print")).not.toBeNull();
+      expect(document.getElementById("ec-browser-page")?.textContent).toBe(
+        "@page { margin-top: 0; margin-bottom: 0; }"
+      );
+      endBrowserPrint();
+      expect(document.querySelector(".is-browser-print")).toBeNull();
+      expect(document.getElementById("ec-browser-page")).toBeNull();
+      // A Long PDF keeps its one page: no page rule.
+      document.body.innerHTML = '<div class="ec-doc is-pageless"></div>';
+      prepareBrowserPrint(() => undefined);
+      expect(document.getElementById("ec-browser-page")).toBeNull();
     });
 
     it("sizes page-height images for the page they print on, not the window", () => {

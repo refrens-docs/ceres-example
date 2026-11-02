@@ -5079,6 +5079,12 @@ const stretchOnScreen = (doc: HTMLElement, filler: HTMLElement): void => {
  * every size a page can be, each giving the filler its formula of 100vh.
  */
 const STRETCH_STYLE_ID = "ec-stretch-pages";
+/*
+ * An item lengthened at a page break runs to the page's foot less this: its table's closing
+ * rule then falls on the frame's own (user, 2 Nov 2026: the 16 px kept back drew a second
+ * line under the table).
+ */
+const BREAK_SLACK = 4;
 const PAGE_HEIGHTS: [number, number] = [280, 1700];
 
 export const stretchPrintRules = (
@@ -5090,8 +5096,8 @@ export const stretchPrintRules = (
 ): string => {
   const rules: string[] = [];
   const z = compactDecimal(zoom);
-  const length = (room: FlowLength) => {
-    const c = Math.floor(room.c - slack);
+  const length = (room: FlowLength, keep = slack) => {
+    const c = Math.floor(room.c - keep);
     return `max(0px, calc(${compactDecimal(room.k)} * 100vh / ${z} ${
       c < 0 ? "-" : "+"
     } ${Math.abs(c)}px))`;
@@ -5109,13 +5115,14 @@ export const stretchPrintRules = (
         )}; }`
       );
     flowBreakFills(sized, anchor, pageLayout)
-      .filter((fill) => flowAt(fill.room, page) > slack)
+      .filter((fill) => flowAt(fill.room, page) > BREAK_SLACK)
       .forEach((fill) =>
         parts.push(
           `.ec-doc.is-stretch .ec-items tr[data-ec-break="${
             fill.unit
           }"] > td::after { content: ""; display: block; height: ${length(
-            fill.room
+            fill.room,
+            BREAK_SLACK
           )}; }`
         )
       );
@@ -5584,6 +5591,32 @@ export const withReadableStylesheet = <T>(measure: () => T): T => {
  * blank page at the end of an A5 printout. Only the steps that need the pages themselves (the
  * footer on the last page's edge) wait for the listener.
  */
+/*
+ * A browser's own print: Chrome prints its date, title, URL and page number in the page's top
+ * and bottom margins unless both are 0 (its print preview turns "Headers and footers" off
+ * then), so they are 0 while it prints (user, 2 Nov 2026: "remove these stamps"); the page
+ * frame's margin rows (styles.css) give each page its 1 cm back. The side margins stay the
+ * browser's. Never on a Long PDF (one page, no @page: Lydia's Pageless PDF breaks with one).
+ */
+const BROWSER_PAGE_STYLE_ID = "ec-browser-page";
+
+const startBrowserPage = (doc: HTMLElement): void => {
+  if (doc.classList.contains("is-pageless")) return;
+  doc.classList.add("is-browser-print");
+  if (document.getElementById(BROWSER_PAGE_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = BROWSER_PAGE_STYLE_ID;
+  style.textContent = "@page { margin-top: 0; margin-bottom: 0; }";
+  document.head.appendChild(style);
+};
+
+export const endBrowserPrint = (root: ParentNode = document): void => {
+  root
+    .querySelectorAll(".ec-doc.is-browser-print")
+    .forEach((doc) => doc.classList.remove("is-browser-print"));
+  document.getElementById(BROWSER_PAGE_STYLE_ID)?.remove();
+};
+
 export const prepareBrowserPrint = (
   layout?: () => void,
   root: ParentNode = document
@@ -5600,6 +5633,7 @@ export const prepareBrowserPrint = (
   ) {
     return;
   }
+  startBrowserPage(doc);
   const style = getComputedStyle(doc);
   // The document's printable width, or the browser's own (1 cm margins) where narrower.
   const width = Math.min(
@@ -5763,6 +5797,7 @@ export const registerEcommerceTotalsFit = (): void => {
     // The preview's stretch back after a print (or a cancelled print dialog).
     window.addEventListener("afterprint", () => {
       printingNow = false;
+      endBrowserPrint();
       schedule();
     });
   }
