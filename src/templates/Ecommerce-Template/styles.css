@@ -384,6 +384,20 @@
   border-top: 0;
 }
 
+/*
+ * Under a row across the whole table (an item's images, its full-width description) the
+ * stretch's empty space draws no column rules: they reappeared under content that has no
+ * columns (user, 2 Nov 2026). The table's outline still runs down to the foot.
+ */
+.ec-doc
+  .ec-items-scroll
+  .ec-items
+  :is(.ec-image-row, .ec-detail-row:not([style*="display: none"]))
+  + .ec-filler
+  > td {
+  border-inline-end-width: 0;
+}
+
 /* The preview's stretch: the sheet filled to A4 (helpers.ts stretchItemTable). */
 @media screen {
   .ec-doc.is-screen-stretch .ec-items .ec-filler {

@@ -1997,6 +1997,12 @@ describe("Ecommerce template — as refrens.com prints real documents", () => {
     // Business toggle off: stretched all the same (user, 2 Nov 2026: no toggle needed).
     expect(stretch(false, true)).toContain("ec-doc is-stretch");
     expect(stretch(false, false)).toContain("ec-doc is-stretch");
+    // Under a row across the whole table the stretch's space draws no column rules.
+    expect(
+      fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8")
+    ).toMatch(
+      /:is\(\.ec-image-row, \.ec-detail-row:not\(\[style\*="display: none"\]\)\)\s*\+ \.ec-filler\s*> td \{\s*border-inline-end-width: 0;/
+    );
     // The filler row is there either way, for the preview's own stretch.
     expect(stretch(false, false)).toContain('class="ec-filler"');
     expect(stretch(true, false)).toContain('class="ec-filler"');
