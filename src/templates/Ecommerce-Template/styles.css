@@ -647,7 +647,7 @@
 
 .ec-item-name {
   display: block;
-  font-weight: 500;
+  font-weight: 600; /* semibold (user, 2 Nov 2026) */
 }
 
 .ec-item-codes {
