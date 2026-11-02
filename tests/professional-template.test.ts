@@ -2162,7 +2162,7 @@ describe("Professional Template — review round 5 (2026-10-24)", () => {
 
   it("sets the coloured section headings in 16 px; the summaries' titles a 12 px grey caption", () => {
     expect(css()).toMatch(
-      /\.pt-card-title \{[^}]*font-size: calc\(var\(--pt-font-size-heading\)[^}]*line-height: 24px;/
+      /\.pt-card-title \{[^}]*font-size: calc\(var\(--pt-font-size-heading\)[^}]*line-height: 1.3;/
     );
     expect(css()).toMatch(
       /\.pt-card\.pt-widget-table > \.pt-card-title \{[^}]*font-size: calc\(var\(--pt-font-size-caption\)[^}]*letter-spacing: 0\.6px;/
@@ -2270,5 +2270,26 @@ describe("Professional Template — real PDF findings (2026-11-01)", () => {
     expect(css).toMatch(
       /\.pt-extra-row \.pt-num:not\(\[data-testid="num"\]\) \{\s*white-space: normal;/
     );
+  });
+});
+
+describe("Professional Template — line height and browser-print margins (2026-11-02)", () => {
+  const css = () =>
+    fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8");
+
+  // User: the lines read too far apart; every line height follows the text scale.
+  it("sets body lines at 1.4 and no line height in fixed pixels", () => {
+    expect(css()).toMatch(/--pt-lh: 1\.4;/);
+    expect(css()).not.toMatch(/line-height: \d+px/);
+  });
+
+  // User: margins did not follow the setting in a browser's print (always 1 cm).
+  it("gives a browser's print the document's side margins", () => {
+    const html = render((invoice) => {
+      invoice.template = { pdfOptions: { xMargins: "2" } };
+    });
+    expect(html).toContain('data-pt-side-margin="2"');
+    const print = mapPrint({ pdfOptions: { xMargins: "2" } });
+    expect(print.browserPrintWidth).toBe(print.printWidth);
   });
 });

@@ -50,8 +50,10 @@
   --pt-fill: #f7f9fa; /* neutral-50: signature, group rows */
   --pt-line: #e8eaed; /* neutral-200: card borders and table rules */
 
-  /* One text rhythm: 13 px on 20 px lines. */
-  --pt-lh: 1.5385;
+  /* Body line height 1.4 (13 px text on 18.2 px), tighter than the first design's 13/20 (user,
+     2026-11-02: the lines read too far apart). Every line height is a ratio of its text, so it
+     follows the text scale. */
+  --pt-lh: 1.4;
 
   /*
    * --pt-script-font is the Noto face for the document's Language/Script setting (set inline
@@ -228,7 +230,7 @@
   font-family: var(--pt-title-font);
   font-size: calc(var(--pt-font-size-xl) * var(--pt-text-scale, 1));
   font-weight: 400;
-  line-height: 1.5;
+  line-height: 1.25;
   letter-spacing: -0.5px;
   overflow-wrap: anywhere;
 }
@@ -244,7 +246,7 @@
   border-radius: 8px;
   font-size: calc(var(--pt-font-size-m) * var(--pt-text-scale, 1));
   font-weight: 500;
-  line-height: 20px;
+  line-height: var(--pt-lh);
 }
 
 /* Subtitle and copy label sit right under the title, as refrens.com prints them. */
@@ -263,7 +265,7 @@
   grid-template-columns: minmax(100px, max-content) minmax(min-content, 1fr);
   gap: 8px 16px;
   font-size: calc(var(--pt-font-size-m) * var(--pt-text-scale, 1));
-  line-height: 20px;
+  line-height: var(--pt-lh);
 }
 
 .pt-meta-row {
@@ -382,7 +384,7 @@
   font-family: var(--pt-label-font);
   font-size: calc(var(--pt-font-size-heading) * var(--pt-text-scale, 1));
   font-weight: 500;
-  line-height: 24px;
+  line-height: 1.3;
 }
 
 /*
@@ -396,7 +398,7 @@
 .pt-after .pt-card-title,
 [data-section="logistics-below"] .pt-card-title {
   font-size: calc(var(--pt-font-size-subheading) * var(--pt-text-scale, 1));
-  line-height: 20px;
+  line-height: 1.35;
 }
 
 /* The summaries' titles a quiet grey caption in capitals, so the coloured tables under them
@@ -406,7 +408,7 @@
   font-size: calc(var(--pt-font-size-caption) * var(--pt-text-scale, 1));
   font-weight: 500;
   letter-spacing: 0.6px;
-  line-height: 16px;
+  line-height: 1.3;
   text-transform: uppercase;
 }
 
@@ -439,7 +441,7 @@
   font-family: var(--pt-label-font);
   font-size: calc(var(--pt-font-size-name) * var(--pt-text-scale, 1));
   font-weight: 600;
-  line-height: 20px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
@@ -762,7 +764,7 @@
   gap: 0 12px;
   color: var(--pt-code);
   font-size: calc(var(--pt-font-size-code) * var(--pt-text-scale, 1));
-  line-height: 1.4545; /* 11 px on 16 px */
+  line-height: 1.35; /* 11 px on 14.85 px */
 }
 
 .pt-item-thumbnail {
@@ -931,7 +933,7 @@
   font-family: var(--pt-label-font);
   font-size: calc(var(--pt-font-size-heading) * var(--pt-text-scale, 1));
   font-weight: 500;
-  line-height: 24px;
+  line-height: 1.3;
 }
 
 .pt-upi-qr {
@@ -946,7 +948,7 @@
   overflow-wrap: break-word; /* only an ID wider than the whole card breaks */
   font-size: calc(var(--pt-font-size-sm) * var(--pt-text-scale, 1));
   font-weight: 400;
-  line-height: 20px;
+  line-height: var(--pt-lh);
 }
 
 /* The UPI note at 11 px, like the item codes (user request, 2026-10-24). */
@@ -954,7 +956,7 @@
   margin-top: -4px;
   color: var(--pt-ink); /* refrens.com */
   font-size: calc(var(--pt-font-size-code) * var(--pt-text-scale, 1));
-  line-height: 1.4545; /* 11 px on 16 px */
+  line-height: 1.35; /* 11 px on 14.85 px */
 }
 
 /* Terms: numbered as refrens.com numbers them, 4 px apart. */
@@ -1085,7 +1087,7 @@
   padding: 0;
   border: 0;
   font-size: calc(var(--pt-font-size-grand) * var(--pt-text-scale, 1));
-  line-height: 28px;
+  line-height: 1.3;
 }
 
 /* "Total (INR)" regular beside its semibold figure (user request, 2026-10-24). */

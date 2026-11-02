@@ -3973,9 +3973,10 @@ export const mapPrint = (state: UnknownRecord) => {
   const browserPrintHeight = Math.floor(
     ((paperHeightMm / 25.4) * 96 - (2 * 96) / 2.54) / rendererZoom
   );
-  // A browser's own print (Lydia's print button, Ctrl+P) keeps its own 1 cm margins, whatever
-  // xMargins says: the page is fitted for the narrower of the two (prepareBrowserPrint).
-  const browserPrintWidth = printableWidth(1);
+  // A browser's own print (Lydia's print button, Ctrl+P) takes the document's side margins too
+  // (applyBrowserPrintPage: an @page rule outside the PDF service; user, 2026-11-02: it kept the
+  // browser's 1 cm whatever the setting).
+  const browserPrintWidth = printWidth;
   const rawScale =
     positiveNumber(pdfOptions.textScale) ?? positiveNumber(pdfOptions.scale);
   // A percentage (110) or a ratio (1.1); kept readable either way.
@@ -3988,7 +3989,9 @@ export const mapPrint = (state: UnknownRecord) => {
     browserPrintWidth,
     browserPrintHeight,
     printBase: compactDecimal(printableBase(sideMarginCm)),
-    browserPrintBase: compactDecimal(printableBase(1)),
+    browserPrintBase: compactDecimal(printableBase(sideMarginCm)),
+    // The side margins in cm, for a browser's own print (applyBrowserPrintPage).
+    sideMargin: compactDecimal(sideMarginCm),
     /*
      * "Stretch invoice & quotation tables to fill the page" (Settings > Experimental,
      * owner.configuration.experimental.stretchInvoiceTable): on a one-page printout the item
@@ -5860,6 +5863,38 @@ export const loadScriptFonts = (): void => {
     });
 };
 
+/*
+ * A browser's own print (Ctrl+P, Lydia's print button) takes the document's side margins
+ * (pdfOptions.xMargins), as Refrens' PDF service does, instead of the browser's 1 cm: an @page
+ * margin, top and bottom kept at 1 cm. The print size's html zoom scales a browser's @page
+ * margins with it (1 cm printed 12 mm at 1.2, 2026-11-02), so they are written divided by it.
+ * Never in the PDF service (body.isDibella), which sets its own page margins.
+ */
+const BROWSER_PAGE_STYLE_ID = "pt-browser-page";
+export const applyBrowserPrintPage = (): void => {
+  if (typeof document === "undefined") return;
+  const doc = document.querySelector<HTMLElement>(".pt-doc");
+  const existing = document.getElementById(BROWSER_PAGE_STYLE_ID);
+  const side = Number(doc?.dataset.ptSideMargin);
+  if (
+    !doc ||
+    document.body?.classList.contains("isDibella") ||
+    !Number.isFinite(side) ||
+    side < 0
+  ) {
+    existing?.remove();
+    return;
+  }
+  const zoom = printZoom();
+  const cm = (value: number) => `${compactDecimal(value / zoom)}cm`;
+  const css = `@page { margin: ${cm(1)} ${cm(side)}; }`;
+  if (existing?.textContent === css) return;
+  const style = existing ?? document.createElement("style");
+  style.id = BROWSER_PAGE_STYLE_ID;
+  style.textContent = css;
+  if (!existing) document.head.appendChild(style);
+};
+
 export const registerProfessionalWords = (): void => {
   const state = window as typeof window & { ptWordsRegistered?: boolean };
   if (state.ptWordsRegistered || typeof document === "undefined") return;
@@ -5869,6 +5904,7 @@ export const registerProfessionalWords = (): void => {
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
       prepareReadableStylesheet();
+      applyBrowserPrintPage();
       loadScriptFonts();
       syncPrintWidths();
       respellTaxWords();
@@ -5923,7 +5959,10 @@ export const registerProfessionalPrint = (): void => {
   state.ptPrintRegistered = true;
   // Lydia's print size, changed live (syncPrintWidths).
   if (typeof MutationObserver === "function") {
-    new MutationObserver(() => syncPrintWidths()).observe(document.head, {
+    new MutationObserver(() => {
+      syncPrintWidths();
+      applyBrowserPrintPage();
+    }).observe(document.head, {
       childList: true,
       subtree: true,
       characterData: true,
