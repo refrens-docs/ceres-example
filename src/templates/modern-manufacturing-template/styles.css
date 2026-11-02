@@ -525,6 +525,20 @@
   grid-column: 1 / -1;
 }
 
+/* A text box that may split across pages (terms, notes, additional info, attachments): on
+   screen its edges and wrappers are not there (print draws them, see @media print). */
+.mm-split-edge {
+  display: none;
+}
+
+.mm-split-frame,
+.mm-split-frame > tbody,
+.mm-split-frame > tbody > tr,
+.mm-split-body,
+.mm-split-grid {
+  display: contents;
+}
+
 /* ------------------------------------------------------------ 4–5. parties, dispatch */
 
 /* Bill To | Ship To and Shipped From | Transport: padding 12 (user request), 6 px between lines. */
@@ -681,7 +695,7 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-.mm-notes.is-stacked > .mm-pair-box + .mm-pair-box,
+.mm-notes.is-stacked .mm-pair-box + .mm-pair-box,
 .mm-dispatch.is-stacked > .mm-pair-box + .mm-pair-box {
   border-top: 1px solid var(--mm-line);
   border-inline-start: 0;
@@ -2348,6 +2362,104 @@
     break-inside: avoid;
   }
 
+  /*
+   * Terms, notes, additional info and attachments break line by line, as in the E-commerce
+   * template (user, 2026-11-02: a box moved whole left most of a page empty). Each page's piece
+   * of the box closes with its own rounded edge (user rule: a split box closes at the page
+   * foot; Chrome 122 cannot clone a block's border): the box prints as a one-column table
+   * whose header and footer rows are the box's top and bottom edges, repeated on every page
+   * it spans, and whose one cell draws the sides around the content.
+   */
+  .mm-pair.mm-split,
+  .mm-box.mm-split {
+    display: block;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+    break-inside: auto;
+  }
+
+  /* A real table: Chrome 122 repeats a <thead>/<tfoot> on every page, not a CSS table's. */
+  .mm-split-frame {
+    display: table;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+  }
+
+  .mm-split-frame > tbody {
+    display: table-row-group;
+  }
+
+  .mm-split-frame > * > tr {
+    display: table-row;
+  }
+
+  .mm-split-frame > .mm-split-edge.is-top {
+    display: table-header-group;
+  }
+
+  .mm-split-frame > .mm-split-edge.is-bottom {
+    display: table-footer-group;
+  }
+
+  .mm-split-cap {
+    display: table-cell;
+    height: 6px;
+    padding: 0;
+    border: 1px solid var(--mm-line);
+  }
+
+  .mm-split-edge.is-top .mm-split-cap {
+    border-bottom: 0;
+    border-radius: 6px 6px 0 0;
+  }
+
+  .mm-split-edge.is-bottom .mm-split-cap {
+    border-top: 0;
+    border-radius: 0 0 6px 6px;
+  }
+
+  .mm-split-body {
+    display: table-cell;
+    padding: 0;
+    border-inline: 1px solid var(--mm-line);
+    vertical-align: top;
+  }
+
+  /* The edges stand in for the box's border and 5 px of its padding: the text sits where it
+     does on screen, and the line between two boxes runs down to the bottom edge. */
+  .mm-split-grid {
+    margin-top: -5px;
+  }
+
+  .mm-split .mm-pair-box {
+    padding-bottom: 7px;
+  }
+
+  .mm-pair.mm-split .mm-split-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .mm-notes.is-stacked .mm-split-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mm-box.mm-split .mm-split-grid {
+    display: flex;
+    flex-direction: column;
+    padding: 12px 12px 7px;
+  }
+
+  /* A point, an info line or a file name is never cut across two pages. */
+  .mm-split :is(.mm-terms > li, .mm-attachments > li, .mm-info-row) {
+    break-inside: avoid;
+  }
+
   .mm-section-title,
   .mm-widget-box .ceres-table-heading {
     break-after: avoid-page;
@@ -2459,6 +2571,15 @@
 @media print {
   .mm-items[data-mm-totals-split] {
     margin-top: calc(-1 * 1px);
+
+    /* The Total row stays with the last item (user, 2026-11-02: it printed alone at the top of
+       a page, open above): where the two do not fit, the item moves on with it. */
+    break-before: avoid;
+  }
+
+  /* Its own rule above, lying over the last item's closing rule where they meet. */
+  .mm-items[data-mm-totals-split] > :first-child > tr:first-child > td {
+    border-top: 1px solid var(--mm-table-outline);
   }
 
   /* One solid ground under the totals, so no hairline seams show between their empty cells. */

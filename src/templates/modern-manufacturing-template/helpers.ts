@@ -3355,7 +3355,6 @@ export const repeatedBandCap = (pdfOptions: UnknownRecord): number => {
 
 export const mapPrint = (state: UnknownRecord) => {
   const pdfOptions = asRecord(state.pdfOptions);
-  const invoice = asRecord(state.invoice);
   const rawScale =
     positiveNumber(pdfOptions.textScale) ?? positiveNumber(pdfOptions.scale);
   // A percentage (110) or a ratio (1.1); kept readable either way.
@@ -3363,15 +3362,12 @@ export const mapPrint = (state: UnknownRecord) => {
     rawScale !== undefined && rawScale > 2 ? rawScale / 100 : rawScale;
   const textScale = Math.min(2, Math.max(0.3, ratio ?? 1));
   /*
-   * "Stretch invoice & quotation tables to fill the page": in print the business's setting
-   * (Settings > Experimental, stretchInvoiceTable) alone decides; the document's own toggle
-   * (pdfOptions.fullHeightTable) is ignored (user rule, 2026-10-31). Every document type,
-   * one-page documents only (stretchItemsTable). The preview always fills an A4 sheet
-   * (stretchItemsToSheet), except a Pageless document's.
+   * The table runs to the foot of every page it prints on, always (user, 2026-11-02: "remove
+   * the stretch dependency on toggles, set to default"): neither the business's setting
+   * (stretchInvoiceTable) nor the document's own (fullHeightTable) changes it. Not on a Pageless
+   * document (stretchItemsTable). The preview fills an A4 sheet (stretchItemsToSheet).
    */
-  const stretchTable =
-    asRecord(ownerConfiguration(invoice).experimental).stretchInvoiceTable ===
-    true;
+  const stretchTable = true;
   return {
     textScale: compactDecimal(textScale),
     printWidth: printWidth(pdfOptions),
@@ -3986,7 +3982,16 @@ export const prepareBrowserPrint = (
   withReadableStylesheet(() =>
     withPrintRules(width, () => {
       doc.style.width = `${width}px`;
-      withPrintMedia(() => layout?.());
+      withPrintMedia(() => {
+        // eslint-disable-next-line @typescript-eslint/no-use-before-define
+        preparingBrowserPrint = true;
+        try {
+          layout?.();
+        } finally {
+          // eslint-disable-next-line @typescript-eslint/no-use-before-define
+          preparingBrowserPrint = false;
+        }
+      });
     })
   );
   doc.style.width = docWidth;
@@ -4023,128 +4028,311 @@ export const resetItemsTableStretch = (root: ParentNode = document): void => {
 };
 
 /*
- * A paginated print of a longer document: the page holding the table's end ends where a forced
- * break after the table would start; when the next block starts on a later page, the last row
- * takes the space between, and goes back should the table then reach past its page.
+ * Pages, simulated (user, 2026-11-02: "stretch is not working, too much space remains"): the
+ * table runs down to the foot of every page it is on. Where a line item moves whole to the
+ * next page (it does not fit under the one before it), the item before it takes the room left;
+ * on the page where the table ends, its last item takes what the rest of that page leaves (the
+ * Total row then closes the table at the page's foot, or the document ends there).
+ *
+ * The page's height is known only when the page prints (Refrens' PDF service lays the page out
+ * in a window shorter than the paper; its bottom margin differs per document), so the document
+ * is cut here into the units a page break moves whole (a section, a line item with its detail
+ * and image rows) or cuts (text), laid on pages of every height a page can have, and each
+ * filled row's height is written as a formula of 100vh, one print media rule per range of page
+ * heights giving the same breaks. As the E-commerce and Professional templates do.
  */
-const stretchToTablePageEnd = (
+export interface PageUnit {
+  top: number;
+  bottom: number;
+  // Moves to the next page whole (break-inside: avoid) rather than breaking where the page ends.
+  solid: boolean;
+  // A line item: the index of its last row (data-mm-fill), the item headings repeated above it
+  // on a page it starts.
+  fill?: number;
+  head?: number;
+}
+
+export interface PageFrame {
+  // The page frame's header and footer, repeated on every page (letterhead and footer bands).
+  head: number;
+  foot: number;
+}
+
+// A length on page `n`: c + k × the page's height.
+export interface PageLength {
+  c: number;
+  k: number;
+}
+
+const lengthAt = (length: PageLength, page: number): number =>
+  length.c + length.k * page;
+
+/*
+ * The room under each item that ends a page, as a length: on the page an item ends, what is
+ * left under the last unit on that page. Nothing once an item (or the table's start) has been
+ * cut by a page break: where Chrome cuts it is not known, so neither are the pages after.
+ */
+export const fillPages = (
+  units: PageUnit[],
+  page: number,
+  frame: PageFrame
+): Map<number, PageLength> => {
+  const fills = new Map<number, PageLength>();
+  let shift: PageLength = { c: 0, k: 0 };
+  let at = 0;
+  let unsure = false;
+  // Per page: its last item (if it ends there), the last unit's bottom, cut at the foot.
+  const pages = new Map<
+    number,
+    { item?: number; bottom: PageLength; cut: boolean }
+  >();
+  const end = (n: number): PageLength => ({ c: -frame.foot, k: n + 1 });
+  const start = (n: number, unit: PageUnit): PageLength =>
+    n === 0 ? { c: 0, k: 0 } : { c: frame.head + (unit.head || 0), k: n };
+  units.forEach((unit) => {
+    const top = (): PageLength => ({ c: unit.top + shift.c, k: shift.k });
+    const bottom = (): PageLength => ({ c: unit.bottom + shift.c, k: shift.k });
+    for (
+      let guard = 0;
+      guard < 400 && lengthAt(bottom(), page) > lengthAt(end(at), page) + 0.5;
+      guard += 1
+    ) {
+      const first =
+        lengthAt(top(), page) <= lengthAt(start(at, unit), page) + 1;
+      if (unit.solid && !first) {
+        at += 1;
+        const was = top();
+        const next = start(at, unit);
+        shift = { c: shift.c + next.c - was.c, k: shift.k + next.k - was.k };
+      } else {
+        if (unit.fill !== undefined || unit.head !== undefined) unsure = true;
+        pages.set(at, { ...pages.get(at), bottom: end(at), cut: true });
+        const cut = end(at);
+        at += 1;
+        const next = { c: frame.head + (unit.head || 0), k: at };
+        shift = { c: shift.c + next.c - cut.c, k: shift.k + next.k - cut.k };
+      }
+    }
+    const placed = pages.get(at);
+    pages.set(at, {
+      item: unit.fill !== undefined && !unsure ? unit.fill : placed?.item,
+      bottom: bottom(),
+      cut: false,
+    });
+  });
+  pages.forEach((placed, n) => {
+    if (placed.item === undefined || placed.cut) return;
+    const room = {
+      c: end(n).c - placed.bottom.c,
+      k: end(n).k - placed.bottom.k,
+    };
+    if (lengthAt(room, page) > 0) fills.set(placed.item, room);
+  });
+  return fills;
+};
+
+// Every page area a page can have, in CSS px (A5 landscape with wide margins to A3).
+const PAGE_HEIGHTS: [number, number] = [280, 1700];
+const FILL_ATTR = "data-mm-fill";
+const MEASURING_ATTR = "data-mm-measuring";
+const FILL_STYLE_ID = "mm-fill-rules";
+
+/* The document cut into page units, in layout px from the first page's top. */
+const pageUnits = (
   doc: HTMLElement,
-  row: HTMLElement,
   scale: number
-): void => {
-  const section = row.closest<HTMLElement>(".mm-items-section");
-  let next = section?.nextElementSibling as HTMLElement | null;
-  while (next && !next.getClientRects().length) {
-    next = next.nextElementSibling as HTMLElement | null;
+): { units: PageUnit[]; rows: HTMLElement[]; frame: PageFrame } | undefined => {
+  const body = doc.querySelector<HTMLElement>(".mm-page-body");
+  if (!body) return undefined;
+  const origin = document.documentElement.getBoundingClientRect().top;
+  const box = (el: Element) => {
+    const rect = el.getBoundingClientRect();
+    return {
+      top: (rect.top - origin) / scale,
+      bottom: (rect.bottom - origin) / scale,
+    };
+  };
+  const height = (el: Element | null | undefined) => {
+    if (!el) return 0;
+    const at = box(el);
+    return at.bottom - at.top;
+  };
+  const repeated = (el: Element | null, display: string) =>
+    el && getComputedStyle(el).display === display ? height(el) : 0;
+  const pageFrame = doc.querySelector(".mm-page-frame");
+  const frame = {
+    head: repeated(
+      pageFrame?.querySelector(":scope > .mm-page-frame-header") ?? null,
+      "table-header-group"
+    ),
+    foot: repeated(
+      pageFrame?.querySelector(":scope > .mm-page-frame-footer") ?? null,
+      "table-footer-group"
+    ),
+  };
+  const units: PageUnit[] = [];
+  const rows: HTMLElement[] = [];
+  Array.from(body.children).forEach((child) => {
+    const style = getComputedStyle(child);
+    if (style.display === "none" || height(child) <= 0) return;
+    const table = child.matches(".mm-items-section")
+      ? child.querySelector<HTMLTableElement>(
+          "table.mm-items:not([data-mm-totals-split])"
+        )
+      : null;
+    if (!table) {
+      units.push({
+        ...box(child),
+        solid: style.breakInside.startsWith("avoid"),
+      });
+      return;
+    }
+    const head = repeated(table.tHead, "table-header-group");
+    let item: HTMLElement[] = [];
+    const close = () => {
+      if (!item.length) return;
+      const last = item[item.length - 1];
+      const first = rows.length === 0;
+      rows.push(last);
+      // The first item carries the headings above it (its top is theirs): on a new page it
+      // starts at the page's top, the headings with it, not under a repeated copy.
+      units.push({
+        top: first && table.tHead ? box(table.tHead).top : box(item[0]).top,
+        bottom: box(last).bottom,
+        solid: true,
+        fill: rows.length - 1,
+        head: first ? 0 : head,
+      });
+      item = [];
+    };
+    Array.from(table.tBodies).forEach((tbody) =>
+      Array.from(tbody.rows).forEach((row) => {
+        if (getComputedStyle(row).display === "none" || height(row) <= 0)
+          return;
+        const joins =
+          row.matches(
+            ".mm-detail-row, .mm-image-row:not(.mm-group-image-row)"
+          ) ||
+          (item.length > 0 &&
+            item[item.length - 1].matches(
+              ".mm-group-row, .mm-group-image-row"
+            ));
+        if (!joins) close();
+        item.push(row);
+      })
+    );
+    close();
+    // Whatever follows the rows in the section (the Total row, kept with the last item) goes
+    // with the last item.
+    const last = units[units.length - 1];
+    if (last && last.fill !== undefined) {
+      last.bottom = Math.max(last.bottom, box(child).bottom);
+    }
+  });
+  return { units, rows, frame };
+};
+
+const fillStyle = (): HTMLStyleElement => {
+  let style = document.getElementById(FILL_STYLE_ID) as HTMLStyleElement | null;
+  if (!style) {
+    style = document.createElement("style");
+    style.id = FILL_STYLE_ID;
+    document.head.appendChild(style);
   }
-  if (!section || !next) return;
-  const marker = document.createElement("div");
-  marker.style.cssText = "break-before: page; height: 0; margin: 0;";
-  section.after(marker);
-  const pageEnd = pageTop(marker);
-  marker.remove();
-  const tableEnd = section.getBoundingClientRect().bottom + window.scrollY;
-  if (pageTop(next) < pageEnd - PAGE_EDGE_SLACK) return;
-  const spare = pageEnd - tableEnd - PAGE_EDGE_SLACK;
-  if (spare <= 0) return;
-  row.style.height = `${
-    (row.getBoundingClientRect().height + spare) / scale
-  }px`;
-  row.setAttribute("data-mm-stretched", "");
-  if (section.getBoundingClientRect().bottom + window.scrollY > pageEnd) {
-    row.style.removeProperty("height");
-    row.removeAttribute("data-mm-stretched");
+  return style;
+};
+
+export const resetItemsTableFill = (root: ParentNode = document): void => {
+  root.querySelectorAll(`.mm-doc [${FILL_ATTR}]`).forEach((row) => {
+    row.removeAttribute(FILL_ATTR);
+  });
+  const style = document.getElementById(FILL_STYLE_ID);
+  if (style) style.textContent = "";
+};
+
+// Kept back from each page's foot, so a filled row never reaches the next page (rounding).
+// 100vh / zoom is the page exactly under the print zoom too (Chrome 122, measured 2026-11-02).
+const FILL_SLACK = 16;
+
+/* The print rules filling the table to each page's foot (see fillPages). */
+export const itemsFillRules = (
+  units: PageUnit[],
+  heights: number[],
+  frame: PageFrame,
+  zoom: number
+): string => {
+  const slack = FILL_SLACK;
+  const ranges: {
+    from: number;
+    to: number;
+    key: string;
+    fills: Map<number, PageLength>;
+  }[] = [];
+  for (let vh = PAGE_HEIGHTS[0]; vh <= PAGE_HEIGHTS[1]; vh += 1) {
+    const fills = fillPages(units, vh / zoom, frame);
+    fills.forEach((room, row) => {
+      if (lengthAt(room, vh / zoom) <= slack) fills.delete(row);
+    });
+    const key = JSON.stringify([...fills.entries()]);
+    const open = ranges[ranges.length - 1];
+    if (open && open.key === key && open.to === vh - 1) open.to = vh;
+    else ranges.push({ from: vh, to: vh, key, fills });
   }
+  const page = `100vh / ${compactDecimal(zoom)}`;
+  return ranges
+    .filter((range) => range.fills.size > 0)
+    .map((range) => {
+      const rules = [...range.fills.entries()]
+        .map(([row, room]) => {
+          const selector = `.mm-doc:not([${MEASURING_ATTR}]) .mm-items tr[${FILL_ATTR}="${row}"]`;
+          const fill = `${compactDecimal(room.k)} * ${page} + ${compactDecimal(
+            room.c - slack
+          )}px`;
+          return `${selector} { height: calc(${Math.ceil(
+            heights[row]
+          )}px + ${fill}); } ${selector} > td { vertical-align: top; }`;
+        })
+        .join(" ");
+      return `@media print and (min-height: ${range.from}px) and (max-height: ${
+        range.to + 0.99
+      }px) { ${rules} }`;
+    })
+    .join("\n");
 };
 
 export const stretchItemsTable = (root: ParentNode = document): void => {
+  // A browser's print, once Chrome has cut the layout into pages: what prepareBrowserPrint
+  // measured stays (measured in the cut layout, the units are where the breaks put them).
+  // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  if (browserPrinting && !preparingBrowserPrint) return;
   resetItemsTableStretch(root);
+  resetItemsTableFill(root);
+  const css: string[] = [];
   root
-    .querySelectorAll<HTMLElement>(`.mm-doc[${STRETCH_ATTR}]`)
+    .querySelectorAll<HTMLElement>(
+      `.mm-doc[${STRETCH_ATTR}]:not([data-mm-pageless])`
+    )
     .forEach((doc) => {
-      const row = doc.querySelector<HTMLElement>(STRETCH_ROW);
-      if (!row || !row.getClientRects().length) return;
-      const docEnd = doc.getBoundingClientRect().bottom + window.scrollY;
-      // Forced breaks after the document: where its last page ends, and a page's height.
-      const breaks = [0, 1].map(() => {
-        const marker = document.createElement("div");
-        marker.style.cssText = "break-before: page; height: 0; margin: 0;";
-        doc.appendChild(marker);
-        return marker;
-      });
-      const [pageEnd, nextPageEnd] = breaks.map(pageTop);
-      breaks.forEach((marker) => marker.remove());
-      const pageHeight = nextPageEnd - pageEnd;
-
-      const scale = layoutScale(doc, doc.firstElementChild as Element);
-      const { height } = row.getBoundingClientRect();
-      if (pageHeight < MIN_PAGE_HEIGHT) {
-        /*
-         * Laid out for print but not paginated: Refrens' PDF service, which lays the page out
-         * in a window shorter than the paper and only then prints, so the window's height is
-         * not the page's (the table never stretched in the PDF, user report). The page's
-         * height is left to CSS, 100vh being the page area when the PDF is made (its bottom
-         * margin differs per document, 34 mm on A00052-E): the row takes what the rest of
-         * the document leaves of it, never less than its own height. Under the print zoom
-         * Chrome scales the margins as well, hence 100vh / zoom; 16 px kept back, more above
-         * a zoom of 1. As the Ecommerce template does.
-         */
+      doc.setAttribute(MEASURING_ATTR, "");
+      try {
         const zoom =
           parseFloat(getComputedStyle(document.documentElement).zoom || "1") ||
           1;
-        const page = `100vh / ${compactDecimal(zoom)}`;
-        const docRect = doc.getBoundingClientRect();
-        const docHeight = docRect.height / scale;
-        const rowHeight = Math.ceil(height / scale);
-        const slack = Math.ceil(16 + (zoom > 1 ? 160 * (1 - 1 / zoom) : 0));
-        // One page: everything ends at the page's foot.
-        const onePage = `calc(${page} - ${Math.ceil(
-          docHeight - rowHeight + slack
-        )}px)`;
-        /*
-         * Longer: the table ends on the first page (tableEnd under the page's height) and
-         * the block after it needs more than the page has left (left = page - tableEnd), so
-         * it goes to the next page whatever happens: the row takes what is left. As a CSS
-         * step: (need - left) × 1000 clamped to [0, left] is all of `left` when the block
-         * does not fit and 0 when it does (or when the table ends further down).
-         */
-        let restOfPage = "0px";
-        const section = row.closest<HTMLElement>(".mm-items-section");
-        let next = section?.nextElementSibling as HTMLElement | null;
-        while (next && !next.getClientRects().length) {
-          next = next.nextElementSibling as HTMLElement | null;
-        }
-        if (section && next) {
-          const tableEnd = Math.ceil(
-            (section.getBoundingClientRect().bottom - docRect.top) / scale +
-              slack
-          );
-          const need = Math.ceil(
-            (next.getBoundingClientRect().bottom - docRect.top) / scale + slack
-          );
-          restOfPage = `clamp(0px, calc((${need}px - ${page}) * 1000), calc(${page} - ${tableEnd}px))`;
-        }
-        row.style.height = `max(${rowHeight}px, ${onePage}, calc(${rowHeight}px + ${restOfPage}))`;
-        row.setAttribute("data-mm-stretched", "");
-        return;
-      }
-      // Paginated (the browser's print). Longer than a page: the table fills the rest of its
-      // page when the block after it has moved to the next page (see above).
-      if (pageEnd > pageHeight + PAGE_EDGE_SLACK) {
-        stretchToTablePageEnd(doc, row, scale);
-        return;
-      }
-      const limit = pageEnd;
-      const spare = limit - docEnd - PAGE_EDGE_SLACK;
-      if (spare <= 0) return;
-
-      row.style.height = `${(height + spare) / scale}px`;
-      row.setAttribute("data-mm-stretched", "");
-      // Should the page still overflow, the table prints as it was.
-      if (doc.getBoundingClientRect().bottom + window.scrollY > limit) {
-        resetItemsTableStretch(doc);
+        const scale = layoutScale(doc, doc.firstElementChild as Element);
+        const cut = pageUnits(doc, scale);
+        if (!cut || !cut.rows.length) return;
+        const heights = cut.rows.map(
+          (row) => row.getBoundingClientRect().height / scale
+        );
+        cut.rows.forEach((row, index) =>
+          row.setAttribute(FILL_ATTR, String(index))
+        );
+        css.push(itemsFillRules(cut.units, heights, cut.frame, zoom));
+      } finally {
+        doc.removeAttribute(MEASURING_ATTR);
       }
     });
+  fillStyle().textContent = css.join("\n");
 };
 
 /*
@@ -4159,6 +4347,9 @@ export const stretchItemsTable = (root: ParentNode = document): void => {
  */
 const A4_RATIO = 297 / 210;
 let browserPrinting = false;
+// While prepareBrowserPrint lays the document out for a browser's print (before Chrome cuts it
+// into pages): the only time a browser's print measures the stretch.
+let preparingBrowserPrint = false;
 
 export const stretchItemsToSheet = (root: ParentNode = document): void => {
   const printing =

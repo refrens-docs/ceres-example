@@ -110,7 +110,10 @@ async function measure(page: Page) {
 
     // K2: pairs — boxes that share a row
     const pairs = q("[data-pair]").map((row) => {
-      const boxes = Array.from(row.children) as HTMLElement[];
+      // A box that may split across pages holds its boxes in a frame (print draws its edges).
+      const boxes = Array.from(
+        row.querySelector(".mm-split-grid")?.children ?? row.children
+      ) as HTMLElement[];
       const rowW = row.getBoundingClientRect().width;
       return {
         name: row.getAttribute("data-pair"),

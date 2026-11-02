@@ -281,7 +281,7 @@ describe("Modern Manufacturing template — render", () => {
     );
   });
 
-  it("marks the page for the stretched table when the business allows it, whatever the document says", () => {
+  it("marks the page for the stretched table always, whatever either toggle says", () => {
     const business = (fullHeightTable: unknown) =>
       render((invoice) => {
         invoice.template = { pdfOptions: { fullHeightTable } };
@@ -295,12 +295,13 @@ describe("Modern Manufacturing template — render", () => {
         'data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" dir="ltr"'
       )
     );
-    expect(render()).not.toContain("data-mm-stretch-table");
+    // Always on (user, 2026-11-02): without the business's setting as well.
+    expect(render()).toContain("data-mm-stretch-table");
     expect(
       render((invoice) => {
-        invoice.template = { pdfOptions: { fullHeightTable: true } };
+        invoice.template = { pdfOptions: { fullHeightTable: false } };
       })
-    ).not.toContain("data-mm-stretch-table");
+    ).toContain("data-mm-stretch-table");
     // A Pageless document is marked, so the preview leaves its table as it is.
     expect(render()).not.toContain("data-mm-pageless");
     expect(
@@ -628,10 +629,10 @@ describe("Modern Manufacturing template — render", () => {
       invoice.template = { languageScript: "Arabic", enableRtl: true };
     });
     expect(html).toContain(
-      '<div class="mm-doc" data-testid="invoice-root" data-mm-paper-height="1122" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-width: 714px; --mm-browser-print-width: 714px; --mm-photo-cap: 596px; --mm-band-cap: 241px; --mm-script-font: \'Noto Sans Arabic\';'
+      '<div class="mm-doc" data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-width: 714px; --mm-browser-print-width: 714px; --mm-photo-cap: 596px; --mm-band-cap: 241px; --mm-script-font: \'Noto Sans Arabic\';'
     );
     expect(render()).toContain(
-      'data-testid="invoice-root" data-mm-paper-height="1122" dir="ltr" style='
+      'data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" dir="ltr" style='
     );
     const styles = fs.readFileSync(
       path.join(TEMPLATE_DIR, "styles.css"),
@@ -2867,7 +2868,7 @@ describe("Modern Manufacturing template — view model", () => {
       invoice.template = { notesPosition: "Row" };
     });
     expect(rowHtml).toMatch(
-      /data-section="attachments"[\s\S]*mm-notes-row" data-testid="section" data-section="notes"/
+      /data-section="attachments"[\s\S]*mm-notes-row mm-split" data-testid="section" data-section="notes"/
     );
 
     // A row whose boxes are all off is not rendered.
@@ -3298,7 +3299,7 @@ describe("Modern Manufacturing template — view model", () => {
       paperHeight: 1122,
       photoCap: 596,
       bandCap: 241,
-      stretchTable: false,
+      stretchTable: true,
       pageless: false,
     });
     // The printable width caps the page in print (Refrens' PDF service lays the page out in
@@ -3333,8 +3334,8 @@ describe("Modern Manufacturing template — view model", () => {
     expect(repeatedBandCap({ format: "a5", landscape: true })).toBe(100);
     expect(repeatedBandCap({ zoomSize: "1.2" })).toBe(198);
     expect(repeatedBandCap({ zoomSize: "0.8" })).toBe(241);
-    // "Stretch invoice & quotation tables to fill the page": the business's setting
-    // (experimental.stretchInvoiceTable) alone; the document's own toggle is ignored.
+    // The table fills the page always (user, 2026-11-02): neither the business's setting
+    // (experimental.stretchInvoiceTable) nor the document's own toggle changes it.
     const allowed = {
       invoice: {
         owner: {
@@ -3347,7 +3348,7 @@ describe("Modern Manufacturing template — view model", () => {
         mapPrint({ ...allowed, pdfOptions: { fullHeightTable } }).stretchTable
       ).toBe(true);
       expect(mapPrint({ pdfOptions: { fullHeightTable } }).stretchTable).toBe(
-        false
+        true
       );
     });
     expect(mapPrint(allowed).stretchTable).toBe(true);

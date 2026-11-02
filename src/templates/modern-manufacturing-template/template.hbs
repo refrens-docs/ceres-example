@@ -418,7 +418,8 @@
           </section>
 
           {{#if view.termsRow.show}}
-            <div class="mm-pair mm-notes" data-pair="terms-notes">
+            <div class="mm-pair mm-notes mm-split" data-pair="terms-notes">
+              <table class="mm-split-frame" role="presentation"><thead class="mm-split-edge is-top" aria-hidden="true"><tr><td class="mm-split-cap"></td></tr></thead><tbody><tr><td class="mm-split-body"><div class="mm-split-grid">
               {{#if view.termsRow.terms.length}}
                 <section class="mm-pair-box mm-note-block mm-terms-box" data-testid="section" data-section="terms">
                   {{#each view.termsRow.terms}}
@@ -439,11 +440,13 @@
                   </div>
                 </section>
               {{/if}}
+              </div></td></tr></tbody><tfoot class="mm-split-edge is-bottom" aria-hidden="true"><tr><td class="mm-split-cap"></td></tr></tfoot></table>
             </div>
           {{/if}}
 
           {{#if view.infoRow.show}}
-            <div class="mm-pair mm-notes" data-pair="additional-attachments">
+            <div class="mm-pair mm-notes mm-split" data-pair="additional-attachments">
+              <table class="mm-split-frame" role="presentation"><thead class="mm-split-edge is-top" aria-hidden="true"><tr><td class="mm-split-cap"></td></tr></thead><tbody><tr><td class="mm-split-body"><div class="mm-split-grid">
               {{#if view.infoRow.additional}}
                 <section class="mm-pair-box mm-note-block" data-testid="section" data-section="additional">
                   <div class="mm-note-group">
@@ -469,15 +472,18 @@
                   </div>
                 </section>
               {{/if}}
+              </div></td></tr></tbody><tfoot class="mm-split-edge is-bottom" aria-hidden="true"><tr><td class="mm-split-cap"></td></tr></tfoot></table>
             </div>
           {{/if}}
 
           {{#if view.notesRow}}
-            <section class="mm-box mm-note-block mm-notes-row" data-testid="section" data-section="notes">
+            <section class="mm-box mm-note-block mm-notes-row mm-split" data-testid="section" data-section="notes">
+              <table class="mm-split-frame" role="presentation"><thead class="mm-split-edge is-top" aria-hidden="true"><tr><td class="mm-split-cap"></td></tr></thead><tbody><tr><td class="mm-split-body"><div class="mm-split-grid">
               <div class="mm-note-group">
                 {{#if view.notesRow.title}}<h3 class="mm-section-title" data-role="title">{{view.notesRow.title}}</h3>{{/if}}
                 <div class="mm-note-body">{{> MarkdownViewer (prepareMarkdownViewerData view.notesRow.body) }}</div>
               </div>
+              </div></td></tr></tbody><tfoot class="mm-split-edge is-bottom" aria-hidden="true"><tr><td class="mm-split-cap"></td></tr></tfoot></table>
             </section>
           {{/if}}
 
