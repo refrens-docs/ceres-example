@@ -1402,21 +1402,10 @@
     break-inside: avoid;
   }
 
-  /* A row cut by a page break (an item taller than what is left of the page) closes with a
-     rule at the page's foot, and every page's piece of the table with it (user rule,
-     2026-10-20): the cells' own borders end open there. The items wrapper draws that rule on
-     each page's piece (box-decoration-break: clone); on the last piece the table's own
-     bottom rule lies over it. */
-  .ec-items-scroll {
-    border-bottom: var(--ec-rule-width) solid var(--ec-ink);
-    /* stylelint-disable-next-line property-no-vendor-prefix -- Chrome before 130 needs it */
-    -webkit-box-decoration-break: clone;
-    box-decoration-break: clone;
-  }
-
-  .ec-items-scroll > :last-child {
-    margin-bottom: calc(-1 * var(--ec-rule-width));
-  }
+  /* A page's piece of the item table closes with the table's own repeated footer
+     (.ec-page-close, below). The items wrapper drew a second rule at the foot of each of its
+     page pieces, which run on below an item moved to the next page: an extra line under the
+     table (user, 2 Nov 2026). */
 
   /* Stretch on, a document longer than a page: it prints exactly as with the stretch off
      (user, 2026-10-31). The column rules the items wrapper used to draw under the page's last
