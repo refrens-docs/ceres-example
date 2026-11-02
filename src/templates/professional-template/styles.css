@@ -1824,6 +1824,14 @@
   }
 }
 
+/* A Long PDF is not laid out in print media: its stamped letterhead and footer hide there too
+   (user, 2026-11-02: printed twice). */
+body[class~="isDibella"]
+  .pt-doc.is-pageless
+  .no-dibella:is(.invoice-letterhead, .invoice-letterhead-footer) {
+  display: none;
+}
+
 /*
  * The filler row (helpers.ts stretchItemTable), on screen and in print alike: in print when the
  * business stretches its tables (.is-stretch), on screen whenever the preview's A4 sheet has

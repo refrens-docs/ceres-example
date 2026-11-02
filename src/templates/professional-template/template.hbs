@@ -19,7 +19,7 @@
   {{#if view.script.fontUrl}}<link rel="stylesheet" href="{{view.script.fontUrl}}" />{{/if}}
   {{#unless view.letterheadEveryPage}}
     {{!-- Letterhead on the first page only (pdfOptions.letterHeadOnFirstPage): in the flow. --}}
-    <div class="invoice-letterhead pt-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}" data-ceres-page-header data-ceres-page-policy="first">
+    <div class="{{#if view.serviceLetterhead}}no-dibella {{/if}}invoice-letterhead pt-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}" data-ceres-page-header data-ceres-page-policy="first">
       {{#if @root.invoice.letterHead}}
         <img src="{{@root.invoice.letterHead}}" alt="Letterhead" data-ceres-height="letterhead" />
       {{else}}

@@ -4436,9 +4436,10 @@ export const buildProfessionalView = (root: unknown) => {
     // Refrens' PDF service draws that every-page footer itself, unless "Hide footer" turns
     // its footer off (only the "electronically generated" line is meant): the template then
     // draws the letterhead footer in the PDF too.
+    // A Long PDF (Pageless) too: the service stamps them at the top and foot of its one page,
+    // and the template's own copies printed them twice (user, 2026-11-02).
     serviceFooter:
       !visibility.footerOnLastPage &&
-      !options.pageless &&
       ![
         asRecord(state.pdfOptions).hideFooter,
         asRecord(state.template).hideFooter,
@@ -4447,6 +4448,8 @@ export const buildProfessionalView = (root: unknown) => {
     // The letterhead repeats at the top of every printed page unless the document asks for
     // it on the first page only (pdfOptions.letterHeadOnFirstPage).
     letterheadEveryPage: !visibility.letterHeadOnFirstPage && !options.pageless,
+    // The service stamps the letterhead itself unless it is for the first page only.
+    serviceLetterhead: !visibility.letterHeadOnFirstPage,
     pageless: options.pageless,
     print,
     script: mapScript(state),
