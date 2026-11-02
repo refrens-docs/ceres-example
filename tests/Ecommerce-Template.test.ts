@@ -1462,8 +1462,10 @@ describe("Ecommerce template — files and CSS", () => {
     const print = css.slice(css.indexOf("@media print"));
     expect(print).toMatch(/\.ec-items > tbody > tr \{\s*break-inside: avoid;/);
     expect(print).toMatch(
-      /\.ec-items \.ec-item-row\.has-name-row,\s*\.ec-items \.ec-detail-row,\s*\.ec-items \.ec-image-row \{\s*break-before: avoid;/
+      /\.ec-items \.ec-item-row\.has-name-row,\s*\.ec-items \.ec-detail-row \{\s*break-before: avoid;/
     );
+    // An item's original images may start the next page on their own (user, 2 Nov 2026).
+    expect(css).toMatch(/\.ec-items \.ec-image-row \{\s*break-before: auto;/);
     expect(print).toMatch(
       /\.ec-summary \.ceres-table tr \{\s*break-inside: avoid;/
     );

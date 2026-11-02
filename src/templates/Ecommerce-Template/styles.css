@@ -1358,9 +1358,15 @@
   }
 
   .ec-items .ec-item-row.has-name-row,
-  .ec-items .ec-detail-row,
-  .ec-items .ec-image-row {
+  .ec-items .ec-detail-row {
     break-before: avoid;
+  }
+
+  /* An item's original images may start the next page on their own: kept with the item, a
+     row of large images pushed the whole item table off page 1 and left 40% of it blank
+     (user, 2 Nov 2026: real PDFs CN UG006, invoice A000144). The images stay whole. */
+  .ec-items .ec-image-row {
+    break-before: auto;
   }
 
   /* A table in a description or note breaks between its rows, its headings repeated at the top
