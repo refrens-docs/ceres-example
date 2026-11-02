@@ -3723,6 +3723,14 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
   const browserPrintWidth = Math.floor(
     ((paperMm / 25.4) * 96 - (2 * 96) / 2.54) / rendererZoom - 4
   );
+  // The same with the paper turned (the print dialog's other orientation): the stretch is
+  // measured for both (prepareBrowserPrint).
+  const turnedMm = landscape
+    ? PAPER_WIDTH_MM[format] ?? PAPER_WIDTH_MM.a4
+    : PAPER_HEIGHT_MM[format] ?? PAPER_HEIGHT_MM.a4;
+  const browserTurnedWidth = Math.floor(
+    ((turnedMm / 25.4) * 96 - (2 * 96) / 2.54) / rendererZoom - 4
+  );
   const rawScale =
     positiveNumber(pdfOptions.textScale) ?? positiveNumber(pdfOptions.scale);
   // A percentage (110) or a ratio (1.1); kept readable either way.
@@ -3737,6 +3745,7 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
     textScale: compactDecimal(textScale),
     printWidth,
     browserPrintWidth,
+    browserTurnedWidth,
     // The renderer's print zoom: the print table's 10 px text floor is 10 px on paper.
     printZoom: compactDecimal(rendererZoom),
     compactTable,
@@ -5085,6 +5094,8 @@ const STRETCH_STYLE_ID = "ec-stretch-pages";
  * line under the table).
  */
 const BREAK_SLACK = 4;
+// The browser's own side margins against the 1 cm the browser print is laid out for, either way.
+const BROWSER_WIDTH_SLACK = 24;
 const PAGE_HEIGHTS: [number, number] = [280, 1700];
 
 export const stretchPrintRules = (
@@ -5092,8 +5103,16 @@ export const stretchPrintRules = (
   anchor: number,
   layout: Omit<FlowLayout, "page">,
   zoom: number,
-  slack: number
+  slack: number,
+  // Only on a page this wide (CSS px, min and max): laid out at another width, the units'
+  // heights are not these.
+  pageWidth?: [number, number]
 ): string => {
+  const widthQuery = pageWidth
+    ? ` and (min-width: ${Math.floor(
+        pageWidth[0]
+      )}px) and (max-width: ${Math.ceil(pageWidth[1])}px)`
+    : "";
   const rules: string[] = [];
   const z = compactDecimal(zoom);
   const length = (room: FlowLength, keep = slack) => {
@@ -5134,7 +5153,7 @@ export const stretchPrintRules = (
       rules.push(
         `@media print and (min-height: ${open.from}px) and (max-height: ${
           open.to + 0.999
-        }px) { ${open.css} }`
+        }px)${widthQuery} { ${open.css} }`
       );
     open = undefined;
   };
@@ -5151,7 +5170,12 @@ export const stretchPrintRules = (
   return rules.join("\n");
 };
 
-export const stretchItemTable = (root: ParentNode = document): void => {
+export const stretchItemTable = (
+  root: ParentNode = document,
+  // Another page width's rules added to the ones in place (prepareBrowserPrint), the items
+  // already marked: given up if they do not mark the same rows.
+  turned = false
+): void => {
   const doc = root.querySelector<HTMLElement>(".ec-doc");
   const filler = doc?.querySelector<HTMLElement>(".ec-items .ec-filler");
   const frame = doc?.querySelector<HTMLElement>(".ec-page-frame");
@@ -5172,15 +5196,21 @@ export const stretchItemTable = (root: ParentNode = document): void => {
     parseFloat(getComputedStyle(document.documentElement).zoom || "1") || 1;
   // Measured with the filler at 0 and no item lengthened, whatever an earlier run's rules give.
   filler.style.setProperty("--ec-filler-height", "0px");
-  doc
-    .querySelectorAll("[data-ec-break]")
-    .forEach((row) => row.removeAttribute("data-ec-break"));
+  if (!turned)
+    doc
+      .querySelectorAll("[data-ec-break]")
+      .forEach((row) => row.removeAttribute("data-ec-break"));
   const flow = measureFlow(doc, filler, true);
   filler.style.removeProperty("--ec-filler-height");
-  flow?.units.forEach((unit, at) => {
-    if (unit.group !== undefined && unit.row instanceof HTMLTableRowElement)
-      unit.row.setAttribute("data-ec-break", String(at));
-  });
+  const marked = (flow?.units || []).every(
+    (unit, at) =>
+      unit.group === undefined ||
+      !(unit.row instanceof HTMLTableRowElement) ||
+      (turned
+        ? unit.row.getAttribute("data-ec-break") === String(at)
+        : (unit.row.setAttribute("data-ec-break", String(at)), true))
+  );
+  if (turned && !marked) return;
   const slack =
     STRETCH_SLACK + (zoom > 1 ? STRETCH_ZOOM_SLACK * (1 - 1 / zoom) : 0);
   let style = document.getElementById(STRETCH_STYLE_ID);
@@ -5189,9 +5219,32 @@ export const stretchItemTable = (root: ParentNode = document): void => {
     style.id = STRETCH_STYLE_ID;
     document.head.appendChild(style);
   }
-  style.textContent = flow
-    ? stretchPrintRules(flow.units, flow.anchor, flow.layout, zoom, slack)
+  /*
+   * A browser's own print fills the paper's width (styles.css), portrait or landscape as its
+   * dialog turns it: the stretch was measured at this width only (prepareBrowserPrint), so it
+   * applies on a page of this width, give or take the browser's margins.
+   */
+  const laidWidth = doc.classList.contains("is-browser-print")
+    ? parseFloat(doc.style.width) || doc.getBoundingClientRect().width
+    : 0;
+  const pageWidth: [number, number] | undefined =
+    laidWidth > 0
+      ? [
+          (laidWidth - BROWSER_WIDTH_SLACK) * zoom,
+          (laidWidth + BROWSER_WIDTH_SLACK) * zoom,
+        ]
+      : undefined;
+  const rules = flow
+    ? stretchPrintRules(
+        flow.units,
+        flow.anchor,
+        flow.layout,
+        zoom,
+        slack,
+        pageWidth
+      )
     : "";
+  style.textContent = turned ? `${style.textContent}\n${rules}` : rules;
 };
 
 /*
@@ -5635,22 +5688,37 @@ export const prepareBrowserPrint = (
   }
   startBrowserPage(doc);
   const style = getComputedStyle(doc);
-  // The document's printable width, or the browser's own (1 cm margins) where narrower.
-  const width = Math.min(
-    parseFloat(style.getPropertyValue("--ec-print-width")) ||
-      doc.getBoundingClientRect().width,
-    parseFloat(style.getPropertyValue("--ec-browser-print-width")) || Infinity
+  // The browser's own printable width (1 cm margins): the page fills it (styles.css
+  // .is-browser-print), whatever the document's own margins.
+  const browserWidth = parseFloat(
+    style.getPropertyValue("--ec-browser-print-width")
   );
+  const width = doc.classList.contains("is-browser-print")
+    ? browserWidth || doc.getBoundingClientRect().width
+    : Math.min(
+        parseFloat(style.getPropertyValue("--ec-print-width")) ||
+          doc.getBoundingClientRect().width,
+        browserWidth || Infinity
+      );
   // The phone and tablet layouts are screen only.
   const fitted = Array.from(
     root.querySelectorAll<HTMLElement>(".ec-items:is(.is-cards, .is-grid)")
   ).map((table) => [table, table.className] as const);
   fitted.forEach(([table]) => table.classList.remove("is-cards", "is-grid"));
   const docWidth = doc.style.width;
+  const turned = doc.classList.contains("is-browser-print")
+    ? parseFloat(style.getPropertyValue("--ec-browser-turned-width"))
+    : 0;
   withReadableStylesheet(() =>
     withPrintRules(width, () => {
       doc.style.width = `${width}px`;
       withPrintMedia(() => (layout ? layout() : fitPrintTable(root, true)));
+      // The print dialog may turn the paper: the stretch for that width too, the table fitted
+      // as it is (the fits stay those of the document's own orientation).
+      if (turned > 0 && Math.abs(turned - width) > BROWSER_WIDTH_SLACK) {
+        doc.style.width = `${turned}px`;
+        withPrintMedia(() => stretchItemTable(root, true));
+      }
     })
   );
   doc.style.width = docWidth;

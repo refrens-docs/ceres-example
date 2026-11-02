@@ -1628,6 +1628,12 @@
     display: table-row;
   }
 
+  /* The paper's whole width, whichever way the print dialog turns it (user, 2 Nov 2026: a
+     portrait document printed in landscape kept its portrait width, the sides left empty). */
+  .ec-doc.is-browser-print {
+    max-width: none;
+  }
+
   .ec-doc.is-browser-print .ec-page-frame > * > tr.ec-page-margin > td {
     height: 1cm;
     padding: 0;

@@ -1344,6 +1344,15 @@ describe("Ecommerce template — files and CSS", () => {
       /--ec-(print|table)-fit|--ec-table-zoom|font-size: max\(/
     );
     expect(print).not.toMatch(/\bzoom:/);
+    // A browser print fills the paper either way the dialog turns it: the turned width too.
+    const a4 = mapPrint({ pdfOptions: { format: "a4" } });
+    expect(a4.browserPrintWidth).toBe(714);
+    expect(a4.browserTurnedWidth).toBe(1042);
+    expect(
+      mapPrint({ pdfOptions: { format: "a4", landscape: true } })
+        .browserTurnedWidth
+    ).toBe(714);
+    expect(print).toMatch(/\.ec-doc\.is-browser-print \{\s*max-width: none;/);
     // A wide A5 table only tightens its padding.
     const a5 = mapPrint({ pdfOptions: { format: "a5" } }, 900);
     expect(a5.compactTable).toBe(true);
