@@ -3693,7 +3693,6 @@ const PAPER_HEIGHT_MM: Record<string, number> = {
 
 export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
   const pdfOptions = asRecord(state.pdfOptions);
-  const invoice = asRecord(state.invoice);
   const format = text(pdfOptions.format).toLowerCase();
   const landscape = optionalFlag(pdfOptions.landscape) === true;
   const paperMm = landscape
@@ -3742,16 +3741,12 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
     printZoom: compactDecimal(rendererZoom),
     compactTable,
     /*
-     * "Stretch invoice & quotation tables to fill the page" (Settings > Experimental,
-     * owner.configuration.experimental.stretchInvoiceTable): the item table runs down to the
-     * foot of the page it ends on, one page or more (helpers.ts stretchItemTable). The toggle alone
-     * decides; the document's own pdfOptions.fullHeightTable is ignored, on, off or missing
-     * (user, 2026-10-31). Every document type, not only invoices and quotations as
-     * refrens.com does (user request). The preview stretches whatever the toggles say.
+     * The item table always runs down to the foot of every page it prints on (helpers.ts
+     * stretchItemTable), whatever the business's "Stretch invoice & quotation tables" toggle
+     * and the document's fullHeightTable say (user, 2 Nov 2026: "bina toggle ke enable kardo").
+     * Every document type. Not a Long PDF (one page as tall as its content).
      */
-    stretchTable:
-      asRecord(asRecord(asRecord(invoice.owner).configuration).experimental)
-        .stretchInvoiceTable === true,
+    stretchTable: true,
   };
 };
 
@@ -4663,6 +4658,10 @@ export interface FlowUnit {
   tail?: boolean;
   // Images sized by the page's height (45vh, styles.css), as measured and uncapped.
   images?: FlowImage[];
+  // The table it belongs to (its rows), and its last row: lengthened when a page break
+  // follows it inside the table (flowBreakFills).
+  group?: number;
+  row?: Element;
 }
 
 // The 490 px cap of styles.css .ec-large-image in print.
@@ -4723,18 +4722,29 @@ const flowAt = (length: FlowLength, page: number): number =>
  * left on its page by it and every unit after it on that page. Undefined: no room (the table
  * ends right at a page's foot) — the stretch then does nothing.
  */
-export const flowFiller = (
+interface FlowPlaced {
+  page: number;
+  bottom: FlowLength;
+  end: FlowLength;
+}
+
+/*
+ * Every unit laid on pages: the page it ends on, its bottom and its page's end. `split`: the
+ * first unit up to `anchor` a page break cuts (where Chrome cuts it is not known, so neither
+ * is anything after it); Infinity when none is.
+ */
+const placeUnits = (
   units: FlowUnit[],
   anchor: number,
   layout: FlowLayout
-): FlowLength | undefined => {
+): { placed: FlowPlaced[]; split: number } => {
   const { page, head, foot, start } = layout;
   let index = 0;
   let shift: FlowLength = { c: start, k: 0 };
-  const placed: { page: number; bottom: FlowLength; end: FlowLength }[] = [];
+  const placed: FlowPlaced[] = [];
   // A unit cut by a page break up to the table's end: where Chrome cuts it (an image or a
   // line that will not split moves down whole) is not known, so neither is the room left.
-  let unsure = false;
+  let split = Infinity;
   const pageStart = (at: number, unit: FlowUnit): FlowLength =>
     at === 0
       ? { c: start, k: 0 }
@@ -4764,7 +4774,7 @@ export const flowFiller = (
         // Breaks where the page ends and runs on at the next page's start (a table's heading
         // repeated), a line or two later for text (the line across the break, orphans).
         const cut = regionEnd(index, unit);
-        if (at <= anchor) unsure = true;
+        if (at <= anchor) split = Math.min(split, at);
         index += 1;
         const next = {
           c: head + (unit.head || 0) + (unit.fluid ? 2 * (unit.line || 0) : 0),
@@ -4773,14 +4783,30 @@ export const flowFiller = (
         shift = { c: shift.c + next.c - cut.c, k: shift.k + next.k - cut.k };
       }
     }
-    placed.push({ page: index, bottom: bottom(), end: regionEnd(index, unit) });
+    placed.push({
+      page: index,
+      bottom: bottom(),
+      end: regionEnd(index, unit),
+    });
   });
+  return { placed, split };
+};
+
+const roomBelow = (from: FlowPlaced): FlowLength => ({
+  c: from.end.c - from.bottom.c,
+  k: from.end.k - from.bottom.k,
+});
+
+export const flowFiller = (
+  units: FlowUnit[],
+  anchor: number,
+  layout: FlowLayout
+): FlowLength | undefined => {
+  const { page } = layout;
+  const { placed, split } = placeUnits(units, anchor, layout);
   const at = placed[anchor];
-  if (!at || unsure) return undefined;
-  const room = (from: { bottom: FlowLength; end: FlowLength }): FlowLength => ({
-    c: from.end.c - from.bottom.c,
-    k: from.end.k - from.bottom.k,
-  });
+  if (!at || split <= anchor) return undefined;
+  const room = roomBelow;
   const after = placed
     .slice(anchor + 1)
     .filter((unit) => unit.page === at.page);
@@ -4790,6 +4816,35 @@ export const flowFiller = (
       flowAt(next, page) < flowAt(least, page) ? next : least
     );
   return flowAt(best, page) > 0 ? best : undefined;
+};
+
+/*
+ * Every page the item table runs over, not only its last (user, 2 Nov 2026: real PDF of
+ * quotation IQ-R2/A5/880, page 1 and 2 left a third empty under the table): where a line item
+ * moves whole to the next page, the item before it is lengthened by the room it left, so the
+ * column rules run down to that page's foot. Up to the first item a page break cuts (after
+ * it, where things fall is not known).
+ */
+export const flowBreakFills = (
+  units: FlowUnit[],
+  anchor: number,
+  layout: FlowLayout
+): { unit: number; room: FlowLength }[] => {
+  const group = units[anchor]?.group;
+  if (group === undefined) return [];
+  const { placed, split } = placeUnits(units, anchor, layout);
+  const fills: { unit: number; room: FlowLength }[] = [];
+  for (let at = 0; at < anchor && at + 1 < split; at += 1) {
+    const room = roomBelow(placed[at]);
+    if (
+      units[at].group === group &&
+      units[at + 1].group === group &&
+      placed[at + 1].page > placed[at].page &&
+      flowAt(room, layout.page) > 0
+    )
+      fills.push({ unit: at, room });
+  }
+  return fills;
 };
 
 /* The units of an element's content, in order, positions relative to `origin` (layout px / scale). */
@@ -4830,6 +4885,8 @@ const flowUnits = (
     if (joinPrevious && last) {
       last.bottom = Math.max(last.bottom, unit.bottom);
       last.fluid = Boolean(last.fluid && unit.fluid);
+      if (unit.row) last.row = unit.row;
+      if (unit.group !== undefined) last.group = unit.group;
       if (images.length) last.images = [...(last.images || []), ...images];
       return;
     }
@@ -4837,7 +4894,10 @@ const flowUnits = (
   };
   const lineOf = (style: CSSStyleDeclaration) =>
     parseFloat(style.lineHeight) || (parseFloat(style.fontSize) || 13) * 1.4;
+  let tables = 0;
   const table = (el: HTMLTableElement, joinPrevious: boolean) => {
+    tables += 1;
+    const group = tables;
     const head =
       el.tHead && getComputedStyle(el.tHead).display === "table-header-group"
         ? box(el.tHead).bottom - box(el.tHead).top
@@ -4870,6 +4930,8 @@ const flowUnits = (
             head,
             close,
             first,
+            group,
+            row,
           },
           join || (first && joinPrevious),
           [row]
@@ -5027,38 +5089,55 @@ export const stretchPrintRules = (
   slack: number
 ): string => {
   const rules: string[] = [];
-  let open: { from: number; to: number; room: FlowLength } | undefined;
-  const close = () => {
-    if (!open) return;
-    const { from, to, room } = open;
-    const k = compactDecimal(room.k);
+  const z = compactDecimal(zoom);
+  const length = (room: FlowLength) => {
     const c = Math.floor(room.c - slack);
-    rules.push(
-      `@media print and (min-height: ${from}px) and (max-height: ${
-        to + 0.999
-      }px) { .ec-doc.is-stretch .ec-items .ec-filler { --ec-filler-height: max(0px, calc(${k} * 100vh / ${compactDecimal(
-        zoom
-      )} ${c < 0 ? "-" : "+"} ${Math.abs(c)}px)); } }`
-    );
+    return `max(0px, calc(${compactDecimal(room.k)} * 100vh / ${z} ${
+      c < 0 ? "-" : "+"
+    } ${Math.abs(c)}px))`;
+  };
+  // What one page height gives: the filler's room and each lengthened item's, as CSS.
+  const body = (page: number, height: number): string => {
+    const sized = flowAtHeight(units, height);
+    const pageLayout = { ...layout, page };
+    const parts: string[] = [];
+    const room = flowFiller(sized, anchor, pageLayout);
+    if (room && flowAt(room, page) > slack)
+      parts.push(
+        `.ec-doc.is-stretch .ec-items .ec-filler { --ec-filler-height: ${length(
+          room
+        )}; }`
+      );
+    flowBreakFills(sized, anchor, pageLayout)
+      .filter((fill) => flowAt(fill.room, page) > slack)
+      .forEach((fill) =>
+        parts.push(
+          `.ec-doc.is-stretch .ec-items tr[data-ec-break="${
+            fill.unit
+          }"] > td::after { content: ""; display: block; height: ${length(
+            fill.room
+          )}; }`
+        )
+      );
+    return parts.join(" ");
+  };
+  let open: { from: number; to: number; css: string } | undefined;
+  const close = () => {
+    if (open?.css)
+      rules.push(
+        `@media print and (min-height: ${open.from}px) and (max-height: ${
+          open.to + 0.999
+        }px) { ${open.css} }`
+      );
     open = undefined;
   };
   for (let height = PAGE_HEIGHTS[0]; height <= PAGE_HEIGHTS[1]; height += 1) {
-    const page = height / zoom;
-    const room = flowFiller(flowAtHeight(units, height), anchor, {
-      ...layout,
-      page,
-    });
-    const same =
-      open &&
-      room &&
-      open.room.k === room.k &&
-      Math.abs(open.room.c - room.c) < 0.5;
-    if (same && open) {
+    const css = body(height / zoom, height);
+    if (open && open.css === css) {
       open.to = height;
     } else {
       close();
-      if (room && flowAt(room, page) > slack)
-        open = { from: height, to: height, room };
+      open = { from: height, to: height, css };
     }
   }
   close();
@@ -5084,10 +5163,17 @@ export const stretchItemTable = (root: ParentNode = document): void => {
   if (!doc.classList.contains("is-stretch")) return;
   const zoom =
     parseFloat(getComputedStyle(document.documentElement).zoom || "1") || 1;
-  // Measured with the filler at 0 whatever an earlier run's rules give it.
+  // Measured with the filler at 0 and no item lengthened, whatever an earlier run's rules give.
   filler.style.setProperty("--ec-filler-height", "0px");
+  doc
+    .querySelectorAll("[data-ec-break]")
+    .forEach((row) => row.removeAttribute("data-ec-break"));
   const flow = measureFlow(doc, filler, true);
   filler.style.removeProperty("--ec-filler-height");
+  flow?.units.forEach((unit, at) => {
+    if (unit.group !== undefined && unit.row instanceof HTMLTableRowElement)
+      unit.row.setAttribute("data-ec-break", String(at));
+  });
   const slack =
     STRETCH_SLACK + (zoom > 1 ? STRETCH_ZOOM_SLACK * (1 - 1 / zoom) : 0);
   let style = document.getElementById(STRETCH_STYLE_ID);

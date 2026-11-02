@@ -12,6 +12,8 @@ import {
   respellTaxWords,
   flowAtHeight,
   flowFiller,
+  flowBreakFills,
+  stretchPrintRules,
   stretchItemTable,
 } from "../src/templates/Ecommerce-Template/helpers";
 
@@ -182,6 +184,36 @@ describe("Ecommerce template — after the render, in the browser", () => {
       // A taller page: everything on page 1, the room after the totals.
       const tall = flowFiller(units, 2, { ...layout, page: 2500 });
       expect(tall && tall.c + tall.k * 2500).toBe(499);
+    });
+
+    it("lengthens the last item on every page the item table runs over", () => {
+      const layout = { head: 13, foot: 1, start: 0 };
+      const units = [
+        { top: 0, bottom: 500 }, // header and parties
+        { top: 500, bottom: 700, group: 1, first: true }, // item 1
+        { top: 700, bottom: 1100, group: 1 }, // item 2: moves whole to page 2
+        { top: 1100, bottom: 1800, group: 1 }, // item 3: moves whole to page 3
+        { top: 1800, bottom: 1900, group: 1 }, // item 4, the last
+        { top: 1900, bottom: 2000 }, // the totals
+      ];
+      const fills = flowBreakFills(units, 4, { ...layout, page: 1000 });
+      const at = (fill: { room: { c: number; k: number } }) =>
+        fill.room.c + fill.room.k * 1000;
+      // Page 1 ends at 999: item 1 ends at 700, 299 px left. Page 2: item 2 at 1013..1413,
+      // the page ends at 1999: 586 px left (item 3, 700 px tall, does not fit).
+      expect(fills.map((fill) => fill.unit)).toEqual([1, 2]);
+      expect(fills.map(at)).toEqual([299, 586]);
+      // Not across a unit a page break cuts: after it nothing is known.
+      const cut = units.map((unit, i) =>
+        i === 2 ? { ...unit, fluid: true } : unit
+      );
+      expect(
+        flowBreakFills(cut, 4, { ...layout, page: 1000 }).map((f) => f.unit)
+      ).toEqual([]);
+      // The rules lengthen those rows in print, per page height.
+      const printed = stretchPrintRules(units, 4, layout, 1, 16);
+      expect(printed).toContain('tr[data-ec-break="1"] > td::after');
+      expect(printed).toContain('tr[data-ec-break="2"] > td::after');
     });
 
     it("sizes page-height images for the page they print on, not the window", () => {

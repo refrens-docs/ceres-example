@@ -1939,7 +1939,7 @@ describe("Ecommerce template — as refrens.com prints real documents", () => {
     expect(number(true)).not.toContain("#");
   });
 
-  it("stretches the printed item table whenever the business asks, whatever the document says", () => {
+  it("always stretches the printed item table, whatever the business and document toggles say", () => {
     const stretch = (enabled: boolean, full: boolean) =>
       render((invoice, root) => {
         invoice.owner = {
@@ -1966,9 +1966,9 @@ describe("Ecommerce template — as refrens.com prints real documents", () => {
         };
       })
     ).toContain("ec-doc is-stretch");
-    // Business off: never in print, the document's toggle on or not.
-    expect(stretch(false, true)).not.toContain("is-stretch");
-    expect(stretch(false, false)).not.toContain("is-stretch");
+    // Business toggle off: stretched all the same (user, 2 Nov 2026: no toggle needed).
+    expect(stretch(false, true)).toContain("ec-doc is-stretch");
+    expect(stretch(false, false)).toContain("ec-doc is-stretch");
     // The filler row is there either way, for the preview's own stretch.
     expect(stretch(false, false)).toContain('class="ec-filler"');
     expect(stretch(true, false)).toContain('class="ec-filler"');
