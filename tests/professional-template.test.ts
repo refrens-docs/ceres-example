@@ -1047,7 +1047,7 @@ describe("Professional Template — files and CSS", () => {
     ].forEach((sample) => expect(code).not.toContain(sample));
   });
 
-  it("prints every text at 13 px but the title (24), the grand total (20), the coloured headings (16 above the items, 14 under them), the summary titles (12) and item codes (11), as on screen", () => {
+  it("prints every text at 13 px but the title (24), the grand total (18), the coloured headings (16 above the items, 14 under them), the summary titles (12) and item codes (11), as on screen", () => {
     const steps = (block: string) =>
       Object.fromEntries(
         Array.from(block.matchAll(/--pt-font-size-(\w+): (\d+)px;/g), (m) => [
@@ -1067,7 +1067,7 @@ describe("Professional Template — files and CSS", () => {
       xl: 24,
       heading: 16,
       subheading: 14,
-      grand: 20,
+      grand: 18,
       name: 14,
       caption: 12,
     });

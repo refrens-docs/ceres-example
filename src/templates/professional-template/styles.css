@@ -80,7 +80,7 @@
   --pt-font-size-xl: 24px;
   --pt-font-size-heading: 16px; /* the coloured section headings (user request, 2026-10-24) */
   --pt-font-size-subheading: 14px; /* the coloured headings under the item table (user, 2026-10-24) */
-  --pt-font-size-grand: 20px; /* the grand total, label and figure (user request, 2026-10-24) */
+  --pt-font-size-grand: 18px; /* the grand total, label and figure (user request, 2026-11-02; was 20) */
   --pt-font-size-name: 14px; /* the business names in Billed / Shipped (user request, 2026-10-24) */
   --pt-font-size-caption: 12px; /* the summary tables' titles (user request, 2026-10-24) */
 
@@ -135,7 +135,8 @@
 }
 
 /* The page margin rows of a browser's own print only (print rules below). */
-.pt-page-frame > * > tr.pt-page-margin {
+.pt-page-frame > * > tr.pt-page-margin,
+.pt-page-frame > * > tr.pt-stamp-room {
   display: none;
 }
 
@@ -904,9 +905,12 @@
   justify-content: space-between;
 }
 
+/* The rows take what the QR leaves and wrap there: a long account name sized them to its
+   one-line width and pushed the QR under them, leaving the card's right side empty (user,
+   2026-11-02). Only an unbreakable figure wider than that room moves the QR down. */
 .pt-bank-main {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   flex-direction: column;
   gap: 8px;
   min-width: min-content;
@@ -1755,6 +1759,24 @@
 
   .pt-page-frame > * > tr.pt-page-margin > td {
     height: calc(1cm / var(--pt-page-zoom, 1));
+  }
+
+  /* The PDF service's stamped letterhead and footer, taller than their margins on a page wider
+     than A4 portrait: that much more room (helpers.ts placeStampRoom, user 2026-11-02). */
+  .pt-page-frame > * > tr.pt-stamp-room {
+    display: none;
+  }
+
+  body[class~="isDibella"] .pt-doc:not(.is-pageless) .pt-page-frame > * > tr.pt-stamp-room {
+    display: table-row;
+  }
+
+  .pt-page-frame > * > tr.pt-stamp-room.is-top > td {
+    height: var(--pt-stamp-top, 0);
+  }
+
+  .pt-page-frame > * > tr.pt-stamp-room.is-bottom > td {
+    height: var(--pt-stamp-bottom, 0);
   }
 
   body:not([class~="isDibella"]) .pt-doc:not(.is-pageless) .pt-page-frame-header:has(.pt-letterhead:not(.is-empty)) > tr.pt-page-margin,

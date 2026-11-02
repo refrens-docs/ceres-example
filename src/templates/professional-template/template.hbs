@@ -14,7 +14,7 @@
   update targets.
 --}}
 {{#with (ptView @root) as |view|}}
-<div class="pt-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-pt-currency="{{@root.invoice.currency}}" data-testid="invoice-root" data-pt-side-margin="{{view.print.sideMargin}}" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--pt-text-scale: {{view.print.textScale}}; --pt-print-scale: {{view.print.printScale}}; --pt-print-width: {{view.print.printWidth}}px; --pt-browser-print-width: {{view.print.browserPrintWidth}}px; --pt-print-base: {{view.print.printBase}}px; --pt-browser-print-height: {{view.print.browserPrintHeight}}px; --pt-browser-print-base: {{view.print.browserPrintBase}}px;{{#if view.theme}} --pt-theme: {{view.theme.accent}}; --pt-on-accent: {{view.theme.onAccent}};{{/if}}{{#if view.script.font}} --pt-script-font: {{{view.script.font}}};{{/if}}">
+<div class="pt-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-pt-currency="{{@root.invoice.currency}}" data-testid="invoice-root" data-pt-side-margin="{{view.print.sideMargin}}" data-pt-paper-width="{{view.print.paperWidth}}" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--pt-text-scale: {{view.print.textScale}}; --pt-print-scale: {{view.print.printScale}}; --pt-print-width: {{view.print.printWidth}}px; --pt-browser-print-width: {{view.print.browserPrintWidth}}px; --pt-print-base: {{view.print.printBase}}px; --pt-browser-print-height: {{view.print.browserPrintHeight}}px; --pt-browser-print-base: {{view.print.browserPrintBase}}px;{{#if view.theme}} --pt-theme: {{view.theme.accent}}; --pt-on-accent: {{view.theme.onAccent}};{{/if}}{{#if view.script.font}} --pt-script-font: {{{view.script.font}}};{{/if}}">
   {{!-- The Language/Script setting's font, for the glyphs Inter lacks. --}}
   {{#if view.script.fontUrl}}<link rel="stylesheet" href="{{view.script.fontUrl}}" />{{/if}}
   {{#unless view.letterheadEveryPage}}
@@ -42,6 +42,8 @@
     <thead class="pt-page-frame-header">
       <tr class="pt-page-margin" aria-hidden="true"><td></td></tr>
       {{#if view.letterheadEveryPage}}
+        {{!-- What the PDF service's stamped letterhead takes past its margin (helpers.ts placeStampRoom). --}}
+        <tr class="pt-stamp-room is-top" aria-hidden="true"><td></td></tr>
         <tr>
           <td>
             <div class="no-dibella invoice-letterhead pt-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}" data-ceres-page-header data-ceres-page-policy="all">
@@ -64,6 +66,7 @@
             </div>
           </td>
         </tr>
+        <tr class="pt-stamp-room is-bottom" aria-hidden="true"><td></td></tr>
       {{/if}}
       <tr class="pt-page-margin" aria-hidden="true"><td></td></tr>
     </tfoot>

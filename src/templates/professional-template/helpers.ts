@@ -4003,6 +4003,8 @@ export const mapPrint = (state: UnknownRecord) => {
     browserPrintBase: compactDecimal(printableBase(sideMarginCm)),
     // The side margins in cm, for a browser's own print (applyBrowserPrintPage).
     sideMargin: compactDecimal(sideMarginCm),
+    // The paper's width in px, as printed (placeStampRoom).
+    paperWidth: compactDecimal((paperMm / 25.4) * 96),
     /*
      * "Stretch invoice & quotation tables to fill the page" (Settings > Experimental,
      * owner.configuration.experimental.stretchInvoiceTable): on a one-page printout the item
@@ -5921,6 +5923,57 @@ const runPrintLayoutIfPrinting = (): void => {
   printLayoutHook();
 };
 
+/*
+ * The PDF service stamps an every-page letterhead and footer image across the paper's whole
+ * width, but keeps the page's margins for them as on an A4 portrait page: on a wider page
+ * (landscape, A3) the stamp came out taller than its margin and covered the content (real PDF
+ * 2026-11-02, A4 landscape, a 1000 × 200 letterhead: 169 pt stamped in a 135 pt margin). The
+ * difference is kept free at the top and foot of every page (a row in the page frame's header
+ * and footer, styles.css .pt-stamp-room); none on A4 portrait or narrower.
+ */
+const A4_PORTRAIT_WIDTH = (210 / 25.4) * 96;
+
+export const placeStampRoom = (root: ParentNode = document): void => {
+  const doc = root.querySelector<HTMLElement>(".pt-doc");
+  if (!doc) return;
+  const paper = parseFloat(doc.dataset.ptPaperWidth || "");
+  const zoom =
+    printZoom() *
+    (parseFloat(getComputedStyle(doc).getPropertyValue("--pt-print-scale")) ||
+      1);
+  const room = (img: HTMLImageElement | null): number => {
+    if (!img || !(paper > A4_PORTRAIT_WIDTH)) return 0;
+    if (!img.complete || !img.naturalWidth) {
+      img.addEventListener(
+        "load",
+        () => {
+          placeStampRoom(root);
+          runPrintLayoutIfPrinting();
+        },
+        { once: true }
+      );
+      return 0;
+    }
+    return (
+      ((paper - A4_PORTRAIT_WIDTH) * img.naturalHeight) /
+      img.naturalWidth /
+      zoom
+    );
+  };
+  const top = room(
+    doc.querySelector<HTMLImageElement>(
+      ".pt-page-frame-header .pt-letterhead.no-dibella:not(.is-empty) img"
+    )
+  );
+  const bottom = room(
+    doc.querySelector<HTMLImageElement>(
+      ".pt-page-frame-footer .pt-footer-spacer.no-dibella:not(.is-empty) img"
+    )
+  );
+  doc.style.setProperty("--pt-stamp-top", `${compactDecimal(top)}px`);
+  doc.style.setProperty("--pt-stamp-bottom", `${compactDecimal(bottom)}px`);
+};
+
 const requestedScriptFonts = new Set<string>();
 export const loadScriptFonts = (): void => {
   if (typeof document === "undefined" || !document.fonts?.load) return;
@@ -6069,6 +6122,7 @@ export const registerProfessionalPrint = (): void => {
   // The totals are lined up last, on the fitted and split item columns. The preview's filler
   // goes first (stretchOnScreen), so the print steps measure the document as it prints.
   const printLayout = () => {
+    placeStampRoom();
     if (!keepPreparedStretch()) {
       document.querySelector(".pt-doc")?.classList.remove("is-filled");
     }
