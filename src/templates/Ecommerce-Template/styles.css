@@ -1731,3 +1731,10 @@
     display: none;
   }
 }
+
+/* A Long PDF is not laid out in print media: the PDF service still stamps an every-page
+   letterhead and footer at the top and foot of its one page, so the template's copies hide
+   there too (user, 2026-11-02: printed twice). */
+body[class~="isDibella"] .no-dibella:is(.invoice-letterhead, .invoice-letterhead-footer) {
+  display: none;
+}
