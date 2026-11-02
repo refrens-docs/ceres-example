@@ -5415,11 +5415,23 @@ export const splitTotals = (root: ParentNode = document): void => {
         ? `inset(-2px -2px -2px ${over}px)`
         : `inset(-2px ${over}px -2px -2px)`;
     }
+    /*
+     * A table that fits the frame is pinned in shares of its width, so it still fills the
+     * frame on a wider page than the one laid out (a browser print turned to landscape: the
+     * pixel widths held the portrait width, user, 2 Nov 2026); one cut at the edge keeps
+     * its pixels.
+     */
+    const fits = over <= 0;
+    const whole = table.getBoundingClientRect().width || 1;
+    if (fits) split.style.width = "100%";
     const cols = document.createElement("colgroup");
     Array.from(row.cells).forEach((cell) => {
       const col = document.createElement("col");
       col.span = cell.colSpan || 1;
-      col.style.width = `${cell.getBoundingClientRect().width / scale}px`;
+      const { width } = cell.getBoundingClientRect();
+      col.style.width = fits
+        ? `${(width / whole) * 100}%`
+        : `${width / scale}px`;
       cols.appendChild(col);
     });
     split.appendChild(cols);
@@ -5723,19 +5735,16 @@ export const prepareBrowserPrint = (
   ).map((table) => [table, table.className] as const);
   fitted.forEach(([table]) => table.classList.remove("is-cards", "is-grid"));
   const docWidth = doc.style.width;
-  const turned = doc.classList.contains("is-browser-print")
-    ? parseFloat(style.getPropertyValue("--ec-browser-turned-width"))
-    : 0;
   withReadableStylesheet(() =>
     withPrintRules(width, () => {
       doc.style.width = `${width}px`;
       withPrintMedia(() => (layout ? layout() : fitPrintTable(root, true)));
-      // The print dialog may turn the paper: the stretch for that width too, the table fitted
-      // as it is (the fits stay those of the document's own orientation).
-      if (turned > 0 && Math.abs(turned - width) > BROWSER_WIDTH_SLACK) {
-        doc.style.width = `${turned}px`;
-        withPrintMedia(() => stretchItemTable(root, true));
-      }
+      /*
+       * The print dialog may turn the paper: no stretch then (its rules hold for the document's
+       * own orientation only). Measured for the turned width too, it overshot in Chrome's own
+       * print and the rest of an item ran onto a page of its own, a heading over an empty
+       * frame (user, 2 Nov 2026, invoice MMS/IN/26-27/082 in landscape).
+       */
     })
   );
   doc.style.width = docWidth;
