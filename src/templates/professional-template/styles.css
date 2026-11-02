@@ -2043,6 +2043,19 @@ body[class~="isDibella"]
   .pt-items[data-pt-totals-split] {
     background-color: var(--pt-paper);
   }
+
+  /* The rule where the items meet the totals is the totals' own top edge: laid a pixel over the
+     items, their tinted row painted out the items' bottom rule, and only the corner pieces at
+     either end were left (user, 2026-11-02: "border cut"). */
+  .pt-items[data-pt-totals-split] > tbody:first-of-type > tr:first-child > td {
+    box-shadow: inset 0 1px 0 var(--pt-line);
+  }
+
+  .pt-items[data-pt-totals-split] > tbody:first-of-type > tr:first-child > td:not(:last-child) {
+    box-shadow:
+      inset 0 1px 0 var(--pt-line),
+      1px 0 0 var(--pt-zebra);
+  }
 }
 
 /* ------------------------------------------------------------ phones and tablets */
