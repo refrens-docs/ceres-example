@@ -126,6 +126,11 @@
   display: none;
 }
 
+/* The page margin rows of a browser's own print only (print rules below). */
+.mm-page-frame > * > tr.mm-page-margin {
+  display: none;
+}
+
 .mm-doc p,
 .mm-doc h1,
 .mm-doc h2,
@@ -1692,14 +1697,14 @@
 }
 
 /*
- * Running text reads looser than labels and figures (user request): terms, attachments, notes
- * and item descriptions take 22 px lines at 13 px (1.6923), and their points sit 4 px apart.
+ * Running text (terms, attachments, notes, item descriptions) takes the template's own line
+ * height, 20 px at 13 px (user, 2026-11-02: 22 px lines read too loose); points sit 4 px apart.
  */
 .mm-terms,
 .mm-attachments,
 .mm-note-body,
 .mm-item-desc {
-  line-height: 1.6923;
+  line-height: 1.5385;
 }
 
 .mm-terms > li + li,
@@ -2422,6 +2427,14 @@
     border-radius: 0 0 6px 6px;
   }
 
+  /* Two boxes side by side: the line between them runs through the edges too, from the top
+     border to the bottom one on every page (user, 2026-11-02: it stopped short of both). It
+     lies on the second box's own line, at the middle of the frame. */
+  .mm-pair.mm-split:not(.is-stacked):has(.mm-pair-box + .mm-pair-box) .mm-split-cap {
+    background: linear-gradient(var(--mm-line), var(--mm-line)) no-repeat
+      calc(50% + 0.5px) 0 / 1px 100%;
+  }
+
   .mm-split-body {
     display: table-cell;
     padding: 0;
@@ -2496,12 +2509,31 @@
     display: table-header-group;
   }
 
-  .mm-page-frame > .mm-page-frame-header > tr > td {
+  .mm-page-frame > .mm-page-frame-header > tr:not(.mm-page-margin) > td {
     padding-bottom: 16px;
   }
 
-  .mm-page-frame > * > tr {
+  .mm-page-frame > * > tr:not(.mm-page-margin) {
     display: table-row;
+  }
+
+  /*
+   * A browser's own print (Refrens' Print button, Ctrl+P): the page's top and bottom margins
+   * are 0 (helpers.ts startBrowserPage), which keeps Chrome from printing its date, title, URL
+   * and page-number stamps there (user, 2026-11-02). The frame's margin rows give every page its
+   * 1 cm back, and the footer fixed to each page's foot sits 1 cm up.
+   */
+  .mm-doc.is-browser-print .mm-page-frame > * > tr.mm-page-margin {
+    display: table-row;
+  }
+
+  .mm-doc.is-browser-print .mm-page-frame > * > tr.mm-page-margin > td {
+    height: 1cm;
+    padding: 0;
+  }
+
+  .mm-doc.is-browser-print .mm-letterhead-footer.mm-footer-fixed {
+    bottom: 1cm;
   }
 
   .mm-page-frame > * > tr > td {
@@ -2580,6 +2612,14 @@
   /* Its own rule above, lying over the last item's closing rule where they meet. */
   .mm-items[data-mm-totals-split] > :first-child > tr:first-child > td {
     border-top: 1px solid var(--mm-table-outline);
+  }
+
+  /* The items above it no longer end the table: their last row keeps square corners, the
+     Total row's are the table's rounded ones (user, 2026-11-02: a rounded corner showed between
+     the last item and the Total row). */
+  .mm-items:has(+ .mm-items[data-mm-totals-split]) > :last-child > tr:last-child > td {
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
   }
 
   /* One solid ground under the totals, so no hairline seams show between their empty cells. */

@@ -22,6 +22,7 @@ import {
   printMediaText,
   withPrintRules,
   prepareBrowserPrint,
+  endBrowserPrint,
   setModernManufacturingStylesheetText,
   withReadableStylesheet,
 } from "../src/templates/modern-manufacturing-template/helpers";
@@ -365,12 +366,24 @@ describe("Modern Manufacturing — the table fills every page it prints on", () 
       return Number(from) <= 1000 && Number(to) >= 1000;
     });
     expect(at1000).toContain(
-      'tr[data-mm-fill="1"] { height: calc(200px + 1 * 100vh / 1 + -916px); }'
+      'tr[data-mm-fill="1"] { height: calc(200px + 1 * 100vh / 1 + -904px); }'
     );
     expect(at1000).toContain(
       'tr[data-mm-fill="1"] > td { vertical-align: top; }'
     );
     expect(at1000).toContain(".mm-doc:not([data-mm-measuring])");
+    // An item at a page break runs to 4 px of the page's foot and, in a browser's print, leaves
+    // the closing rule to the items' own (cloned at the break); the last item keeps 16 px and
+    // its rule.
+    expect(at1000).toContain(
+      '.mm-doc.is-browser-print:not([data-mm-measuring]) .mm-items tr[data-mm-fill="1"] > td { border-bottom-color: transparent; }'
+    );
+    expect(at1000).toContain(
+      'tr[data-mm-fill="2"] { height: calc(400px + 1 * 100vh / 1 + -686px); }'
+    );
+    expect(at1000).not.toContain(
+      'tr[data-mm-fill="2"] > td { border-bottom-color'
+    );
     // Under a zoom the page holds fewer of the document's pixels.
     expect(
       itemsFillRules(units(), [360, 200, 400], { head: 0, foot: 0 }, 1.25)
@@ -886,6 +899,28 @@ describe("Modern Manufacturing — a browser's own print", () => {
     expect(document.querySelector(".mm-items")?.className).toBe(
       "mm-items has-thumbnails is-cards"
     );
+  });
+
+  it("prints no browser stamps: 0 top and bottom page margins while a browser prints", () => {
+    // Chrome prints its date, title, URL and page number unless both margins are 0 (user,
+    // 2026-11-02); the frame's margin rows give every page its 1 cm back.
+    document.head.innerHTML = "";
+    document.body.innerHTML = `<div class="mm-doc" data-mm-paper-size="297mm 210mm" style="--mm-print-width: 714px;"></div>`;
+    prepareBrowserPrint();
+    const doc = document.querySelector(".mm-doc") as HTMLElement;
+    expect(doc.classList.contains("is-browser-print")).toBe(true);
+    // On the document's own paper and orientation (here A4 landscape).
+    expect(document.getElementById("mm-browser-page")?.textContent).toBe(
+      "@page { size: 297mm 210mm; margin-top: 0; margin-bottom: 0; }"
+    );
+    endBrowserPrint();
+    expect(doc.classList.contains("is-browser-print")).toBe(false);
+    expect(document.getElementById("mm-browser-page")).toBeNull();
+
+    // A Pageless document keeps its page as it is (an @page breaks Lydia's Pageless PDF).
+    document.body.innerHTML = `<div class="mm-doc" data-mm-pageless></div>`;
+    prepareBrowserPrint();
+    expect(document.getElementById("mm-browser-page")).toBeNull();
   });
 });
 

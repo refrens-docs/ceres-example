@@ -33,6 +33,9 @@ import {
   customFieldText,
   mapPrint,
   printWidth,
+  printZoom,
+  paperSize,
+  sideMarginPx,
   paperHeight,
   mapDocumentScript,
   withDocumentScript,
@@ -227,7 +230,10 @@ describe("Modern Manufacturing template — render", () => {
       invoice.letterHead = "https://cdn.example/head.png";
       invoice.template = { pdfOptions: { letterHeadOnFirstPage: true } };
     });
-    expect(firstPage).not.toContain("mm-page-frame-header");
+    // The frame's header holds only the browser print's page margin row then.
+    expect(firstPage).toMatch(
+      /<thead class="mm-page-frame-header">\s*<tr class="mm-page-margin" aria-hidden="true"><td><\/td><\/tr>\s*<\/thead>/
+    );
     expect(firstPage.indexOf("head.png")).toBeLessThan(
       firstPage.indexOf("mm-page-frame")
     );
@@ -292,7 +298,7 @@ describe("Modern Manufacturing template — render", () => {
       });
     [true, false, undefined].forEach((toggle) =>
       expect(business(toggle)).toContain(
-        'data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" dir="ltr"'
+        'data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" dir="ltr"'
       )
     );
     // Always on (user, 2026-11-02): without the business's setting as well.
@@ -629,10 +635,10 @@ describe("Modern Manufacturing template — render", () => {
       invoice.template = { languageScript: "Arabic", enableRtl: true };
     });
     expect(html).toContain(
-      '<div class="mm-doc" data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-width: 714px; --mm-browser-print-width: 714px; --mm-photo-cap: 596px; --mm-band-cap: 241px; --mm-script-font: \'Noto Sans Arabic\';'
+      '<div class="mm-doc" data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-width: 759px; --mm-browser-print-width: 714px; --mm-photo-cap: 596px; --mm-band-cap: 241px; --mm-script-font: \'Noto Sans Arabic\';'
     );
     expect(render()).toContain(
-      'data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" dir="ltr" style='
+      'data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" dir="ltr" style='
     );
     const styles = fs.readFileSync(
       path.join(TEMPLATE_DIR, "styles.css"),
@@ -2464,7 +2470,9 @@ describe("Modern Manufacturing template — view model", () => {
       invoice.template = { pdfOptions: { footerOnLastPage: true } };
     });
     expect(lastOnly).not.toContain("mm-footer-fixed");
-    expect(lastOnly).not.toContain("mm-page-frame-footer");
+    expect(lastOnly).toMatch(
+      /<tfoot class="mm-page-frame-footer">\s*<tr class="mm-page-margin" aria-hidden="true"><td><\/td><\/tr>\s*<\/tfoot>/
+    );
     expect(render()).toMatch(
       /<tr class="mm-hsn-words">\s*<td colspan="7">Total Tax In Words: EIGHTEEN THOUSAND/
     );
@@ -3291,49 +3299,72 @@ describe("Modern Manufacturing template — view model", () => {
   });
 
   it("prints at true size, stretching the table where the business asks", () => {
-    // No zoom of its own: the text scale, the printable width and the stretch flags only.
+    // Unset: Refrens' defaults, Text Scale "Smaller" (0.8, printed at Normal size) and Narrow
+    // margins (0.5: 15 px a side).
     expect(mapPrint({})).toEqual({
       textScale: "1",
-      printWidth: 714,
+      printWidth: 759,
       browserPrintWidth: 714,
       paperHeight: 1122,
+      paperSize: "210mm 297mm",
       photoCap: 596,
       bandCap: 241,
       stretchTable: true,
       pageless: false,
     });
+    // Refrens' Text Scale as its own templates print it: Smaller (0.8, the default) at
+    // Normal size, the others at their own.
+    expect(printZoom({})).toBe(1);
+    expect(printZoom({ zoomSize: "0.8" })).toBe(1);
+    expect(printZoom({ zoomSize: "0.9" })).toBe(0.9);
+    expect(printZoom({ zoomSize: 1.2 })).toBe(1.2);
+    // Refrens' margins: 30 px a step at either side (Narrow 0.5, Normal 1, Wide 2, Extra wide 3).
+    expect(sideMarginPx({})).toBe(15);
+    expect(sideMarginPx({ xMargins: "1" })).toBe(30);
+    expect(sideMarginPx({ xMargins: 3 })).toBe(90);
+    expect(sideMarginPx({ xMargins: "0" })).toBe(0);
     // The printable width caps the page in print (Refrens' PDF service lays the page out in
     // a wider window): paper less the side margins, under the print zoom, 4 px kept back.
-    expect(printWidth({})).toBe(714);
+    expect(printWidth({})).toBe(759);
+    expect(printWidth({ zoomSize: "1", xMargins: "1" })).toBe(729);
     // The paper's height, which a one-page document fits within (the long side, or the
     // short one in landscape).
     expect(paperHeight({})).toBe(1122);
     expect(paperHeight({ format: "a5", landscape: true })).toBe(559);
-    expect(printWidth({ format: "A5", xMargins: "0.5" })).toBe(517);
-    // 0 cm is a real margin, not unset: the page takes the paper's whole width.
+    // A browser's own print uses the document's paper and orientation (user, 2026-11-02).
+    expect(paperSize({})).toBe("210mm 297mm");
+    expect(paperSize({ format: "A5", landscape: true })).toBe("210mm 148mm");
+    expect(paperSize({ format: "tabloid" })).toBe("279.4mm 431.8mm");
+    expect(paperSize({ format: "letter", landscape: "true" })).toBe(
+      "279.4mm 215.9mm"
+    );
+    expect(printWidth({ format: "A5", xMargins: "0.5" })).toBe(525);
+    // 0 is a real margin, not unset: the page takes the paper's whole width.
     expect(printWidth({ xMargins: "0" })).toBe(789);
     expect(printWidth({ xMargins: 0 })).toBe(789);
-    expect(printWidth({ format: "letter", landscape: true })).toBe(976);
-    expect(printWidth({ zoomSize: "0.8" })).toBe(714);
+    expect(printWidth({ format: "letter", landscape: true })).toBe(1022);
+    expect(printWidth({ zoomSize: "0.8" })).toBe(759);
     // A large photo is at most 55 % of the page from the paper itself, never the window (vh).
     expect(photoCap({})).toBe(596);
     expect(photoCap({ format: "a5" })).toBe(415);
     expect(photoCap({ landscape: true })).toBe(415);
     expect(photoCap({ zoomSize: "1.2" })).toBe(496);
-    expect(photoCap({ zoomSize: "0.8" })).toBe(596);
-    // The side margins come off the paper before the print zoom: 1 cm prints as 1 cm at
-    // every print size (real PDFs: it grew to ~33/36 pt at 1.1/1.2 when taken off after).
-    expect(printWidth({ zoomSize: "1.1", format: "unknown" })).toBe(648);
-    expect(printWidth({ zoomSize: "1.2" })).toBe(594);
-    expect(printWidth({ zoomSize: "0.9" })).toBe(793);
+    expect(photoCap({ zoomSize: "1" })).toBe(596);
+    // The side margins come off the paper before the print zoom: they keep their size at
+    // every text scale (real PDFs: they grew to ~33/36 pt at 1.1/1.2 when taken off after).
+    expect(printWidth({ zoomSize: "1.1", format: "unknown" })).toBe(690);
+    expect(printWidth({ zoomSize: "1.2" })).toBe(632);
+    expect(printWidth({ zoomSize: "0.9" })).toBe(844);
     // The letterhead and footer repeated on every page stay under a quarter of a browser
     // print's page (1 cm margins), less their 16 px gap and 4 px: Chrome stops repeating a
     // taller table header or footer, and the fixed footer then covered the content.
     expect(repeatedBandCap({})).toBe(241);
-    expect(repeatedBandCap({ landscape: true })).toBe(159);
-    expect(repeatedBandCap({ format: "a5", landscape: true })).toBe(100);
+    expect(repeatedBandCap({ zoomSize: "1" })).toBe(241);
+    expect(repeatedBandCap({ zoomSize: "1", landscape: true })).toBe(159);
+    expect(
+      repeatedBandCap({ zoomSize: "1", format: "a5", landscape: true })
+    ).toBe(100);
     expect(repeatedBandCap({ zoomSize: "1.2" })).toBe(198);
-    expect(repeatedBandCap({ zoomSize: "0.8" })).toBe(241);
     // The table fills the page always (user, 2026-11-02): neither the business's setting
     // (experimental.stretchInvoiceTable) nor the document's own toggle changes it.
     const allowed = {
@@ -3370,7 +3401,7 @@ describe("Modern Manufacturing template — view model", () => {
       invoice.template = { pdfOptions: { format: "a5", textScale: 1.1 } };
     });
     expect(html).toContain(
-      'style="--mm-text-scale: 1.1; --mm-print-width: 479px; --mm-browser-print-width: 479px; --mm-photo-cap: 415px; --mm-band-cap: 159px;"'
+      'style="--mm-text-scale: 1.1; --mm-print-width: 525px; --mm-browser-print-width: 479px; --mm-photo-cap: 415px; --mm-band-cap: 159px;"'
     );
     expect(html).not.toContain("--mm-print-zoom");
     expect(html).not.toContain("is-print-compact");
@@ -3949,9 +3980,9 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(css).not.toContain(":last-child:nth-child(odd)");
   });
 
-  it("gives running text room to read: 22 px lines, points 4 px apart", () => {
+  it("gives running text the template's own 20 px lines, points 4 px apart", () => {
     expect(css).toMatch(
-      /\.mm-terms,\s*\.mm-attachments,\s*\.mm-note-body,\s*\.mm-item-desc \{\s*line-height: 1\.6923;/
+      /\.mm-terms,\s*\.mm-attachments,\s*\.mm-note-body,\s*\.mm-item-desc \{\s*line-height: 1\.5385;/
     );
     expect(css).toMatch(
       /\.mm-terms > li \+ li,\s*\.mm-attachments > li \+ li,[^{]*\.mm-note-body \.toastui-editor-contents li \+ li,[^{]*\.mm-item-desc \.toastui-editor-contents li \+ li \{\s*margin-top: 4px;/

@@ -3263,8 +3263,8 @@ export const mapFooter = (state: UnknownRecord) => {
 
 /*
  * Print and PDF print at true size (design-to-template §4a): no page-fit zoom, so 13 px text
- * prints at 13 px. zoomSize is the print size picked in Lydia (0.8 smaller … 1.2 larger),
- * applied by the renderer; textScale scales text only, tables included (never fitted).
+ * prints at 13 px. zoomSize is Refrens' Text Scale (printZoom: 0.8 smaller … 1.2 larger);
+ * textScale scales text only, tables included (never fitted).
  */
 const positiveNumber = (value: unknown): number | undefined => {
   const parsed = hasValue(value) ? Number(text(value)) : NaN;
@@ -3275,14 +3275,43 @@ const compactDecimal = (value: number): string =>
   String(Number(value.toFixed(4)));
 
 /*
+ * Refrens' "Text Scale" (pdfOptions.zoomSize, PDF settings): Smaller 0.8 (the default, also
+ * when unset), Small 0.9, Normal 1, Large 1.1, Larger 1.2. As Refrens' own templates print it
+ * (Classic, Simple, Default, Enterprise, real PDFs 2026-11-02; Refrens' page maths maps 0.8 to
+ * 1): Smaller prints at Normal size, the others at their own. The renderer zooms the printed
+ * page by it (and leaves 0.8 unzoomed); this is the zoom the page prints at.
+ */
+export const printZoom = (pdfOptions: UnknownRecord): number => {
+  const zoom = positiveNumber(pdfOptions.zoomSize);
+  return zoom === undefined || Math.abs(zoom - 0.8) < 1e-9 ? 1 : zoom;
+};
+
+/*
+ * Refrens' margins (pdfOptions.xMargins, PDF settings): Narrow 0.5 (the default, also when
+ * unset), Normal 1, Wide 2, Extra wide 3, each step 30 px of the paper at either side (Refrens'
+ * own page maths; its templates measure 22.5 pt at Normal), never centimetres (user,
+ * 2026-11-02: the margins were a quarter wider than Refrens'). 0 is a real choice.
+ */
+const MARGIN_STEP_PX = 30;
+
+export const sideMarginPx = (pdfOptions: UnknownRecord): number => {
+  const margin = hasValue(pdfOptions.xMargins)
+    ? Number(text(pdfOptions.xMargins))
+    : NaN;
+  return (
+    (Number.isFinite(margin) && margin >= 0 ? margin : 0.5) * MARGIN_STEP_PX
+  );
+};
+
+// A browser's own print (Lydia's print button, Ctrl+P): its own 1 cm at either side.
+const BROWSER_SIDE_MARGIN_PX = 96 / 2.54;
+
+/*
  * The printable width in the document's own pixels, which caps the page in print
  * (styles.css): Refrens' PDF service lays the page out in a window wider than the paper
- * before it prints, and a table fitted there was clipped on the page (user report). Side
- * margins are xMargins centimetres (1 when unset) of the paper itself, at every print size:
- * they come off the paper before the print zoom (zoomSize, 0.8 is the renderer's unzoomed
- * default), so 1 cm prints as 28 pt at 0.9/1.1/1.2 as at 1, like Refrens' Enterprise and the
- * Professional template (real PDFs, 2026-11-01; Ecommerce 3125801); 4 px kept back for
- * rounding.
+ * before it prints, and a table fitted there was clipped on the page (user report). The side
+ * margins come off the paper before the print zoom, so they keep their size at every text
+ * scale (real PDFs, 2026-11-01; Ecommerce 3125801); 4 px kept back for rounding.
  */
 const PAPER_MM: Record<string, [number, number]> = {
   a3: [297, 420],
@@ -3290,21 +3319,34 @@ const PAPER_MM: Record<string, [number, number]> = {
   a5: [148, 210],
   letter: [215.9, 279.4],
   legal: [215.9, 355.6],
+  tabloid: [279.4, 431.8],
 };
 
-export const printWidth = (pdfOptions: UnknownRecord): number => {
+/*
+ * The document's paper as a CSS page size ("210mm 297mm", landscape turned): a browser's own
+ * print uses it (startBrowserPage), so it prints on the paper and in the orientation set in
+ * Refrens' PDF settings, as the PDF does (user, 2026-11-02: landscape picked in Chrome's dialog
+ * left the portrait-wide page with empty sides).
+ */
+export const paperSize = (pdfOptions: UnknownRecord): string => {
+  const [width, height] =
+    PAPER_MM[text(pdfOptions.format).toLowerCase()] ?? PAPER_MM.a4;
+  const [w, h] =
+    flagSetting(pdfOptions.landscape) === true
+      ? [height, width]
+      : [width, height];
+  return `${w}mm ${h}mm`;
+};
+
+export const printWidth = (
+  pdfOptions: UnknownRecord,
+  marginPx: number = sideMarginPx(pdfOptions)
+): number => {
   const [width, height] =
     PAPER_MM[text(pdfOptions.format).toLowerCase()] ?? PAPER_MM.a4;
   const paperMm = flagSetting(pdfOptions.landscape) === true ? height : width;
-  const zoom = positiveNumber(pdfOptions.zoomSize) ?? 1;
-  const rendererZoom = zoom === 0.8 ? 1 : zoom;
-  // 0 cm is a real choice (Refrens' "0" margin), not unset: only a missing value means 1 cm.
-  const margin = hasValue(pdfOptions.xMargins)
-    ? Number(text(pdfOptions.xMargins))
-    : NaN;
-  const sideMarginCm = Number.isFinite(margin) && margin >= 0 ? margin : 1;
   return Math.floor(
-    ((paperMm / 25.4) * 96 - (2 * sideMarginCm * 96) / 2.54) / rendererZoom - 4
+    ((paperMm / 25.4) * 96 - 2 * marginPx) / printZoom(pdfOptions) - 4
   );
 };
 
@@ -3328,11 +3370,9 @@ export const paperHeight = (pdfOptions: UnknownRecord): number => {
  * bottom margins; under the print zoom a page holds fewer of the document's pixels; 600 px most.
  */
 export const photoCap = (pdfOptions: UnknownRecord): number => {
-  const zoom = positiveNumber(pdfOptions.zoomSize) ?? 1;
-  const rendererZoom = zoom === 0.8 ? 1 : zoom;
   return Math.min(
     600,
-    Math.floor((0.55 * (paperHeight(pdfOptions) - 38)) / rendererZoom)
+    Math.floor((0.55 * (paperHeight(pdfOptions) - 38)) / printZoom(pdfOptions))
   );
 };
 
@@ -3347,10 +3387,8 @@ export const photoCap = (pdfOptions: UnknownRecord): number => {
 const BROWSER_MARGINS_PX = (2 * 96) / 2.54;
 
 export const repeatedBandCap = (pdfOptions: UnknownRecord): number => {
-  const zoom = positiveNumber(pdfOptions.zoomSize) ?? 1;
-  const rendererZoom = zoom === 0.8 ? 1 : zoom;
   const pageArea = paperHeight(pdfOptions) - BROWSER_MARGINS_PX;
-  return Math.floor(pageArea / rendererZoom / 4) - 20;
+  return Math.floor(pageArea / printZoom(pdfOptions) / 4) - 20;
 };
 
 export const mapPrint = (state: UnknownRecord) => {
@@ -3373,8 +3411,9 @@ export const mapPrint = (state: UnknownRecord) => {
     printWidth: printWidth(pdfOptions),
     // A browser's own print (Lydia's print button, Ctrl+P) keeps its own 1 cm margins,
     // whatever xMargins says: the page is fitted for the narrower of the two.
-    browserPrintWidth: printWidth({ ...pdfOptions, xMargins: 1 }),
+    browserPrintWidth: printWidth(pdfOptions, BROWSER_SIDE_MARGIN_PX),
     paperHeight: paperHeight(pdfOptions),
+    paperSize: paperSize(pdfOptions),
     photoCap: photoCap(pdfOptions),
     bandCap: repeatedBandCap(pdfOptions),
     stretchTable,
@@ -3960,12 +3999,45 @@ export const withPrintMedia = <T>(measure: () => T): T => {
  * blank page at the end of an A5 printout. Only the steps that need the pages themselves (the
  * footer on the last page's edge) wait for the listener.
  */
+/*
+ * A browser's own print: Chrome prints its date, title, URL and page number in the page's top
+ * and bottom margins unless both are 0 (its print preview turns "Headers and footers" off
+ * then), so they are 0 while it prints (user, 2026-11-02: "remove these header footer from
+ * print"); the page frame's margin rows (styles.css) give each page its 1 cm back. The side
+ * margins stay the browser's; the paper and its orientation are the document's own
+ * (paperSize). Never on a Pageless document (no @page: Lydia's Pageless PDF
+ * breaks with one), never in the PDF service (already in print media, no beforeprint run).
+ * As the E-commerce template does (da17847).
+ */
+const BROWSER_PAGE_STYLE_ID = "mm-browser-page";
+
+const startBrowserPage = (doc: HTMLElement): void => {
+  if (doc.hasAttribute("data-mm-pageless")) return;
+  doc.classList.add("is-browser-print");
+  if (document.getElementById(BROWSER_PAGE_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = BROWSER_PAGE_STYLE_ID;
+  const size = doc.dataset.mmPaperSize;
+  style.textContent = `@page { ${
+    size && /^[\d.]+mm [\d.]+mm$/.test(size) ? `size: ${size}; ` : ""
+  }margin-top: 0; margin-bottom: 0; }`;
+  document.head.appendChild(style);
+};
+
+export const endBrowserPrint = (root: ParentNode = document): void => {
+  root
+    .querySelectorAll(".mm-doc.is-browser-print")
+    .forEach((doc) => doc.classList.remove("is-browser-print"));
+  document.getElementById(BROWSER_PAGE_STYLE_ID)?.remove();
+};
+
 export const prepareBrowserPrint = (
   layout?: () => void,
   root: ParentNode = document
 ): void => {
   const doc = root.querySelector<HTMLElement>(".mm-doc");
   if (!doc) return;
+  startBrowserPage(doc);
   const style = getComputedStyle(doc);
   // The document's printable width, or the browser's own (1 cm margins) where narrower.
   const width = Math.min(
@@ -4253,6 +4325,15 @@ export const resetItemsTableFill = (root: ParentNode = document): void => {
 // Kept back from each page's foot, so a filled row never reaches the next page (rounding).
 // 100vh / zoom is the page exactly under the print zoom too (Chrome 122, measured 2026-11-02).
 const FILL_SLACK = 16;
+/*
+ * An item filled to a page break (the table runs on) stops this short of the page's foot, where
+ * a browser's own print draws the items' closing rule (box-decoration-break: clone): the row's
+ * own bottom rule is hidden there, so one rule closes the page, not two 16 px apart (user,
+ * 2026-11-02). Refrens' PDF service (Chrome 122) draws no cloned rule: the row's own closes it.
+ * 4 px kept every page as with no fill in the E-commerce template (da17847).
+ */
+const BREAK_SLACK = 4;
+const BROWSER_BREAK_SLACK = 1;
 
 /* The print rules filling the table to each page's foot (see fillPages). */
 export const itemsFillRules = (
@@ -4261,7 +4342,10 @@ export const itemsFillRules = (
   frame: PageFrame,
   zoom: number
 ): string => {
-  const slack = FILL_SLACK;
+  // The last item ends the table (its Total row under it); the others end a page.
+  const lastRow = heights.length - 1;
+  const slackFor = (row: number) =>
+    row === lastRow ? FILL_SLACK : BREAK_SLACK;
   const ranges: {
     from: number;
     to: number;
@@ -4271,7 +4355,7 @@ export const itemsFillRules = (
   for (let vh = PAGE_HEIGHTS[0]; vh <= PAGE_HEIGHTS[1]; vh += 1) {
     const fills = fillPages(units, vh / zoom, frame);
     fills.forEach((room, row) => {
-      if (lengthAt(room, vh / zoom) <= slack) fills.delete(row);
+      if (lengthAt(room, vh / zoom) <= slackFor(row)) fills.delete(row);
     });
     const key = JSON.stringify([...fills.entries()]);
     const open = ranges[ranges.length - 1];
@@ -4286,11 +4370,22 @@ export const itemsFillRules = (
         .map(([row, room]) => {
           const selector = `.mm-doc:not([${MEASURING_ATTR}]) .mm-items tr[${FILL_ATTR}="${row}"]`;
           const fill = `${compactDecimal(room.k)} * ${page} + ${compactDecimal(
-            room.c - slack
+            room.c - slackFor(row)
           )}px`;
+          const browser = `.mm-doc.is-browser-print:not([${MEASURING_ATTR}]) .mm-items tr[${FILL_ATTR}="${row}"]`;
+          // A browser's print measures its own page: the row runs to 1 px of the foot, where
+          // the cloned closing rule is, so the column rules meet it.
+          const closing =
+            row === lastRow
+              ? ""
+              : ` ${browser} { height: calc(${Math.ceil(
+                  heights[row]
+                )}px + ${compactDecimal(room.k)} * ${page} + ${compactDecimal(
+                  room.c - BROWSER_BREAK_SLACK
+                )}px); } ${browser} > td { border-bottom-color: transparent; }`;
           return `${selector} { height: calc(${Math.ceil(
             heights[row]
-          )}px + ${fill}); } ${selector} > td { vertical-align: top; }`;
+          )}px + ${fill}); } ${selector} > td { vertical-align: top; }${closing}`;
         })
         .join(" ");
       return `@media print and (min-height: ${range.from}px) and (max-height: ${
@@ -4751,6 +4846,7 @@ export const registerModernManufacturingPrint = (): void => {
   });
   window.addEventListener("afterprint", () => {
     browserPrinting = false;
+    endBrowserPrint();
     reset();
   });
   window.addEventListener("message", (event) => {
