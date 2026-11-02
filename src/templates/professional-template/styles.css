@@ -265,6 +265,12 @@
   overflow-wrap: anywhere;
 }
 
+/* The subtitle 12 px, regular (user request, 2026-11-02). */
+.pt-doc .pt-subtitle {
+  font-size: calc(12px * var(--pt-text-scale, 1));
+  font-weight: 400;
+}
+
 /* Document details: a 100 px label column (grows for a longer label), 16 px, the value. */
 .pt-meta {
   display: grid;
