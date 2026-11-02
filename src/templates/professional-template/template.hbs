@@ -118,6 +118,9 @@
             {{/if}}
           </header>
 
+          {{!-- Billed, Shipped and Transport / E-Invoice cards fill one two-column grid in order,
+                left to right, with no gap where a card is missing (user, 2026-11-02). --}}
+          <div class="pt-card-flow">
           {{#if view.parties.length}}
             <section class="pt-cards pt-parties" data-testid="section" data-section="parties">
               {{#each view.parties}}
@@ -203,6 +206,7 @@
             </div>
             {{/unless}}
           </section>
+          </div>
 
           {{!-- Country / Place of Supply just above the items, as refrens.com's default layout prints
                 them (data-ceres-country-of-supply: the host's live hide toggle). --}}

@@ -5452,8 +5452,17 @@ const flowUnits = (
       if (body.contains(filler)) anchor = units.length - 1;
     });
   };
+  // A display: contents box (the card grid's sections) lays its children out in its parent's
+  // place: they are measured as the parent's own.
+  const flatChildren = (parent: Element): Element[] =>
+    Array.from(parent.children).flatMap((child) =>
+      getComputedStyle(child).display === "contents" &&
+      !(child instanceof HTMLTableElement)
+        ? flatChildren(child)
+        : [child]
+    );
   const walk = (parent: Element) => {
-    const children = Array.from(parent.children).filter((child) => {
+    const children = flatChildren(parent).filter((child) => {
       if (child === filler) return false;
       const style = getComputedStyle(child);
       if (style.display === "none" || style.position === "fixed") return false;

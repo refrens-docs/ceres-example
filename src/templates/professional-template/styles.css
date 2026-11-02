@@ -365,6 +365,27 @@
   display: none;
 }
 
+/* One grid for the party, shipping and logistics cards: each card takes the next cell, left to
+   right, so a missing Shipped From leaves no hole (user, 2026-11-02). */
+.pt-card-flow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.pt-card-flow:not(:has(.pt-card:not(.is-empty))) {
+  display: none;
+}
+
+.pt-card-flow > .pt-cards:has(> .pt-card:not(.is-empty)) {
+  display: contents;
+}
+
+.pt-card-flow > .pt-cards > .pt-card {
+  grid-column: auto;
+}
+
 .pt-card {
   display: flex;
   flex-direction: column;
@@ -1442,7 +1463,8 @@
 /* Under 600 px: the cards stack one per row, the totals take the full width under the cards,
    the UPI QR goes under the bank rows. */
 @container pt-doc (width < 600px) {
-  .pt-cards {
+  .pt-cards,
+  .pt-card-flow {
     grid-template-columns: minmax(0, 1fr);
   }
 
