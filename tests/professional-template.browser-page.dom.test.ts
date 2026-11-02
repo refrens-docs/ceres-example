@@ -14,7 +14,7 @@ describe("Professional Template — a browser's print takes the side margins", (
   it("writes an @page margin from the document's setting", () => {
     document.body.innerHTML = `<div class="pt-doc" data-pt-side-margin="2"></div>`;
     applyBrowserPrintPage();
-    expect(page()).toBe("@page { margin: 1cm 2cm; }");
+    expect(page()).toBe("@page { margin: 0 2cm; }");
   });
 
   it("divides the margins by the print size zoom, which scales them", () => {
@@ -24,7 +24,7 @@ describe("Professional Template — a browser's print takes the side margins", (
     zoom.textContent = "@media print { html { zoom: 1.25; } }";
     document.head.append(zoom);
     applyBrowserPrintPage();
-    expect(page()).toBe("@page { margin: 0.8cm 0.8cm; }");
+    expect(page()).toBe("@page { margin: 0 0.8cm; }");
   });
 
   it("leaves the PDF service's own margins alone", () => {

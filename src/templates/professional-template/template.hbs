@@ -36,8 +36,12 @@
     content never runs under it.
   --}}
   <table class="pt-page-frame" role="presentation">
-    {{#if view.letterheadEveryPage}}
-      <thead class="pt-page-frame-header">
+    {{!-- The page's top margin in a browser's own print, whose page margins are 0 there so Chrome
+          prints no date / title / URL / page-number stamps (helpers.ts applyBrowserPrintPage);
+          hidden otherwise, and under an every-page letterhead, which sits on the page's edge. --}}
+    <thead class="pt-page-frame-header">
+      <tr class="pt-page-margin" aria-hidden="true"><td></td></tr>
+      {{#if view.letterheadEveryPage}}
         <tr>
           <td>
             <div class="no-dibella invoice-letterhead pt-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}" data-ceres-page-header data-ceres-page-policy="all">
@@ -49,10 +53,10 @@
             </div>
           </td>
         </tr>
-      </thead>
-    {{/if}}
-    {{#if view.footerEveryPage}}
-      <tfoot class="pt-page-frame-footer">
+      {{/if}}
+    </thead>
+    <tfoot class="pt-page-frame-footer">
+      {{#if view.footerEveryPage}}
         <tr>
           <td>
             <div class="{{#if view.serviceFooter}}no-dibella {{/if}}invoice-letterhead-footer pt-letterhead-footer pt-footer-spacer{{#unless @root.invoice.letterHeadFooter}} is-empty{{/unless}}" aria-hidden="true">
@@ -60,8 +64,9 @@
             </div>
           </td>
         </tr>
-      </tfoot>
-    {{/if}}
+      {{/if}}
+      <tr class="pt-page-margin" aria-hidden="true"><td></td></tr>
+    </tfoot>
     <tbody>
       <tr>
         <td class="pt-page-frame-cell">

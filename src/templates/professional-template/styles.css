@@ -134,6 +134,11 @@
   display: none;
 }
 
+/* The page margin rows of a browser's own print only (print rules below). */
+.pt-page-frame > * > tr.pt-page-margin {
+  display: none;
+}
+
 .pt-doc p,
 .pt-doc h1,
 .pt-doc h2,
@@ -1477,12 +1482,12 @@
 /* ------------------------------------------------------------------ print / PDF */
 
 /*
- * Print at Refrens' own ratio (user, 2026-11-02): Refrens' templates (Classic, Enterprise,
- * Default, Compact) print the whole page at 75 %, so the document is drawn at 75 % in print
- * (--pt-print-scale, a zoom on .pt-doc: text, spacing, rules and images together). Text scale
- * 0.8 and 0.9 print at that base, as 1 does; 1.1 and 1.2 print 10 % and 20 % larger (the
- * renderer's html zoom; helpers.ts mapPrint divides 0.9's zoom back out). The page fills the
- * printable width with no gutter of its own (margins belong to the browser or the PDF service).
+ * Print at the screen's size, as the E-commerce template does (user, 2026-11-02, after a day at
+ * Refrens' 75 %: the print preview read too small): 13 px body text prints at 13 px. Text scale
+ * 0.8, 0.9 and 1 print the same, as Refrens' own templates print 0.8 and 1; 1.1 and 1.2 print
+ * 10 % and 20 % larger (the renderer's html zoom; --pt-print-scale on .pt-doc divides the
+ * renderer's 0.9 back out, helpers.ts printScaleFor). The page fills the printable width with
+ * no gutter of its own (margins belong to the browser or the PDF service).
  */
 @media print {
   .pt-doc {
@@ -1730,6 +1735,31 @@
     display: table-cell;
     padding: 0;
     vertical-align: top;
+  }
+
+  /*
+   * A browser's own print (Refrens' Print button, Ctrl+P): the page's top and bottom margins are
+   * 0 (helpers.ts applyBrowserPrintPage), which keeps Chrome from printing its date, title, URL
+   * and page-number stamps there (user, 2026-11-02). A row at the top and foot of the page frame,
+   * repeated on each page, gives every page its 1 cm back; an every-page letterhead or footer
+   * image sits on the page's edge instead, as the PDF service stamps it. Never in the PDF
+   * service (its own margins) nor on a Long PDF (one page, no @page rule).
+   */
+  .pt-page-frame > * > tr.pt-page-margin {
+    display: none;
+  }
+
+  body:not([class~="isDibella"]) .pt-doc:not(.is-pageless) .pt-page-frame > * > tr.pt-page-margin {
+    display: table-row;
+  }
+
+  .pt-page-frame > * > tr.pt-page-margin > td {
+    height: calc(1cm / var(--pt-page-zoom, 1));
+  }
+
+  body:not([class~="isDibella"]) .pt-doc:not(.is-pageless) .pt-page-frame-header:has(.pt-letterhead:not(.is-empty)) > tr.pt-page-margin,
+  body:not([class~="isDibella"]) .pt-doc:not(.is-pageless) .pt-page-frame-footer:has(.pt-footer-spacer:not(.is-empty)) > tr.pt-page-margin {
+    display: none;
   }
 
   /* The page body is the narrow-page container in print (see the container queries). */

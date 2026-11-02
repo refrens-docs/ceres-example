@@ -483,14 +483,15 @@ describe("Professional Template — boolean settings", () => {
     });
     expect(every).toContain('src="https://example.com/head.png"');
     expect(every).toContain("pt-footer-fixed");
-    expect(every).toContain("pt-page-frame-footer");
+    expect(every).toContain("pt-footer-spacer");
 
     const last = render((invoice) => {
       invoice.letterHeadFooter = "https://example.com/foot.png";
       invoice.template = { pdfOptions: { footerOnLastPage: true } };
     });
     expect(last).not.toContain("pt-footer-fixed");
-    expect(last).not.toContain("pt-page-frame-footer");
+    // The frame's footer holds only the browser print's margin row then.
+    expect(last).not.toContain("pt-footer-spacer");
   });
 
   it("keeps a long header detail beside its label, wrapping in the value column", () => {
@@ -523,7 +524,13 @@ describe("Professional Template — boolean settings", () => {
       invoice.letterHead = "https://example.com/head.png";
       invoice.template = { pdfOptions: { letterHeadOnFirstPage: true } };
     });
-    expect(first).not.toContain("pt-page-frame-header");
+    // The frame's header holds only the browser print's margin row then.
+    expect(
+      first.slice(
+        first.indexOf("pt-page-frame-header"),
+        first.indexOf("</thead>")
+      )
+    ).not.toContain("pt-letterhead");
     expect(first.indexOf('src="https://example.com/head.png"')).toBeLessThan(
       first.indexOf("pt-page-frame")
     );
@@ -2299,17 +2306,28 @@ describe("Professional Template — line height and browser-print margins (2026-
   });
 });
 
-describe("Professional Template — Refrens' print ratio (2026-11-02)", () => {
-  // Refrens' own templates print the whole page at 75 %; 0.8 prints as 1 does.
-  it("prints at 75 %, with 0.8 and 0.9 at that base and 1.1 / 1.2 larger", () => {
+describe("Professional Template — print size (2026-11-02)", () => {
+  // Print at the screen's size, like the E-commerce template; 0.8 prints as 1 (Refrens).
+  it("prints at 100 %, with 0.8 and 0.9 as 1 and 1.1 / 1.2 larger", () => {
     const scale = (zoomSize: string) =>
       mapPrint({ pdfOptions: { zoomSize } }).printScale;
     // The renderer zooms <html> by 0.9, 1.1 and 1.2 (not 0.8); the document's own zoom
     // makes 0.8, 0.9 and 1 print the same.
-    expect(scale("0.8")).toBe("0.75");
-    expect(scale("1")).toBe("0.75");
-    expect(Number(scale("0.9")) * 0.9).toBeCloseTo(0.75, 3);
-    expect(scale("1.2")).toBe("0.75");
-    expect(printScaleFor(1.2) * 1.2).toBeCloseTo(0.9, 5);
+    expect(scale("0.8")).toBe("1");
+    expect(scale("1")).toBe("1");
+    expect(Number(scale("0.9")) * 0.9).toBeCloseTo(1, 3);
+    expect(scale("1.2")).toBe("1");
+    expect(printScaleFor(1.2) * 1.2).toBeCloseTo(1.2, 5);
+  });
+
+  // Chrome prints its date / title / URL / page-number stamps in a page's top and bottom
+  // margins: they are 0 in a browser's print, the frame's margin rows put 1 cm back.
+  it("gives a browser's print margin rows instead of page margins", () => {
+    const html = render();
+    expect(html.match(/<tr class="pt-page-margin"/g)).toHaveLength(2);
+    const css = fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8");
+    expect(css).toMatch(
+      /body:not\(\[class~="isDibella"\]\) \.pt-doc:not\(\.is-pageless\) \.pt-page-frame > \* > tr\.pt-page-margin \{\s*display: table-row;/
+    );
   });
 });

@@ -3935,12 +3935,12 @@ const PAPER_HEIGHT_MM: Record<string, number> = {
 };
 
 /*
- * Refrens' own templates print the whole page at 75 % (measured 2026-11-02: a 1 cm margin lands
- * at 7.5 mm, text at 75 %), and text scale 0.8 prints the same as 1. Professional's print is
- * drawn at that 75 % (user, 2026-11-02), with 0.8 and 0.9 at the base as 1 is: the renderer
- * zooms <html> by 0.9 (not 0.8), so that zoom is divided back out here. 1.1 and 1.2 stay larger.
+ * Print at the screen's size (user, 2026-11-02: like the E-commerce template; Refrens' own 75 %
+ * read too small). Text scale 0.8 prints the same as 1, as in Refrens' own templates, and so
+ * does 0.9: the renderer zooms <html> by 0.9 (not 0.8), so that zoom is divided back out here.
+ * 1.1 and 1.2 stay larger.
  */
-const PRINT_BASE_SCALE = 0.75;
+const PRINT_BASE_SCALE = 1;
 export const printScaleFor = (rendererZoom: number): number =>
   PRINT_BASE_SCALE / Math.min(1, rendererZoom > 0 ? rendererZoom : 1);
 
@@ -5908,7 +5908,8 @@ export const loadScriptFonts = (): void => {
 /*
  * A browser's own print (Ctrl+P, Lydia's print button) takes the document's side margins
  * (pdfOptions.xMargins), as Refrens' PDF service does, instead of the browser's 1 cm: an @page
- * margin, top and bottom kept at 1 cm. The print size's html zoom scales a browser's @page
+ * margin. Top and bottom are 0 so Chrome prints no date / title / URL / page-number stamps
+ * (user, 2026-11-02); the page frame's margin rows put 1 cm back. The print size's html zoom scales a browser's @page
  * margins with it (1 cm printed 12 mm at 1.2, 2026-11-02), so they are written divided by it.
  * Never in the PDF service (body.isDibella), which sets its own page margins.
  */
@@ -5929,7 +5930,15 @@ export const applyBrowserPrintPage = (): void => {
   }
   const zoom = printZoom();
   const cm = (value: number) => `${compactDecimal(value / zoom)}cm`;
-  const css = `@page { margin: ${cm(1)} ${cm(side)}; }`;
+  // Top and bottom 0: Chrome prints no stamps there; the page frame's margin rows (styles.css)
+  // give each page its 1 cm back, sized in the document's own pixels. A Long PDF keeps 1 cm.
+  const pageZoom =
+    zoom *
+    (parseFloat(getComputedStyle(doc).getPropertyValue("--pt-print-scale")) ||
+      1);
+  doc.style.setProperty("--pt-page-zoom", compactDecimal(pageZoom));
+  const vertical = doc.classList.contains("is-pageless") ? cm(1) : "0";
+  const css = `@page { margin: ${vertical} ${cm(side)}; }`;
   if (existing?.textContent === css) return;
   const style = existing ?? document.createElement("style");
   style.id = BROWSER_PAGE_STYLE_ID;
