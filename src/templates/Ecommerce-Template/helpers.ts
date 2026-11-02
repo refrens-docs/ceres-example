@@ -3699,6 +3699,11 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
     ? PAPER_HEIGHT_MM[format] ?? PAPER_HEIGHT_MM.a4
     : PAPER_WIDTH_MM[format] ?? PAPER_WIDTH_MM.a4;
   const pageZoom = positiveNumber(pdfOptions.zoomSize) ?? 1;
+  /*
+   * The renderer zooms the printed page by the text scale (zoomSize), except 0.8, printed at 1
+   * as Refrens' own templates print it (real PDFs, 2 Nov 2026: Classic invoices 0029 at 0.8 and
+   * 0006 at 1 both set their text at 6.75 pt; Enterprise and Default the same on 1 Nov).
+   */
   const rendererZoom = pageZoom === 0.8 ? 1 : pageZoom;
   const pageWidth = ((paperMm / 25.4) * 96 - PRINT_MARGINS_PX) / rendererZoom;
   /*
@@ -3718,18 +3723,16 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
   const printWidth = Math.floor(
     ((paperMm / 25.4) * 96 - (2 * sideMarginCm * 96) / 2.54) / rendererZoom - 4
   );
-  // A browser's own print (Lydia's print button, Ctrl+P) keeps its own 1 cm margins, whatever
-  // xMargins says: the page is fitted for the narrower of the two (prepareBrowserPrint).
-  const browserPrintWidth = Math.floor(
-    ((paperMm / 25.4) * 96 - (2 * 96) / 2.54) / rendererZoom - 4
-  );
+  // A browser's own print (Lydia's print button, Ctrl+P) sets the same side margins as its
+  // page rule (prepareBrowserPrint): the same width.
+  const browserPrintWidth = printWidth;
   // The same with the paper turned (the print dialog's other orientation): the stretch is
   // measured for both (prepareBrowserPrint).
   const turnedMm = landscape
     ? PAPER_WIDTH_MM[format] ?? PAPER_WIDTH_MM.a4
     : PAPER_HEIGHT_MM[format] ?? PAPER_HEIGHT_MM.a4;
   const browserTurnedWidth = Math.floor(
-    ((turnedMm / 25.4) * 96 - (2 * 96) / 2.54) / rendererZoom - 4
+    ((turnedMm / 25.4) * 96 - (2 * sideMarginCm * 96) / 2.54) / rendererZoom - 4
   );
   const rawScale =
     positiveNumber(pdfOptions.textScale) ?? positiveNumber(pdfOptions.scale);
@@ -3748,6 +3751,15 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
     browserTurnedWidth,
     // The renderer's print zoom: the print table's 10 px text floor is 10 px on paper.
     printZoom: compactDecimal(rendererZoom),
+    // The side margins in centimetres, for a browser's own print's page rule.
+    sideMargin: compactDecimal(sideMarginCm),
+    /*
+     * The preview shows the side margins at the paper's proportion (user, 2 Nov 2026: margins
+     * made no difference on screen): the sheet's gutter is this share of its width.
+     */
+    marginShare: compactDecimal(
+      Math.min(0.2, (sideMarginCm * 10) / Math.max(1, paperMm))
+    ),
     compactTable,
     /*
      * The item table always runs down to the foot of every page it prints on (helpers.ts
@@ -5659,7 +5671,12 @@ const startBrowserPage = (doc: HTMLElement): void => {
   if (document.getElementById(BROWSER_PAGE_STYLE_ID)) return;
   const style = document.createElement("style");
   style.id = BROWSER_PAGE_STYLE_ID;
-  style.textContent = "@page { margin-top: 0; margin-bottom: 0; }";
+  const docStyle = getComputedStyle(doc);
+  const side = parseFloat(docStyle.getPropertyValue("--ec-side-margin")) || 0;
+  // Chrome scales a page rule's margins by the page's zoom (the print size): divided back, so
+  // 1 cm prints as 1 cm (Chrome 122: 22 pt at 0.8, 34 pt at 1.2 before).
+  const zoom = parseFloat(docStyle.getPropertyValue("--ec-print-zoom")) || 1;
+  style.textContent = `@page { margin: 0 ${compactDecimal(side / zoom)}cm; }`;
   document.head.appendChild(style);
 };
 

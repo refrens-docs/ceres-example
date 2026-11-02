@@ -1336,8 +1336,18 @@ describe("Ecommerce template — files and CSS", () => {
       mapPrint({ pdfOptions }).printZoom;
     expect(zoom({})).toBe("1");
     expect(zoom({ zoomSize: "1.2" })).toBe("1.2");
-    // The renderer applies no zoom for 0.8.
+    // 0.8 prints at 1, as Refrens' own templates (Classic, Enterprise, Default) print it.
     expect(zoom({ zoomSize: "0.8" })).toBe("1");
+    // The preview: text scaled by the print size, gutter at the margins' share of the paper.
+    expect(css).toMatch(
+      /--ec-text-scale: calc\(\s*var\(--ec-doc-text-scale, 1\) \* var\(--ec-print-zoom, 1\)\s*\);/
+    );
+    expect(mapPrint({ pdfOptions: { xMargins: "1" } }).marginShare).toBe(
+      "0.0476"
+    );
+    expect(mapPrint({ pdfOptions: { xMargins: "2" } }).marginShare).toBe(
+      "0.0952"
+    );
     const print = css.slice(css.indexOf("@media print"));
     // No print rule sets a table's text by a fit factor, a floor or a zoom.
     expect(print).not.toMatch(
@@ -1367,7 +1377,7 @@ describe("Ecommerce template — files and CSS", () => {
     // A browser's own print: 0 top and bottom page margins (no Chrome stamps), the page
     // frame's margin rows give the 1 cm back.
     expect(print).toMatch(
-      /\.ec-doc\.is-browser-print \.ec-page-frame > \* > tr\.ec-page-margin > td \{\s*height: 1cm;/
+      /\.ec-doc\.is-browser-print \.ec-page-frame > \* > tr\.ec-page-margin > td \{\s*height: calc\(1cm \/ var\(--ec-print-zoom, 1\)\);/
     );
     expect(print).toMatch(
       /\.ec-items\.is-print-tight \.ec-item-desc table \{\s*width: 100%;\s*table-layout: fixed;/

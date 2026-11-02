@@ -219,11 +219,13 @@ describe("Ecommerce template — after the render, in the browser", () => {
     });
 
     it("zeroes a browser print's top and bottom page margins, and only for its run", () => {
-      document.body.innerHTML = '<div class="ec-doc"></div>';
+      document.body.innerHTML =
+        '<div class="ec-doc" style="--ec-side-margin: 2"></div>';
       prepareBrowserPrint(() => undefined);
       expect(document.querySelector(".ec-doc.is-browser-print")).not.toBeNull();
+      // The document's own side margins (xMargins), none above or below.
       expect(document.getElementById("ec-browser-page")?.textContent).toBe(
-        "@page { margin-top: 0; margin-bottom: 0; }"
+        "@page { margin: 0 2cm; }"
       );
       endBrowserPrint();
       expect(document.querySelector(".is-browser-print")).toBeNull();
