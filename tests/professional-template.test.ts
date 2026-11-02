@@ -16,6 +16,7 @@ import {
   mapItemTable,
   mapScript,
   mapPrint,
+  printScaleFor,
   withTemplateSettings,
   mapStockSummary,
   onThemeColor,
@@ -544,14 +545,16 @@ describe("Professional Template — boolean settings", () => {
     const css = fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8");
     const print = css.slice(css.indexOf("@media print {"));
     expect(print).toMatch(
-      /\.pt-doc \{[^}]*width: 100%;\s*[^}]*max-width: var\(--pt-print-width, 100000px\);/
+      /\.pt-doc \{[^}]*zoom: var\(--pt-print-scale, 1\);\s*width: calc\(100% \/ var\(--pt-print-scale, 1\)\);/
     );
     expect(print).toMatch(
       /\.pt-items-scroll,\s*\.pt-widget-table \{\s*overflow: clip;/
     );
-    expect(css).not.toMatch(
-      /--pt-doc-fit|is-print-compact|--pt-table-fit|zoom:/
-    );
+    // The one zoom is the 75 % print base, the whole document at once (2026-11-02).
+    expect(css.match(/zoom:[^;]+;/g)).toEqual([
+      "zoom: var(--pt-print-scale, 1);",
+    ]);
+    expect(css).not.toMatch(/--pt-doc-fit|is-print-compact|--pt-table-fit/);
     expect(render()).not.toMatch(
       /--pt-doc-fit|is-print-compact|--pt-table-fit/
     );
@@ -1111,8 +1114,10 @@ describe("Professional Template — files and CSS", () => {
       "text-transform: uppercase",
     ]);
     expect(source).not.toMatch(/@page\s*\{/);
-    // No zoom of its own: the print size is the renderer's html zoom (user, 2026-11-01).
-    expect(source.match(/zoom:[^;]+;/g)).toBeNull();
+    // One zoom: the 75 % print base on the whole document (user, 2026-11-02).
+    expect(source.match(/zoom:[^;]+;/g)).toEqual([
+      "zoom: var(--pt-print-scale, 1);",
+    ]);
     const sizes = Array.from(
       source.matchAll(/font-size:\s*([^;]+);/g),
       (m) => m[1]
@@ -1445,7 +1450,7 @@ describe("Professional Template — PDF service window", () => {
     // The service's window is narrower than a landscape page: the layout must see the paper.
     const print = source.slice(source.indexOf("@media print {"));
     expect(print).toMatch(
-      /\[class~="isDibella"\] \.pt-doc \{\s*width: var\(--pt-print-width, 100%\);\s*max-width: none;/
+      /\[class~="isDibella"\] \.pt-doc \{\s*width: calc\(var\(--pt-print-width, 100%\) \/ var\(--pt-print-scale, 1\)\);\s*max-width: none;/
     );
   });
 });
@@ -2291,5 +2296,20 @@ describe("Professional Template — line height and browser-print margins (2026-
     expect(html).toContain('data-pt-side-margin="2"');
     const print = mapPrint({ pdfOptions: { xMargins: "2" } });
     expect(print.browserPrintWidth).toBe(print.printWidth);
+  });
+});
+
+describe("Professional Template — Refrens' print ratio (2026-11-02)", () => {
+  // Refrens' own templates print the whole page at 75 %; 0.8 prints as 1 does.
+  it("prints at 75 %, with 0.8 and 0.9 at that base and 1.1 / 1.2 larger", () => {
+    const scale = (zoomSize: string) =>
+      mapPrint({ pdfOptions: { zoomSize } }).printScale;
+    // The renderer zooms <html> by 0.9, 1.1 and 1.2 (not 0.8); the document's own zoom
+    // makes 0.8, 0.9 and 1 print the same.
+    expect(scale("0.8")).toBe("0.75");
+    expect(scale("1")).toBe("0.75");
+    expect(Number(scale("0.9")) * 0.9).toBeCloseTo(0.75, 3);
+    expect(scale("1.2")).toBe("0.75");
+    expect(printScaleFor(1.2) * 1.2).toBeCloseTo(0.9, 5);
   });
 });

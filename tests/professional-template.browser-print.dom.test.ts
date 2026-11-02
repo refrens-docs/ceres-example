@@ -124,7 +124,7 @@ describe("Professional Template — a browser's own print", () => {
   });
 
   // Nothing shrinks to fit the paper (user, 2026-11-01): the browser's print lays the page out
-  // at its width and the table keeps the print size, cut off at the edge when too wide.
+  // at its width (over the 75 % print base) and the table keeps the print size.
   it("never scales the document or the table for a browser's print", () => {
     document.body.innerHTML = `<div class="pt-doc" style="--pt-print-width: 714px;"><div class="pt-items-scroll"><table class="pt-items"></table></div></div>`;
     const doc = document.querySelector(".pt-doc") as HTMLElement;
@@ -132,7 +132,10 @@ describe("Professional Template — a browser's own print", () => {
     prepareBrowserPrint(() => {
       widthWhilePreparing = doc.style.width;
     });
-    expect(widthWhilePreparing).toBe("714px");
+    // jsdom drops a calc() with a variable; Chrome lays the page out at 714 px / the 75 % base.
+    expect(["", "calc(714px / var(--pt-print-scale, 1))"]).toContain(
+      widthWhilePreparing
+    );
     expect(doc.getAttribute("style")).not.toMatch(/zoom|fit/);
     expect(doc.dataset.ptPreparedZoom).toBeUndefined();
   });

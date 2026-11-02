@@ -1477,10 +1477,12 @@
 /* ------------------------------------------------------------------ print / PDF */
 
 /*
- * Print at true size (design-to-template §4a, the preset the other templates use): 13 px body
- * text prints at 13 px and every other size as on screen, nothing below the floor. The
- * page fills the printable width with no gutter of its own (margins belong to Lydia, the
- * browser or the PDF service); the renderer's print size setting (zoomSize) scales a printout.
+ * Print at Refrens' own ratio (user, 2026-11-02): Refrens' templates (Classic, Enterprise,
+ * Default, Compact) print the whole page at 75 %, so the document is drawn at 75 % in print
+ * (--pt-print-scale, a zoom on .pt-doc: text, spacing, rules and images together). Text scale
+ * 0.8 and 0.9 print at that base, as 1 does; 1.1 and 1.2 print 10 % and 20 % larger (the
+ * renderer's html zoom; helpers.ts mapPrint divides 0.9's zoom back out). The page fills the
+ * printable width with no gutter of its own (margins belong to the browser or the PDF service).
  */
 @media print {
   .pt-doc {
@@ -1492,11 +1494,12 @@
      * size (zoomSize, the renderer's html zoom), and a table too wide for the page is cut off at
      * its edge (.pt-items-scroll clips it); landscape gives it room (user, 2026-11-01).
      */
-    width: 100%;
+    zoom: var(--pt-print-scale, 1);
+    width: calc(100% / var(--pt-print-scale, 1));
 
     /* Never wider than the paper's printable width (helpers.ts mapPrint): Refrens' PDF
        service lays the page out in a window wider than the paper before it prints. */
-    max-width: var(--pt-print-width, 100000px);
+    max-width: calc(var(--pt-print-width, 100000px) / var(--pt-print-scale, 1));
 
     /* Centred: a browser's own print keeps 1 cm margins, so a document set to wider ones
        (xMargins 2) sits in the middle of the page rather than against its left edge. */
@@ -1507,7 +1510,7 @@
      prints, narrower than a landscape or A3 page: the document takes the paper's printable
      width there, so the table is fitted to the paper and not to the window. */
   [class~="isDibella"] .pt-doc {
-    width: var(--pt-print-width, 100%);
+    width: calc(var(--pt-print-width, 100%) / var(--pt-print-scale, 1));
     max-width: none;
   }
 

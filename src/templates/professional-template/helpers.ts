@@ -3934,6 +3934,16 @@ const PAPER_HEIGHT_MM: Record<string, number> = {
   tabloid: 431.8,
 };
 
+/*
+ * Refrens' own templates print the whole page at 75 % (measured 2026-11-02: a 1 cm margin lands
+ * at 7.5 mm, text at 75 %), and text scale 0.8 prints the same as 1. Professional's print is
+ * drawn at that 75 % (user, 2026-11-02), with 0.8 and 0.9 at the base as 1 is: the renderer
+ * zooms <html> by 0.9 (not 0.8), so that zoom is divided back out here. 1.1 and 1.2 stay larger.
+ */
+const PRINT_BASE_SCALE = 0.75;
+export const printScaleFor = (rendererZoom: number): number =>
+  PRINT_BASE_SCALE / Math.min(1, rendererZoom > 0 ? rendererZoom : 1);
+
 export const mapPrint = (state: UnknownRecord) => {
   const pdfOptions = asRecord(state.pdfOptions);
   const invoice = asRecord(state.invoice);
@@ -3985,6 +3995,7 @@ export const mapPrint = (state: UnknownRecord) => {
   const textScale = Math.min(2, Math.max(0.3, ratio ?? 1));
   return {
     textScale: compactDecimal(textScale),
+    printScale: compactDecimal(printScaleFor(rendererZoom)),
     printWidth,
     browserPrintWidth,
     browserPrintHeight,
@@ -4865,6 +4876,11 @@ export const syncPrintWidths = (root: ParentNode = document): void => {
         doc.style.setProperty(width, next);
       }
     });
+    // The 75 % print base, kept for 0.9 (printScaleFor).
+    const scale = compactDecimal(printScaleFor(zoom));
+    if (doc.style.getPropertyValue("--pt-print-scale") !== scale) {
+      doc.style.setProperty("--pt-print-scale", scale);
+    }
   });
 };
 
@@ -5080,7 +5096,8 @@ export const prepareBrowserPrint = (
   );
   withReadableStylesheet(() =>
     withPrintRules(width, () => {
-      doc.style.width = `${width}px`;
+      // Laid out wider by the 75 % print base, so it still fills the page (styles.css).
+      doc.style.width = `calc(${width}px / var(--pt-print-scale, 1))`;
       if (pageHeight > 0)
         doc.style.setProperty("--pt-vh", `${pageHeight / 100}px`);
       withPrintMedia(() => {
@@ -5651,9 +5668,15 @@ export const stretchItemTable = (root: ParentNode = document): void => {
     wrap.style.setProperty("--pt-column-rules", rules.layers);
     wrap.style.setProperty("--pt-column-rule-color", rules.color);
   }
-  const zoom = printZoom();
+  const htmlZoom = printZoom();
+  // The filler sits inside the document's 75 % print base too: a page is 100vh over both.
+  const zoom =
+    htmlZoom *
+    (parseFloat(getComputedStyle(doc).getPropertyValue("--pt-print-scale")) ||
+      1);
   const slack =
-    STRETCH_SLACK + (zoom > 1 ? STRETCH_ZOOM_SLACK * (1 - 1 / zoom) : 0);
+    STRETCH_SLACK +
+    (htmlZoom > 1 ? STRETCH_ZOOM_SLACK * (1 - 1 / htmlZoom) : 0);
   let style = document.getElementById(STRETCH_STYLE_ID);
   if (!style) {
     style = document.createElement("style");
@@ -5837,6 +5860,25 @@ export const evenSummaryColumns = (root: ParentNode = document): void => {
  * a Khmer party name printed as empty boxes (E-commerce, real PDF, 1 Nov 2026). Each face is
  * asked for as soon as its stylesheet is in, for the characters the document uses.
  */
+/*
+ * Refrens' PDF service can be in print media before the template renders (2026-11-01, real
+ * PDFs): the print media change never fires there, so the print steps (totals split, stretch)
+ * set up in registerProfessionalPrint also run on every render and refit made in print media,
+ * outside a browser's own print.
+ */
+let printLayoutHook: (() => void) | undefined;
+const runPrintLayoutIfPrinting = (): void => {
+  if (
+    !printLayoutHook ||
+    browserPrinting ||
+    typeof window.matchMedia !== "function" ||
+    !window.matchMedia("print").matches
+  ) {
+    return;
+  }
+  printLayoutHook();
+};
+
 const requestedScriptFonts = new Set<string>();
 export const loadScriptFonts = (): void => {
   if (typeof document === "undefined" || !document.fonts?.load) return;
@@ -5910,6 +5952,7 @@ export const registerProfessionalWords = (): void => {
       respellTaxWords();
       evenSummaryColumns();
       fitItemsToScreen();
+      runPrintLayoutIfPrinting();
     }, 0);
   };
   const start = () => {
@@ -5981,6 +6024,10 @@ export const registerProfessionalPrint = (): void => {
     joinTotals();
     splitTotals();
     stretchItemTable();
+  };
+  printLayoutHook = () => {
+    fitItemsToScreen();
+    if (!pageless()) printLayout();
   };
   window.matchMedia("print").addEventListener("change", (event) => {
     fitItemsToScreen();
