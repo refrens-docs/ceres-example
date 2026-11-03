@@ -5400,7 +5400,7 @@ export const flowFiller = (
   units: FlowUnit[],
   anchor: number,
   layout: FlowLayout,
-  // Only where everything after the table ends on the table's own page (the preview).
+  // Only where the whole document is one page (the preview).
   lastPageOnly = false
 ): FlowLength | undefined => {
   const { page, head, foot, start } = layout;
@@ -5450,11 +5450,7 @@ export const flowFiller = (
   });
   const at = placed[anchor];
   if (!at || unsure) return undefined;
-  if (
-    lastPageOnly &&
-    placed.slice(anchor + 1).some((unit) => unit.page !== at.page)
-  )
-    return undefined;
+  if (lastPageOnly && placed.some((unit) => unit.page !== 0)) return undefined;
   const room = (from: { bottom: FlowLength; end: FlowLength }): FlowLength => ({
     c: from.end.c - from.bottom.c,
     k: from.end.k - from.bottom.k,
@@ -5733,9 +5729,9 @@ const stretchOnScreen = (doc: HTMLElement, filler: HTMLElement): void => {
   const flow = measureFlow(doc, filler, false);
   if (!flow) return;
   const page = sheet * A4_ASPECT;
-  // Only where the table and all that follows it end on one sheet: the preview shows no sheet
-  // edges, so space filling the foot of a sheet mid-document read as a stray gap above the
-  // totals (user, 2026-11-03). Print fills each page's foot (pages show).
+  // Only where the whole document is one sheet: the preview shows no sheet edges, so space
+  // filling a sheet's foot with more content below read as a stray gap above the totals
+  // (user, 2026-11-03, twice). Print fills each page's foot (pages show).
   const room = flowFiller(
     flowAtHeight(flow.units, page),
     flow.anchor,
