@@ -1554,6 +1554,12 @@
     max-width: none;
   }
 
+  /* A browser's own print: the paper's whole width, whichever way its dialog turns it (user,
+     2026-11-03: landscape kept the portrait width, the sides left empty). */
+  body:not([class~="isDibella"]) .pt-doc.is-browser-print {
+    max-width: none;
+  }
+
   .pt-status.no-print {
     display: none;
   }
@@ -1973,6 +1979,107 @@ body[class~="isDibella"]
     box-decoration-break: clone;
   }
 
+  /*
+   * The party, shipping and transport cards carry on line by line across a page break, a row
+   * of them too (user, 2026-11-03), and each page's piece closes with the card's own rounded
+   * edges (user rule: a split box closes at the page foot; Chrome 122 cannot clone a block's
+   * border): the card prints as a one-cell table whose header and footer rows are its top and
+   * bottom edges, repeated on every page it spans, as the Modern Manufacturing template's
+   * text boxes, grown to the card's height so two cards in a row end level. A line never
+   * splits; a title stays with what follows it.
+   */
+  .pt-card-flow > .pt-cards > .pt-card:has(> .pt-split-frame) {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    break-inside: auto;
+  }
+
+  /* A real table: Chrome 122 repeats a <thead>/<tfoot> on every page, not a CSS table's. */
+  .pt-card-flow .pt-split-frame {
+    display: table;
+    flex: 1 0 auto;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+  }
+
+  .pt-card-flow .pt-split-frame > tbody {
+    display: table-row-group;
+  }
+
+  .pt-card-flow .pt-split-frame > * > tr,
+  .pt-card-flow .pt-split-frame .pt-split-edge.is-top {
+    display: table-row;
+  }
+
+  /* The top edge and the title repeat on every page the card spans (user, 2026-11-03: the
+     fields carried to the next page under their heading, as a table's rows). */
+  .pt-card-flow .pt-split-frame > .pt-split-head {
+    display: table-header-group;
+  }
+
+  .pt-card-flow .pt-split-title > .pt-split-body {
+    padding-bottom: 8px;
+  }
+
+  .pt-card-flow .pt-split-frame > .pt-split-edge.is-bottom {
+    display: table-footer-group;
+  }
+
+  /* The card's 16 px padding above and below, with its border and corners. */
+  .pt-card-flow .pt-split-cap {
+    display: table-cell;
+    height: 16px;
+    padding: 0;
+    border: 1px solid var(--pt-line);
+    background: var(--pt-tint);
+  }
+
+  .pt-card-flow .pt-split-edge.is-top .pt-split-cap {
+    border-bottom: 0;
+    border-radius: 8px 8px 0 0;
+  }
+
+  .pt-card-flow .pt-split-edge.is-bottom .pt-split-cap {
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+  }
+
+  .pt-card-flow .pt-split-body {
+    display: table-cell;
+    padding: 0 16px;
+    border-inline: 1px solid var(--pt-line);
+    background: var(--pt-tint);
+    vertical-align: top;
+  }
+
+  .pt-card-flow .pt-split-body > * + * {
+    margin-top: 8px;
+  }
+
+  .pt-card-flow .pt-party-body {
+    display: block;
+  }
+
+  .pt-card-flow .pt-party-body > * + * {
+    margin-top: 6px;
+  }
+
+  .pt-card-flow :is(.pt-party-name, .pt-party-address) {
+    orphans: 2;
+    widows: 2;
+  }
+
+  .pt-card-flow :is(.pt-fields, .pt-kv) > *,
+  .pt-card-flow .pt-fields > .pt-field > * {
+    break-inside: avoid;
+  }
+
   /* A card that can split (terms, notes, additional info, attachments) lays out as a block:
      Chrome split a column flex card at its very start, leaving an empty box at the page's
      foot. The 8 px between its parts moves from the gap to margins. */
@@ -1983,6 +2090,23 @@ body[class~="isDibella"]
   .pt-after > .pt-card > * + * {
     margin-top: 8px;
   }
+}
+
+/* A card's print frame (pt-split-frame, print rules above): not there on screen. */
+.pt-split-edge {
+  display: none;
+}
+
+.pt-split-frame,
+.pt-split-frame > :is(thead, tbody),
+.pt-split-frame > :is(thead, tbody) > tr,
+.pt-split-body {
+  display: contents;
+}
+
+/* Above the screen's frame rules: the edge rows stay out of the screen's layout. */
+.pt-split-frame .pt-split-edge {
+  display: none;
 }
 
 /* The page-break corners (below) are print only. */
@@ -2114,8 +2238,18 @@ body[class~="isDibella"]
     margin-top: calc(-2 * var(--pt-joint-rule, 1px));
   }
 
-  .pt-items[data-pt-totals-split] > tbody:first-of-type > tr:first-child > td {
+  /* The totals' ground and top edge are the table's, in one piece: painted cell by cell, some
+     PDF viewers drew each cell's edge as a faint vertical line in the Total row (user,
+     2026-11-03). */
+  .pt-items[data-pt-totals-split] {
     box-shadow: inset 0 var(--pt-joint-rule, 1px) 0 var(--pt-line);
+  }
+
+  .pt-items[data-pt-totals-split] > :is(thead, tbody, tfoot),
+  .pt-items[data-pt-totals-split] > :is(thead, tbody, tfoot) > tr,
+  .pt-items[data-pt-totals-split] > tbody > tr > td {
+    background: none;
+    box-shadow: none;
   }
 
   .pt-items td.is-joint-row {

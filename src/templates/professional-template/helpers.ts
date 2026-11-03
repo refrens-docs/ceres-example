@@ -4469,6 +4469,7 @@ export const buildProfessionalView = (root: unknown) => {
      */
     ownSignatureNote:
       visibility.footerOnLastPage &&
+      Boolean(visibility.letterHeadOnFirstPage) &&
       !options.pageless &&
       ["", "NONE"].includes(text(invoice.signatureMethod).toUpperCase()) &&
       !text(invoice.signature) &&
@@ -4725,8 +4726,26 @@ let preparingBrowserPrint = false;
  * (prepareBrowserPrint) stays as it is. Measured in the cut layout, the filler came out a page
  * break too tall (the E-commerce template, 2026-11-01).
  */
+// The browser's own side margins against the ones a browser print is laid out for, either way.
+const BROWSER_WIDTH_SLACK = 24;
+
 const keepPreparedStretch = (): boolean =>
   browserPrinting && !preparingBrowserPrint;
+
+/*
+ * A browser's own print laid out at one width (prepareBrowserPrint, data-pt-prepared-width)
+ * and printing at another: its dialog turned the paper.
+ */
+const pageTurned = (): boolean => {
+  const doc = document.querySelector<HTMLElement>(".pt-doc");
+  const prepared = Number(doc?.dataset.ptPreparedWidth);
+  return (
+    Boolean(doc) &&
+    prepared > 0 &&
+    Math.abs((doc as HTMLElement).getBoundingClientRect().width - prepared) >
+      BROWSER_WIDTH_SLACK
+  );
+};
 
 /*
  * The totals carry on without the item headings (user, 2026-10-19): in print, the rows after
@@ -4908,6 +4927,34 @@ const alignTotalsColumns = (
   body.remove();
 };
 
+/*
+ * A browser's own print may turn the paper (its dialog's Layout), after the page was laid out
+ * for the document's own orientation (user, 2026-11-03: landscape kept the portrait width, the
+ * sides left empty): the two tables' columns are shares of their width, which is the frame's,
+ * so they widen with the page and keep lined up. Never narrower than they were laid out: a
+ * table wider than its frame is still cut at the page's edge there, whole on a wider page.
+ */
+const proportionalColumns = (
+  table: HTMLTableElement,
+  split: HTMLTableElement
+): void => {
+  const width = parseFloat(table.style.width) || 0;
+  if (!(width > 0)) return;
+  [table, split].forEach((each) => {
+    each
+      .querySelectorAll<HTMLTableColElement>(
+        `:scope > colgroup[${TOTALS_SPLIT}] > col, :scope > colgroup > col`
+      )
+      .forEach((col) => {
+        const px = parseFloat(col.style.width);
+        // eslint-disable-next-line no-param-reassign
+        if (px > 0) col.style.width = `${(px / width) * 100}%`;
+      });
+    // eslint-disable-next-line no-param-reassign
+    each.style.width = `max(100%, ${width}px)`;
+  });
+};
+
 export const splitTotals = (root: ParentNode = document): void => {
   joinTotals(root);
   const printing =
@@ -4959,6 +5006,8 @@ export const splitTotals = (root: ParentNode = document): void => {
     groups.forEach((group) => split.appendChild(group));
     table.after(split);
     alignTotalsColumns(row, split, cols);
+    if (table.closest(".pt-doc.is-browser-print"))
+      proportionalColumns(table, split);
     markJointCorners(table, split);
   });
 };
@@ -5215,6 +5264,8 @@ export const prepareBrowserPrint = (
   ).map((table) => [table, table.className] as const);
   fitted.forEach(([table]) => table.classList.remove("is-cards", "is-grid"));
   const docWidth = doc.style.width;
+  // The page fills the paper's width, whichever way the print dialog turns it (styles.css).
+  doc.classList.add("is-browser-print");
   // The page's vh, not the window's: a print rule sized by the page's height (the item photos'
   // cap) measured in a short window left the table unfitted, and the page count one too many
   // (a blank last page on Legal, 2026-10-28).
@@ -5234,6 +5285,7 @@ export const prepareBrowserPrint = (
         } finally {
           preparingBrowserPrint = false;
         }
+        doc.dataset.ptPreparedWidth = String(doc.getBoundingClientRect().width);
       });
     })
   );
@@ -5612,7 +5664,20 @@ const flowUnits = (
         continue;
       }
       if (row.length > 1) {
-        push({ top: box(child).top, bottom: rowBottom }, join, row);
+        // Cards side by side that may split between their lines (the party, shipping and
+        // transport cards in print): a page break may cut the row too.
+        const breakable = row.every(
+          (el) => !avoids(getComputedStyle(el).breakInside)
+        );
+        push(
+          {
+            top: box(child).top,
+            bottom: rowBottom,
+            ...(breakable ? { fluid: true, line: lineOf(style) } : {}),
+          },
+          join,
+          row
+        );
         if (row.some((el) => el.contains(filler))) anchor = units.length - 1;
       } else if (child instanceof HTMLTableElement) {
         table(child, join);
@@ -5755,8 +5820,16 @@ export const stretchPrintRules = (
   anchor: number,
   layout: Omit<FlowLayout, "page">,
   zoom: number,
-  slack: number
+  slack: number,
+  // Only on a page this wide (CSS px, min and max): laid out at another width (a browser's
+  // print dialog turned the paper), the units' heights are not these.
+  pageWidth?: [number, number]
 ): string => {
+  const widthQuery = pageWidth
+    ? ` and (min-width: ${Math.floor(
+        pageWidth[0]
+      )}px) and (max-width: ${Math.ceil(pageWidth[1])}px)`
+    : "";
   const rules: string[] = [];
   let open: { from: number; to: number; room: FlowLength } | undefined;
   const close = () => {
@@ -5767,7 +5840,7 @@ export const stretchPrintRules = (
     rules.push(
       `@media print and (min-height: ${from}px) and (max-height: ${
         to + 0.999
-      }px) { .pt-doc.is-stretch .pt-items .pt-filler { --pt-filler-height: max(0px, calc(${k} * 100vh / ${compactDecimal(
+      }px)${widthQuery} { .pt-doc.is-stretch .pt-items .pt-filler { --pt-filler-height: max(0px, calc(${k} * 100vh / ${compactDecimal(
         zoom
       )} ${c < 0 ? "-" : "+"} ${Math.abs(c)}px)); } }`
     );
@@ -5863,8 +5936,30 @@ export const stretchItemTable = (root: ParentNode = document): void => {
     style.id = STRETCH_STYLE_ID;
     document.head.appendChild(style);
   }
+  /*
+   * A browser's own print was laid out at the document's own orientation (prepareBrowserPrint):
+   * the stretch holds on a page of that width only, give or take the browser's margins; turned,
+   * the table is left as it is (as the E-commerce template, 60f1e76).
+   */
+  const laid = doc.classList.contains("is-browser-print")
+    ? doc.getBoundingClientRect().width
+    : 0;
+  const pageWidth: [number, number] | undefined =
+    laid > 0
+      ? [
+          (laid / htmlZoom - BROWSER_WIDTH_SLACK) * htmlZoom,
+          (laid / htmlZoom + BROWSER_WIDTH_SLACK) * htmlZoom,
+        ]
+      : undefined;
   const css = flow
-    ? stretchPrintRules(flow.units, flow.anchor, flow.layout, zoom, slack)
+    ? stretchPrintRules(
+        flow.units,
+        flow.anchor,
+        flow.layout,
+        zoom,
+        slack,
+        pageWidth
+      )
     : "";
   if (style.textContent !== css) style.textContent = css;
 };
@@ -6279,8 +6374,13 @@ export const registerProfessionalPrint = (): void => {
     if (!keepPreparedStretch()) {
       document.querySelector(".pt-doc")?.classList.remove("is-filled");
     }
-    joinTotals();
-    splitTotals();
+    // A browser's own print counted its pages from the prepared layout (prepareBrowserPrint):
+    // on a page its dialog turned, the totals laid out again at that width came out shorter
+    // than counted, and the printout ended in blank pages (user, 2026-11-03, landscape).
+    if (!(keepPreparedStretch() && pageTurned())) {
+      joinTotals();
+      splitTotals();
+    }
     stretchItemTable();
   };
   printLayoutHook = () => {
@@ -6310,6 +6410,9 @@ export const registerProfessionalPrint = (): void => {
   });
   window.addEventListener("afterprint", () => {
     browserPrinting = false;
+    document
+      .querySelectorAll(".pt-doc.is-browser-print")
+      .forEach((doc) => doc.classList.remove("is-browser-print"));
     resetFootersOnPageEdge();
     stretchItemTable();
   });
