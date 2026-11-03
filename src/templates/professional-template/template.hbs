@@ -239,8 +239,18 @@
                   {{#each view.table.rows}}
                     {{#if isGroupHeader}}
                       <tr class="pt-group-row{{#if isStripe}} is-stripe{{/if}}" data-testid="group-row">
-                        <td colspan="{{colspan}}">{{name}}</td>
+                        <td colspan="{{colspan}}">
+                          <span class="pt-group-name">{{name}}</span>
+                          {{#if images.length}}{{> CeresImageGallery (prepareImageGallery images variant="thumbnail" alt=name) }}{{/if}}
+                        </td>
                       </tr>
+                      {{#if originalImages.length}}
+                        <tr class="pt-image-row pt-group-image-row{{#if isStripe}} is-stripe{{/if}}" data-testid="group-image-row">
+                          <td colspan="{{colspan}}">
+                            {{#each originalImages}}<img class="pt-large-image" data-testid="large-image" src="{{this}}" alt="{{../name}}" referrerpolicy="no-referrer" />{{/each}}
+                          </td>
+                        </tr>
+                      {{/if}}
                     {{else}}
                       {{#if nameRow}}
                         <tr class="pt-name-row{{#if isStripe}} is-stripe{{/if}}" data-testid="item-name-row" data-item-index="{{itemIndex}}">

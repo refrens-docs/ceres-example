@@ -262,10 +262,32 @@ describe("Professional Template — render", () => {
     expect(html).not.toMatch(/ceres-subtotal-label" colspan/);
   });
 
+  // User (2026-11-03): a group's images print as an item's do, thumbnails under its name.
+  it("prints a group's images under its name and its original images in a row below", () => {
+    const html = render((invoice) => {
+      // eslint-disable-next-line no-param-reassign
+      invoice.items = [
+        {
+          name: "Pumps",
+          group: true,
+          images: ["https://x.test/g.png"],
+          originalImages: ["https://x.test/big.png"],
+        },
+        { name: "Pump A", quantity: 1, rate: 10, amount: 10, total: 10 },
+      ];
+    });
+    expect(html).toMatch(
+      /pt-group-name">Pumps<\/span>[\s\S]*?ceres-image-gallery-thumbnail[\s\S]*?g\.png/
+    );
+    expect(html).toMatch(
+      /pt-group-image-row[\s\S]*?class="pt-large-image"[^>]*big\.png/
+    );
+  });
+
   it("prints group names as entered and numbers their items 1., 2.… from 1 again, as refrens.com", () => {
     const html = render();
     const groups = Array.from(
-      html.matchAll(/pt-group-row[^>]*>\s*<td colspan="\d+">([^<]+)</g),
+      html.matchAll(/class="pt-group-name">([^<]+)</g),
       (m) => m[1]
     );
     expect(groups).toEqual(["OUTDOOR UNITS", "INDOOR UNITS", "REFNET JOINT"]);

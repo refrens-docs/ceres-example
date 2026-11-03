@@ -2958,10 +2958,15 @@ export const mapItemTable = (
       if (item.group === true) {
         serial = 0;
         stripeIndex += 1;
+        // A group carries images of its own, as an item does (the line item editor's "Upload
+        // Image" on a group; user, 2026-11-03, as refrens.com's Modern template): images[] as
+        // thumbnails under its name, originalImages[] in a full-width row below it.
         return {
           isGroupHeader: true,
           isStripe: stripeIndex % 2 === 1,
           name: groupName(text(item.name)),
+          images: imageList(item.images),
+          originalImages: imageList(item.originalImages),
           colspan,
         };
       }
