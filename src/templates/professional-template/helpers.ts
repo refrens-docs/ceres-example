@@ -4850,6 +4850,11 @@ export const joinTotals = (root: ParentNode = document): void => {
         );
         marker.remove();
       }
+      if (table instanceof HTMLTableElement) {
+        table.querySelector(`:scope > colgroup[${TOTALS_SPLIT}]`)?.remove();
+        table.style.removeProperty("table-layout");
+        table.style.removeProperty("width");
+      }
       split.remove();
     });
 };
@@ -4933,6 +4938,14 @@ export const splitTotals = (root: ParentNode = document): void => {
       cols.appendChild(col);
     });
     split.appendChild(cols);
+    // The item table keeps the columns it had with the totals in it: without them it narrowed
+    // a column to its items' figures, and the Total row's wider figure, held to that column,
+    // was cut off at the page edge (user, 2026-11-03, INVPD-4323343423 landscape).
+    const keep = cols.cloneNode(true) as HTMLTableColElement;
+    keep.setAttribute(TOTALS_SPLIT, "");
+    table.insertBefore(keep, table.firstChild);
+    table.style.tableLayout = "fixed";
+    table.style.width = `${table.offsetWidth}px`;
     groups[0].before(document.createComment(TOTALS_SPLIT));
     groups.forEach((group) => split.appendChild(group));
     table.after(split);
