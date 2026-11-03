@@ -2086,8 +2086,13 @@ body[class~="isDibella"]
 
   /* One solid ground under the totals: painted cell by cell, the hairline seams between their
      empty cells let the stretch column rules (columnRules) show through. */
+
+  /* In the Total row's tint, with the table's rounded foot: the hairline seams between its cells
+     (fractional column widths) showed the paper as vertical lines (user, 2026-11-03). */
   .pt-items[data-pt-totals-split] {
-    background-color: var(--pt-paper);
+    border-end-start-radius: 8px;
+    border-end-end-radius: 8px;
+    background-color: var(--pt-zebra);
   }
 
   /* The rule where the items meet the totals is the totals' own top edge: laid a pixel over the
