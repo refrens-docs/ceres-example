@@ -2043,7 +2043,7 @@ describe("Professional Template — review round 6 (2026-10-24)", () => {
       /\.pt-items > \.pt-items-corners \{\s*display: table-footer-group;/
     );
     expect(css()).toMatch(
-      /\.pt-items thead th:first-child \{\s*border-start-start-radius: 8px;/
+      /\.pt-items > thead > tr > th:first-child \{\s*border-start-start-radius: 8px;/
     );
     // The items' last row stays square where the split-off totals follow.
     expect(css()).toMatch(
@@ -2179,7 +2179,7 @@ describe("Professional Template — review round 5 (2026-10-24)", () => {
     expect(rule("\\.pt-party-address")).toMatch(/font-weight: 400;/);
     expect(rule("\\.pt-item-name")).toMatch(/font-weight: 500;/);
     expect(rule("\\.pt-item-codes")).toMatch(/color: var\(--pt-code\);/);
-    expect(rule("\\.pt-items thead th")).toMatch(/font-weight: 500;/);
+    expect(rule("\\.pt-items > thead > tr > th")).toMatch(/font-weight: 500;/);
     expect(rule("\\.pt-widget-table \\.ceres-table thead th")).toMatch(
       /font-weight: 500;/
     );

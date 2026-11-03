@@ -720,11 +720,11 @@
 
 /* The fill on the row, not on each heading: cell by cell, columns with fractional widths left
    hairline seams between the headings. */
-.pt-items thead tr {
+.pt-items > thead > tr {
   background: var(--pt-accent);
 }
 
-.pt-items thead th {
+.pt-items > thead > tr > th {
   background: none;
   color: var(--pt-on-accent);
   font-family: var(--pt-label-font);
@@ -749,7 +749,7 @@
   overflow-wrap: break-word;
 }
 
-.pt-items thead th.pt-col-name {
+.pt-items > thead > tr > th.pt-col-name {
   text-align: start;
 }
 
@@ -1189,25 +1189,26 @@
 .pt-signature {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   text-align: center;
   letter-spacing: -0.25px;
 }
 
+/* As refrens.com's own Professional template signs (user, 2026-11-03): on the paper, no panel,
+   centred, up to 110 px tall and 220 px wide in proportion (8.5 times the text there), the
+   name under it. */
 .pt-signature-mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 60px;
-  background: var(--pt-fill);
 }
 
-/* A signature scanned on white sits on the panel without a white box. */
 .pt-signature-mark .pt-signature-image {
   display: block;
-  mix-blend-mode: multiply;
-  max-width: 100%;
-  max-height: 60px;
+  width: auto;
+  max-width: min(220px, 100%);
+  height: auto;
+  max-height: 110px;
   object-fit: contain;
 }
 
@@ -1573,7 +1574,7 @@
   }
 
   /* Column headings repeat on every page a table spans; its totals print once, at the end. */
-  .pt-items thead,
+  .pt-items > thead,
   .pt-widget-table .ceres-table thead {
     display: table-header-group;
   }
@@ -2000,24 +2001,24 @@ body[class~="isDibella"]
  * table with their own.
  */
 @media print {
-  .pt-items thead tr {
+  .pt-items > thead > tr {
     background: none;
   }
 
   /* Cell by cell; each heading overlaps the next by a pixel, so no hairline seam shows. */
-  .pt-items thead th {
+  .pt-items > thead > tr > th {
     background: var(--pt-accent);
   }
 
-  .pt-items thead th:not(:last-child) {
+  .pt-items > thead > tr > th:not(:last-child) {
     box-shadow: 1px 0 0 var(--pt-accent);
   }
 
-  .pt-items thead th:first-child {
+  .pt-items > thead > tr > th:first-child {
     border-start-start-radius: 8px;
   }
 
-  .pt-items thead th:last-child {
+  .pt-items > thead > tr > th:last-child {
     border-start-end-radius: 8px;
   }
 

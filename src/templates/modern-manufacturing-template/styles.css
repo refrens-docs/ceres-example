@@ -783,11 +783,11 @@
 }
 
 /* The header's top corners follow the table's 6 px radius (no top border inside them). */
-.mm-items thead th:first-child {
+.mm-items > thead > tr > th:first-child {
   border-start-start-radius: 6px;
 }
 
-.mm-items thead th:last-child {
+.mm-items > thead > tr > th:last-child {
   border-inline-end: 0;
   border-start-end-radius: 6px;
 }
@@ -1941,10 +1941,14 @@
   margin-bottom: 8px;
 }
 
+/* As refrens.com's own Professional template signs (user, 2026-11-03): up to 110 px tall and
+   220 px wide in proportion; a wide signature no longer shrinks into a 100 px square. */
 .mm-signature-image {
   display: block;
-  width: 100px;
-  height: 100px;
+  width: auto;
+  max-width: min(220px, 100%);
+  height: auto;
+  max-height: 110px;
   object-fit: contain;
 }
 
