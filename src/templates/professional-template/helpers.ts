@@ -4744,7 +4744,7 @@ const TOTALS_GROUPS = ":scope > tbody.pt-items-total";
  * curve. Read off the layout, as a description or a name row's serial cell may be the one at
  * the edge.
  */
-const JOINT_CLASSES = ["is-joint-left", "is-joint-right"];
+const JOINT_CLASSES = ["is-joint-left", "is-joint-right", "is-joint-row"];
 
 const clearJointCorners = (root: ParentNode): void => {
   root
@@ -4773,8 +4773,15 @@ const markJointCorners = (
   table: HTMLTableElement,
   totals: HTMLTableElement
 ): void => {
-  // The totals' first row, under the joint: the corner's last pixel row is drawn in its ground.
-  const below = groundOf(totals.tBodies[0]?.rows[0]?.cells[0] ?? null);
+  /*
+   * The corner pieces hang from the totals' table (styles.css), at its top corners, which are
+   * the item table's bottom corners: no cell's border width to read (Chrome 122 under the print
+   * zoom misread them, and the left piece sat a pixel inside the table's edge, user
+   * 2026-11-03). Their ground is the item table's last row's.
+   */
+  totals.classList.remove(...JOINT_CLASSES);
+  totals.style.removeProperty("--pt-joint-bg");
+  totals.style.removeProperty("--pt-joint-rule");
   const cells = Array.from(table.tBodies)
     .flatMap((body) => Array.from(body.rows))
     .flatMap((row) => Array.from(row.cells))
@@ -4785,35 +4792,37 @@ const markJointCorners = (
   const last = cells.filter(({ box }) => bottom - box.bottom < 1.5);
   // On a tie the later row wins: a stretched table's filler (or a Sub total under it) ends the
   // table even while the page rules have not given the filler its height yet.
+  // The totals' top edge is the one line where the two meet: the item table's last row draws
+  // none (laid a hair apart in print, the two rules showed as a doubled line, 2026-11-03).
+  last.forEach(({ cell }) => cell.classList.add("is-joint-row"));
   const left = last.reduce((a, b) => (b.box.left <= a.box.left ? b : a));
-  const right = last.reduce((a, b) => (b.box.right >= a.box.right ? b : a));
+  const ground = groundOf(left.cell);
+  if (ground) totals.style.setProperty("--pt-joint-bg", ground);
+  // The item table's bottom rule as it is drawn (the print zoom makes it a fraction of a pixel):
+  // the totals overlap it by exactly that and draw it again, so the two meet on one line
+  // whether they follow on the same page or start the next one (user, 2026-11-03).
+  const rule = Math.max(
+    0,
+    ...last.map(
+      ({ cell }) => parseFloat(getComputedStyle(cell).borderBottomWidth) || 0
+    )
+  );
+  // Chrome draws a rule no thinner than one device pixel: under the print zoom that is more than
+  // a pixel of the document's own (the rule printed 0.75 pt where 0.625 px gave 0.24 pt).
+  const zoom =
+    left.box.width /
+      ((left.cell as HTMLElement).offsetWidth || left.box.width || 1) || 1;
+  totals.style.setProperty(
+    "--pt-joint-rule",
+    `${compactDecimal(Math.max(rule || 1, 1 / zoom))}px`
+  );
   // A table too wide for the page is cut off at its box (user, 2026-11-01): a corner past that
-  // edge is not on the paper, and Chrome 122 let its mark escape the cut, so the PDF service
+  // edge is not on the paper, and Chrome 122 let such a mark escape the cut, so the PDF service
   // shrank the whole page to show it (2026-11-01: 13 px text printed at 9.9 px).
   const room = (table.parentElement ?? table).getBoundingClientRect();
-  const onPaper = ({ box }: { box: DOMRect }) =>
-    box.left >= room.left - 1 && box.right <= room.right + 1;
-  (
-    [
-      [left, "is-joint-left", "borderLeftWidth"],
-      [right, "is-joint-right", "borderRightWidth"],
-    ] as const
-  )
-    .filter(([edge]) => onPaper(edge))
-    .map(([edge, name, side]) => [edge.cell, name, side])
-    .forEach(([cell, name, side]) => {
-      const target = cell as HTMLTableCellElement;
-      const style = getComputedStyle(target);
-      target.classList.add(name as string);
-      const ground = groundOf(target);
-      if (ground) target.style.setProperty("--pt-joint-bg", ground);
-      if (below) target.style.setProperty("--pt-joint-below", below);
-      target.style.setProperty("--pt-joint-bottom", style.borderBottomWidth);
-      target.style.setProperty(
-        "--pt-joint-side",
-        style[side as "borderLeftWidth" | "borderRightWidth"]
-      );
-    });
+  const box = table.getBoundingClientRect();
+  if (box.left >= room.left - 1) totals.classList.add("is-joint-left");
+  if (box.right <= room.right + 1) totals.classList.add("is-joint-right");
 };
 
 /*

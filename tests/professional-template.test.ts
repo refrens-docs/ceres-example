@@ -2049,7 +2049,9 @@ describe("Professional Template — review round 6 (2026-10-24)", () => {
     expect(css()).toMatch(
       /\.pt-items:not\(:has\(\+ \[data-pt-totals-split\]\)\) > tbody:last-of-type/
     );
-    expect(css()).toMatch(/\.pt-items td\.is-joint-left::after \{/);
+    expect(css()).toMatch(
+      /\.pt-items\[data-pt-totals-split\]\.is-joint-left::before \{/
+    );
     expect(css()).not.toMatch(/\.pt-items[^{]*> tbody:last-child/);
   });
 

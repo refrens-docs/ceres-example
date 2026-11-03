@@ -2056,39 +2056,37 @@ body[class~="isDibella"]
     background: radial-gradient(circle at 0 0, transparent 7px, var(--pt-line) 7px 8px, var(--pt-paper) 8px);
   }
 
-  /* The totals follow: the items' last row ends square, drawn over the corner above. */
-  .pt-items td:is(.is-joint-left, .is-joint-right) {
+  /* The totals follow: the items' table ends square, a piece hung from the totals' top corners
+     (helpers.ts markJointCorners) drawn over the curve above: the last row's ground with the
+     table's side rule, down to the rule the two tables share. */
+  .pt-items[data-pt-totals-split] {
     position: relative;
   }
 
-  .pt-items td:is(.is-joint-left, .is-joint-right)::after {
+  .pt-items[data-pt-totals-split]:is(.is-joint-left, .is-joint-right)::before,
+  .pt-items[data-pt-totals-split].is-joint-right::after {
     position: absolute;
     z-index: 1;
-    bottom: calc(-1 * var(--pt-joint-bottom, 1px) - 1px);
+    top: -9px;
     box-sizing: border-box;
     width: 9px;
-    height: 10px;
+    height: 9px;
     border: 0 solid var(--pt-line);
-
-    /* The row's ground, the rule under it, then the totals' first pixel row (the corner reaches
-       a pixel past the table). */
-    background: linear-gradient(
-      var(--pt-joint-bg, var(--pt-paper)) 0 8px,
-      var(--pt-line) 8px 9px,
-      var(--pt-joint-below, var(--pt-paper)) 9px
-    );
-    content: "";
+    background: var(--pt-joint-bg, var(--pt-paper));
+    content: none;
     pointer-events: none;
   }
 
-  .pt-items td.is-joint-left::after {
-    left: calc(-1 * var(--pt-joint-side, 1px));
-    border-width: 0 0 0 1px; /* the table's left edge, whatever the direction */
+  .pt-items[data-pt-totals-split].is-joint-left::before {
+    left: 0;
+    border-width: 0 0 0 1px;
+    content: "";
   }
 
-  .pt-items td.is-joint-right::after {
-    right: calc(-1 * var(--pt-joint-side, 1px));
+  .pt-items[data-pt-totals-split].is-joint-right::after {
+    right: 0;
     border-width: 0 1px 0 0;
+    content: "";
   }
 }
 
@@ -2098,8 +2096,26 @@ body[class~="isDibella"]
  * the two meet on a single line.
  */
 @media print {
+  /* Over the item table's bottom rule by exactly its width, drawing it again as their own top
+     edge (helpers.ts markJointCorners measures it): one line where they meet, and a top edge
+     when the totals start a page. Overlapping by a fixed pixel left the rule covered at one print
+     size and doubled at another (user, 2026-11-03). */
   .pt-items[data-pt-totals-split] {
-    margin-top: calc(-1 * 1px);
+    margin-top: calc(-1 * var(--pt-joint-rule, 1px));
+  }
+
+  .pt-items[data-pt-totals-split] > tbody:first-of-type > tr:first-child > td {
+    box-shadow: inset 0 var(--pt-joint-rule, 1px) 0 var(--pt-line);
+  }
+
+  .pt-items td.is-joint-row {
+    border-bottom-color: transparent;
+  }
+
+  /* Nor does the page-break corner row's rule, which falls on the same spot on the last piece
+     (each page's foot keeps the wrapper's rule). */
+  .pt-items:has(+ table[data-pt-totals-split]) > .pt-items-corners td {
+    box-shadow: none;
   }
 
   /* One solid ground under the totals: painted cell by cell, the hairline seams between their
@@ -2113,18 +2129,6 @@ body[class~="isDibella"]
     background-color: var(--pt-zebra);
   }
 
-  /* The rule where the items meet the totals is the totals' own top edge: laid a pixel over the
-     items, their tinted row painted out the items' bottom rule, and only the corner pieces at
-     either end were left (user, 2026-11-02: "border cut"). */
-  .pt-items[data-pt-totals-split] > tbody:first-of-type > tr:first-child > td {
-    box-shadow: inset 0 1px 0 var(--pt-line);
-  }
-
-  .pt-items[data-pt-totals-split] > tbody:first-of-type > tr:first-child > td:not(:last-child) {
-    box-shadow:
-      inset 0 1px 0 var(--pt-line),
-      1px 0 0 var(--pt-zebra);
-  }
 }
 
 /* ------------------------------------------------------------ phones and tablets */

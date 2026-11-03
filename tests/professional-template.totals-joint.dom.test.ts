@@ -46,25 +46,35 @@ const mount = (edges: Array<[number, number]>) => {
 describe("Professional Template — the totals' joint on a cut-off table", () => {
   it("marks both square corners when the table fits its box", () => {
     printing();
-    const row = mount([
+    mount([
       [0, 300],
       [300, 714],
     ]);
+    const table = document.querySelector(".pt-items") as HTMLElement;
+    table.getBoundingClientRect = () => rect(0, 714);
     splitTotals();
-    expect(row.cells[0].classList.contains("is-joint-left")).toBe(true);
-    expect(row.cells[1].classList.contains("is-joint-right")).toBe(true);
+    const split = document.querySelector(
+      "table[data-pt-totals-split]"
+    ) as HTMLElement;
+    expect(split.classList.contains("is-joint-left")).toBe(true);
+    expect(split.classList.contains("is-joint-right")).toBe(true);
   });
 
   // User (2026-11-01): a wide table is cut off at the page edge, never shrunk. Chrome 122 let
   // the corner mark past that edge escape the cut and shrank the whole PDF page to show it.
   it("leaves out the corner that falls past the page edge", () => {
     printing();
-    const row = mount([
+    mount([
       [0, 500],
       [500, 954],
     ]);
+    const table = document.querySelector(".pt-items") as HTMLElement;
+    table.getBoundingClientRect = () => rect(0, 954);
     splitTotals();
-    expect(row.cells[0].classList.contains("is-joint-left")).toBe(true);
-    expect(row.cells[1].classList.contains("is-joint-right")).toBe(false);
+    const split = document.querySelector(
+      "table[data-pt-totals-split]"
+    ) as HTMLElement;
+    expect(split.classList.contains("is-joint-left")).toBe(true);
+    expect(split.classList.contains("is-joint-right")).toBe(false);
   });
 });
