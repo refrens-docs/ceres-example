@@ -134,7 +134,9 @@
   display: none;
 }
 
-/* The page margin rows of a browser's own print only (print rules below). */
+/* The page margin rows of a browser's own print only (print rules below); the signature note
+   in Refrens' PDF only. */
+.pt-page-frame > * > tr.pt-signature-note,
 .pt-page-frame > * > tr.pt-page-margin,
 .pt-page-frame > * > tr.pt-stamp-room {
   display: none;
@@ -1805,6 +1807,22 @@
 
   .pt-page-frame > * > tr.pt-stamp-room.is-bottom > td {
     height: var(--pt-stamp-bottom, 0);
+  }
+
+  /* The PDF service's own "electronically generated" line, as it prints it on Refrens'
+     templates: centred at the foot of every page, at the template's smallest size, 10 px
+     (helpers.ts ownSignatureNote). */
+  body[class~="isDibella"] .pt-doc:not(.is-pageless) .pt-page-frame > * > tr.pt-signature-note {
+    display: table-row;
+  }
+
+  .pt-page-frame > * > tr.pt-signature-note > td > p {
+    margin: 0;
+    padding-top: 12px;
+    color: var(--pt-ink);
+    font-size: calc(10px * var(--pt-text-scale, 1));
+    line-height: 1.4;
+    text-align: center;
   }
 
   /* The stamped letterhead and footer reach into the page area there: the document's white

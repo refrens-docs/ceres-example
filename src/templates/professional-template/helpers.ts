@@ -4459,6 +4459,24 @@ export const buildProfessionalView = (root: unknown) => {
         asRecord(state.template).hideFooter,
         invoice.hideFooter,
       ].some((value) => optionalFlag(value) === true),
+    /*
+     * "This is an electronically generated document, no signature is required." Refrens' PDF
+     * service prints it at the foot of every page of an unsigned document, in its own page
+     * footer; with the footer on the last page only it leaves that footer out for a custom
+     * template, the line with it (user, 2026-11-03), while its own templates keep the line on
+     * every page. The template prints it then, in the PDF's pages (not a Long PDF, where the
+     * service still prints it); "Hide footer" drops it, as it does Refrens' own.
+     */
+    ownSignatureNote:
+      visibility.footerOnLastPage &&
+      !options.pageless &&
+      ["", "NONE"].includes(text(invoice.signatureMethod).toUpperCase()) &&
+      !text(invoice.signature) &&
+      ![
+        asRecord(state.pdfOptions).hideFooter,
+        asRecord(state.template).hideFooter,
+        invoice.hideFooter,
+      ].some((value) => optionalFlag(value) === true),
     // The letterhead repeats at the top of every printed page unless the document asks for
     // it on the first page only (pdfOptions.letterHeadOnFirstPage).
     letterheadEveryPage: !visibility.letterHeadOnFirstPage && !options.pageless,

@@ -70,6 +70,9 @@
         </tr>
         <tr class="pt-stamp-room is-bottom" aria-hidden="true"><td></td></tr>
       {{/if}}
+      {{#if view.ownSignatureNote}}
+        <tr class="pt-signature-note"><td><p>This is an electronically generated document, no signature is required.</p></td></tr>
+      {{/if}}
       <tr class="pt-page-margin" aria-hidden="true"><td></td></tr>
     </tfoot>
     <tbody>

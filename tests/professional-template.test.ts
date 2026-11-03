@@ -262,6 +262,39 @@ describe("Professional Template — render", () => {
     expect(html).not.toMatch(/ceres-subtotal-label" colspan/);
   });
 
+  // User (2026-11-03): with the footer on the last page only, the PDF service leaves out its
+  // "electronically generated" line for a custom template; the template prints it then.
+  it("prints the electronically generated line for an unsigned document with the footer on the last page", () => {
+    const note = (edit: (invoice: Json) => void) =>
+      render((invoice) => {
+        // eslint-disable-next-line no-param-reassign
+        invoice.signatureMethod = "NONE";
+        // eslint-disable-next-line no-param-reassign
+        invoice.signature = null;
+        // eslint-disable-next-line no-param-reassign
+        invoice.template = {
+          ...((invoice.template as Json) || {}),
+          pdfOptions: { footerOnLastPage: true, letterHeadOnFirstPage: true },
+        };
+        edit(invoice);
+      }).includes("pt-signature-note");
+    expect(note(() => undefined)).toBe(true);
+    expect(
+      note((invoice) => {
+        // eslint-disable-next-line no-param-reassign
+        invoice.signatureMethod = "SIMPLE";
+        // eslint-disable-next-line no-param-reassign
+        invoice.signature = "https://x.test/s.png";
+      })
+    ).toBe(false);
+    expect(
+      note((invoice) => {
+        // eslint-disable-next-line no-param-reassign
+        (invoice.template as Json).pdfOptions = { footerOnLastPage: false };
+      })
+    ).toBe(false);
+  });
+
   // User (2026-11-03): a group's images print as an item's do, thumbnails under its name.
   it("prints a group's images under its name and its original images in a row below", () => {
     const html = render((invoice) => {
