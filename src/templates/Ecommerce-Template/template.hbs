@@ -15,7 +15,7 @@
   update targets.
 --}}
 {{#with (ecView @root) as |view|}}
-<div class="ec-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" data-ec-currency="{{@root.invoice.currency}}" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--ec-doc-text-scale: {{view.print.textScale}}; --ec-side-margin: {{view.print.sideMargin}}; --ec-margin-share: {{view.print.marginShare}}; --ec-print-width: {{view.print.printWidth}}px; --ec-browser-print-width: {{view.print.browserPrintWidth}}px; --ec-browser-turned-width: {{view.print.browserTurnedWidth}}px; --ec-print-zoom: {{view.print.printZoom}};{{#if view.theme}} --ec-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --ec-script-font: {{{view.script.font}}};{{/if}}">
+<div class="ec-doc{{#if view.print.stretchTable}} is-stretch{{/if}}{{#if view.pageless}} is-pageless{{/if}}" data-testid="invoice-root" data-ec-currency="{{@root.invoice.currency}}" dir="{{view.script.dir}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}}{{#if view.script.script}} data-ceres-script="{{view.script.script}}"{{/if}} style="--ec-doc-text-scale: {{view.print.textScale}}; --ec-side-margin: {{view.print.sideMargin}}; --ec-margin-share: {{view.print.marginShare}}; --ec-print-width: {{view.print.printWidth}}px; --ec-browser-print-width: {{view.print.browserPrintWidth}}px; --ec-browser-turned-width: {{view.print.browserTurnedWidth}}px; --ec-print-zoom: {{view.print.printZoom}}; --ec-stamp-width: {{view.print.stampWidth}}px;{{#if view.theme}} --ec-theme: {{view.theme.accent}};{{/if}}{{#if view.script.font}} --ec-script-font: {{{view.script.font}}};{{/if}}">
   {{!-- Text Scale Smaller (0.8, also unset): Refrens' renderer leaves the page unzoomed then, so the template zooms it (helpers.ts mapPrint ownPrintZoom). --}}
   {{#if view.print.ownPrintZoom}}<style>@media print { :where(html) { zoom: {{view.print.ownPrintZoom}}; } }</style>{{/if}}
   {{!-- The Language/Script setting's font, for the glyphs Inter lacks. --}}
@@ -45,6 +45,9 @@
            prepareBrowserPrint). Hidden otherwise. --}}
       <tr class="ec-page-margin" aria-hidden="true"><td></td></tr>
     {{#if view.letterheadEveryPage}}
+        {{!-- What the PDF service's stamped letterhead takes past its margin on a page wider than
+             A4 portrait: a hidden copy of it, view.print.stampWidth wide (styles.css). --}}
+        {{#if @root.invoice.letterHead}}<tr class="ec-stamp-room is-top" aria-hidden="true"><td><img class="ec-stamp-image" src="{{@root.invoice.letterHead}}" alt="" /></td></tr>{{/if}}
         <tr>
           <td>
             <div class="no-dibella invoice-letterhead ec-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}" data-ceres-page-header data-ceres-page-policy="all">
@@ -72,6 +75,10 @@
             </div>
           </td>
         </tr>
+        {{#if view.serviceFooter}}{{#if @root.invoice.letterHeadFooter}}<tr class="ec-stamp-room is-bottom" aria-hidden="true"><td><img class="ec-stamp-image" src="{{@root.invoice.letterHeadFooter}}" alt="" /></td></tr>{{/if}}{{/if}}
+    {{/if}}
+    {{#if view.ownSignatureNote}}
+        <tr class="ec-signature-note"><td><p>This is an electronically generated document, no signature is required.</p></td></tr>
     {{/if}}
       <tr class="ec-page-margin" aria-hidden="true"><td></td></tr>
     </tfoot>

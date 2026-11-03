@@ -3772,6 +3772,16 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
     ),
     compactTable,
     /*
+     * Refrens' PDF service stamps an every-page letterhead and footer image as wide as an A4
+     * portrait page, then as wide as the paper on a wider one (landscape, A3), where it reaches
+     * past its margin into the page (user, 2026-11-03, as the Professional template): a hidden
+     * copy of the image this wide (CSS px under the print zoom) is as tall as that reach
+     * (template.hbs ec-stamp-room).
+     */
+    stampWidth: compactDecimal(
+      Math.max(0, ((paperMm - PAPER_WIDTH_MM.a4) / 25.4) * 96) / rendererZoom
+    ),
+    /*
      * The item table always runs down to the foot of every page it prints on (helpers.ts
      * stretchItemTable), whatever the business's "Stretch invoice & quotation tables" toggle
      * and the document's fullHeightTable say (user, 2 Nov 2026: "bina toggle ke enable kardo").
@@ -4394,6 +4404,21 @@ export const buildEcommerceView = (root: unknown) => {
     // off; the letterhead footer stays, so the template then draws it in the PDF (as Viraj).
     serviceFooter: !visibility.footerOnLastPage && !hidesServiceFooter(state),
     letterheadEveryPage: !visibility.letterHeadOnFirstPage,
+    /*
+     * "This is an electronically generated document, no signature is required." Refrens' PDF
+     * service prints it at the foot of every page of an unsigned document, in its own page
+     * footer, which it leaves out for a custom template when it stamps no band at all
+     * (letterhead on the first page and footer on the last page only; with an every-page
+     * letterhead it draws its band and the line in it: two lines, user 2026-11-03) (user, 2026-11-03, as the Professional template): the template prints it then (not
+     * on a Long PDF, where the service still prints it); "Hide footer" drops it.
+     */
+    ownSignatureNote:
+      Boolean(visibility.footerOnLastPage) &&
+      Boolean(visibility.letterHeadOnFirstPage) &&
+      !options.pageless &&
+      ["", "NONE"].includes(text(invoice.signatureMethod).toUpperCase()) &&
+      !text(invoice.signature) &&
+      !hidesServiceFooter(state),
     pageless: options.pageless,
     // A Long PDF is one page as tall as its content: there is no page to stretch the table to.
     print: options.pageless ? { ...print, stretchTable: false } : print,
@@ -4844,6 +4869,10 @@ export const flowFiller = (
   const after = placed
     .slice(anchor + 1)
     .filter((unit) => unit.page === at.page);
+  // The totals start the next page: no space under the items there, where it printed a piece
+  // of empty table above them (user, 2026-11-03, as the Professional template); the page the
+  // items end on is filled as any other page break (flowBreakFills).
+  if (!after.length && placed.length > anchor + 1) return undefined;
   const best = (after.length ? after : [at])
     .map(room)
     .reduce((least, next) =>
@@ -4868,11 +4897,16 @@ export const flowBreakFills = (
   if (group === undefined) return [];
   const { placed, split } = placeUnits(units, anchor, layout);
   const fills: { unit: number; room: FlowLength }[] = [];
-  for (let at = 0; at < anchor && at + 1 < split; at += 1) {
+  // The last item too, when the totals after it start the next page (flowFiller).
+  for (
+    let at = 0;
+    at <= anchor && at + 1 < split && at + 1 < units.length;
+    at += 1
+  ) {
     const room = roomBelow(placed[at]);
     if (
       units[at].group === group &&
-      units[at + 1].group === group &&
+      (units[at + 1].group === group || at === anchor) &&
       placed[at + 1].page > placed[at].page &&
       flowAt(room, layout.page) > 0
     )
@@ -4919,7 +4953,10 @@ const flowUnits = (
     if (joinPrevious && last) {
       last.bottom = Math.max(last.bottom, unit.bottom);
       last.fluid = Boolean(last.fluid && unit.fluid);
-      if (unit.row) last.row = unit.row;
+      // A Sub total joined to its item never takes the item's place as the row a page's
+      // room lengthens: the summary rows never stretch (user, 2026-11-02).
+      if (unit.row && !unit.row.classList.contains("ec-group-total-row"))
+        last.row = unit.row;
       if (unit.group !== undefined) last.group = unit.group;
       if (images.length) last.images = [...(last.images || []), ...images];
       return;
@@ -5200,6 +5237,17 @@ export const stretchPrintRules = (
   return rules.join("\n");
 };
 
+/*
+ * The summary rows never stretch (user, 2026-11-02): a group's Sub total closing the item list
+ * stays on the Total row side of the space, which goes above it, under the last item.
+ */
+const placeFiller = (filler: HTMLElement): void => {
+  let before: Element | null = filler;
+  while (before?.previousElementSibling?.matches(".ec-group-total-row"))
+    before = before.previousElementSibling;
+  if (before && before !== filler) before.before(filler);
+};
+
 export const stretchItemTable = (
   root: ParentNode = document,
   // Another page width's rules added to the ones in place (prepareBrowserPrint), the items
@@ -5210,6 +5258,7 @@ export const stretchItemTable = (
   const filler = doc?.querySelector<HTMLElement>(".ec-items .ec-filler");
   const frame = doc?.querySelector<HTMLElement>(".ec-page-frame");
   if (!doc || !filler || !frame) return;
+  placeFiller(filler);
   filler.style.removeProperty("--ec-filler-height");
   filler.style.removeProperty("--ec-screen-filler-height");
   doc.classList.remove("is-screen-stretch");
@@ -5832,6 +5881,34 @@ export const loadScriptFonts = (): void => {
     });
 };
 
+/*
+ * The room the PDF service's stamped letterhead and footer take past their margins (styles.css
+ * ec-stamp-room), on the root too: the print watermark keeps between them there (user,
+ * 2026-11-03, as the Professional template). Set again when an image arrives.
+ */
+export const placeStampRoom = (root: ParentNode = document): void => {
+  const doc = root.querySelector<HTMLElement>(".ec-doc");
+  if (!doc || typeof document === "undefined") return;
+  const width = parseFloat(doc.style.getPropertyValue("--ec-stamp-width")) || 0;
+  const room = (selector: string): number => {
+    const img = doc.querySelector<HTMLImageElement>(
+      `tr.ec-stamp-room${selector} .ec-stamp-image`
+    );
+    return img && img.naturalWidth > 0
+      ? (width * img.naturalHeight) / img.naturalWidth
+      : 0;
+  };
+  const top = room(".is-top");
+  const bottom = room(".is-bottom");
+  const page = document.documentElement;
+  page.toggleAttribute("data-ec-stamp-room", top > 0 || bottom > 0);
+  page.style.setProperty("--ec-stamp-page-top", `${compactDecimal(top)}px`);
+  page.style.setProperty(
+    "--ec-stamp-page-bottom",
+    `${compactDecimal(bottom)}px`
+  );
+};
+
 export const registerEcommerceTotalsFit = (): void => {
   const state = window as typeof window & { ecTotalsFitRegistered?: boolean };
   if (state.ecTotalsFitRegistered || typeof document === "undefined") return;
@@ -5882,6 +5959,7 @@ export const registerEcommerceTotalsFit = (): void => {
     fitPrintTable();
     fitTotals();
     splitTotals();
+    placeStampRoom();
     stretchItemTable();
     observer?.takeRecords();
     watch();

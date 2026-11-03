@@ -492,7 +492,7 @@ describe("Ecommerce template — settings and data", () => {
       invoice.letterHeadFooter = "https://example.com/foot.png";
     });
     expect(every).toMatch(
-      /<thead class="ec-page-frame-header">\s*<tr class="ec-page-margin"[^>]*><td><\/td><\/tr>\s*<tr>\s*<td>/
+      /<thead class="ec-page-frame-header">\s*<tr class="ec-page-margin"[^>]*><td><\/td><\/tr>\s*(<tr class="ec-stamp-room is-top"[^>]*>.*?<\/tr>\s*)?<tr>\s*<td>/
     );
     expect(every).toContain("ec-footer-fixed");
     expect(every).toContain('data-ceres-page-policy="all"');

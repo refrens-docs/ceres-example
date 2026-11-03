@@ -181,8 +181,20 @@ describe("Ecommerce template — after the render, in the browser", () => {
         { top: 1316, bottom: 2000 }, // the totals: too tall for page 2's rest, to page 3
       ];
       const room = flowFiller(units, 2, { ...layout, page: 1000 });
-      // Item 2 on page 2 at 1013..1413; page 2 ends at 1999: 586 px left, the totals moved on.
-      expect(room && room.c + room.k * 1000).toBe(586);
+      // Item 2 on page 2 at 1013..1413; the totals move on to page 3: no filler, whose space
+      // printed a piece of empty table above them (user, 2026-11-03).
+      expect(room).toBeUndefined();
+      // The page item 2 ends on is filled as a page break: 586 px under it, to page 2's foot.
+      const grouped = units.map((unit, at) =>
+        at === 1 || at === 2 ? { ...unit, group: 1 } : unit
+      );
+      const fills = flowBreakFills(grouped, 2, { ...layout, page: 1000 });
+      expect(
+        fills.map((fill) => [fill.unit, fill.room.c + fill.room.k * 1000])
+      ).toEqual([
+        [1, 99],
+        [2, 586],
+      ]);
       // A taller page: everything on page 1, the room after the totals.
       const tall = flowFiller(units, 2, { ...layout, page: 2500 });
       expect(tall && tall.c + tall.k * 2500).toBe(499);

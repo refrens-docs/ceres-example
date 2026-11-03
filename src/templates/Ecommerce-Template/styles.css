@@ -1698,6 +1698,80 @@
     .no-dibella:is(.invoice-letterhead, .invoice-letterhead-footer) {
     display: none;
   }
+
+  /*
+   * The PDF service's stamped letterhead and footer, taller than their margins on a page wider
+   * than A4 portrait (landscape, A3): the page keeps that much more room at its top and foot,
+   * a hidden copy of the image as wide as the reach (--ec-stamp-width, helpers.ts mapPrint),
+   * and the document's white ground does not paint over them (user, 2026-11-03).
+   */
+  body[class~="isDibella"] .ec-doc:not(.is-pageless) .ec-page-frame > * > tr.ec-stamp-room {
+    display: table-row;
+  }
+
+  .ec-page-frame > * > tr.ec-stamp-room > td {
+    padding: 0;
+    border: 0;
+  }
+
+  .ec-page-frame > * > tr.ec-stamp-room .ec-stamp-image {
+    display: block;
+    width: var(--ec-stamp-width, 0);
+    max-width: none;
+    height: auto;
+    visibility: hidden;
+  }
+
+  body[class~="isDibella"] .ec-doc {
+    background: transparent;
+  }
+
+  /* The watermark keeps to the room between them (helpers.ts placeStampRoom). */
+  :root[data-ec-stamp-room] body[class~="isDibella"]::after {
+    --ec-mark-room: calc(100% - var(--ec-stamp-page-top, 0px) - var(--ec-stamp-page-bottom, 0px));
+
+    /* A turned watermark reaches further: |cos| + |sin| of its angle (a square one). */
+    --ec-mark-cos: max(cos(var(--watermark-rotate, 0deg)), -1 * cos(var(--watermark-rotate, 0deg)));
+    --ec-mark-sin: max(sin(var(--watermark-rotate, 0deg)), -1 * sin(var(--watermark-rotate, 0deg)));
+    --ec-mark-turn: calc(var(--ec-mark-cos) + var(--ec-mark-sin));
+    --ec-mark-shrink: max(1, calc(var(--watermark-scale, 1) * var(--ec-mark-turn)));
+    --ec-mark-gap: calc((var(--ec-mark-room) - var(--ec-mark-room) / var(--ec-mark-shrink)) / 2);
+
+    top: calc(var(--ec-stamp-page-top, 0px) + var(--ec-mark-gap));
+    height: calc(var(--ec-mark-room) / var(--ec-mark-shrink));
+  }
+
+  /* The PDF service's own "electronically generated" line where it leaves its footer out
+     (footer on the last page only): centred at the foot of every page, 10 px (helpers.ts
+     ownSignatureNote). */
+  body[class~="isDibella"] .ec-doc:not(.is-pageless) .ec-page-frame > * > tr.ec-signature-note {
+    display: table-row;
+  }
+
+  .ec-page-frame > * > tr.ec-signature-note > td {
+    padding: 0;
+    border: 0;
+  }
+
+  .ec-page-frame > * > tr.ec-signature-note > td > p {
+    margin: 0;
+    padding-top: 12px;
+    color: var(--ec-ink);
+    font-size: calc(10px * var(--ec-text-scale, 1));
+    line-height: 1.4;
+    text-align: center;
+  }
+
+  /* A group's Sub total closing the item list stays with the last item: the stretch space goes
+     above it, under the item (user, 2026-11-02: the summary rows never stretch). */
+  .ec-items tr + .ec-group-total-row {
+    break-before: avoid;
+  }
+}
+
+/* The stamp room and the signature note print in Refrens' PDF only (print rules above). */
+.ec-page-frame > * > tr:is(.ec-stamp-room, .ec-signature-note) {
+  display: none;
 }
 
 /*
