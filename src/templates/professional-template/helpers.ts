@@ -4831,6 +4831,46 @@ export const joinTotals = (root: ParentNode = document): void => {
     });
 };
 
+/*
+ * The totals' columns line up with the item columns above them (user, 2026-11-03: the Total
+ * row's figures sat up to 10 pt left of their columns in a landscape PDF). Chrome 122 under the
+ * print zoom does not give the fixed columns exactly the widths set, so each is measured on a
+ * probe row and corrected, twice.
+ */
+const alignTotalsColumns = (
+  row: HTMLTableRowElement,
+  split: HTMLTableElement,
+  cols: HTMLTableColElement
+): void => {
+  const columns = Array.from(cols.children) as HTMLTableColElement[];
+  const target = Array.from(row.cells).map(
+    (cell) => cell.getBoundingClientRect().width
+  );
+  if (columns.length !== target.length || !target.every((w) => w > 0)) return;
+  const body = document.createElement("tbody");
+  const probe = body.insertRow();
+  columns.forEach((col) => {
+    const cell = probe.insertCell();
+    cell.colSpan = col.span || 1;
+    cell.style.cssText = "padding:0;border:0;height:0;";
+  });
+  split.appendChild(body);
+  for (let pass = 0; pass < 2; pass += 1) {
+    const got = Array.from(probe.cells).map(
+      (cell) => cell.getBoundingClientRect().width
+    );
+    if (got.every((w, i) => Math.abs(w - target[i]) < 0.5)) break;
+    columns.forEach((col, i) => {
+      const now = parseFloat(col.style.width) || 0;
+      if (got[i] > 0 && now > 0) {
+        // eslint-disable-next-line no-param-reassign
+        col.style.width = `${(now * target[i]) / got[i]}px`;
+      }
+    });
+  }
+  body.remove();
+};
+
 export const splitTotals = (root: ParentNode = document): void => {
   joinTotals(root);
   const printing =
@@ -4873,6 +4913,7 @@ export const splitTotals = (root: ParentNode = document): void => {
     groups[0].before(document.createComment(TOTALS_SPLIT));
     groups.forEach((group) => split.appendChild(group));
     table.after(split);
+    alignTotalsColumns(row, split, cols);
     markJointCorners(table, split);
   });
 };
