@@ -904,9 +904,10 @@
   text-align: start;
 }
 
-/* 12 px between the name and codes and the item's description. */
+/* 4 px between the name and codes and the item's description, as between the name and its
+   codes (user, 2026-11-02: 12 px read as too much space). */
 .mm-items td[data-col="desc"] .mm-item-detail {
-  margin-top: 12px;
+  margin-top: 4px;
 }
 
 .mm-item-detail > * + * {
@@ -2330,20 +2331,40 @@
     border-bottom-color: var(--mm-table-outline);
   }
 
-  /* A row cut by a page break (an item taller than what is left of the page) closes with a
-     rule at the page's foot, and every page's piece of the table with it (user rule,
-     2026-10-20): the cells' own borders end open there. The items wrapper draws that rule on
-     each page's piece (box-decoration-break: clone); on the last piece the table's own
-     bottom rule lies over it. */
-  .mm-items-scroll {
-    border-bottom: 1px solid var(--mm-table-outline);
+  /*
+   * Every page's piece of the table closes with rounded corners (user rules: 2026-10-20 a piece
+   * closes at the page's foot; 2026-11-02 "at the end curves hone chahiye", a rule alone at the
+   * foot under a short table). A browser's own print draws the outline on the items' wrapper,
+   * repeated on each page's piece (box-decoration-break: clone), sides, foot and rounded
+   * corners, so a row cut by the break closes too; the cells then draw no outline of their own.
+   * Refrens' PDF service (Chrome 122) repeats no block border: there the cells draw it, the
+   * row that ends a page (helpers.ts itemsFillRules) and the table's last row with rounded
+   * bottom corners.
+   */
+  .mm-doc.is-browser-print .mm-items-scroll {
+    border: 1px solid var(--mm-table-outline);
+    border-top: 0;
+    border-radius: 6px;
     /* stylelint-disable-next-line property-no-vendor-prefix -- Chrome before 130 needs it */
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
   }
 
-  .mm-items-scroll > :last-child {
-    margin-bottom: calc(-1 * 1px);
+  .mm-doc.is-browser-print .mm-items tr > :is(th, td):first-child {
+    border-inline-start: 0;
+  }
+
+  .mm-doc.is-browser-print .mm-items tr > :is(th, td):last-child {
+    border-inline-end: 0;
+  }
+
+  .mm-doc.is-browser-print
+    .mm-items-scroll
+    > .mm-items:last-child
+    > :last-child
+    > tr:last-child
+    > td {
+    border-bottom-color: transparent;
   }
 
   /* Boxes and short sections never split across pages; a heading stays with its content. */
@@ -2430,9 +2451,18 @@
   /* Two boxes side by side: the line between them runs through the edges too, from the top
      border to the bottom one on every page (user, 2026-11-02: it stopped short of both). It
      lies on the second box's own line, at the middle of the frame. */
-  .mm-pair.mm-split:not(.is-stacked):has(.mm-pair-box + .mm-pair-box) .mm-split-cap {
+
+  /* The body cell draws it too, not the second box's border: at a page break the box's text
+     ends above the page's bottom edge, and the line stopped with it, a gap above the edge
+     (user, 2026-11-02). The cell runs to the edge on every page. */
+  .mm-pair.mm-split:not(.is-stacked):has(.mm-pair-box + .mm-pair-box)
+    :is(.mm-split-cap, .mm-split-body) {
     background: linear-gradient(var(--mm-line), var(--mm-line)) no-repeat
       calc(50% + 0.5px) 0 / 1px 100%;
+  }
+
+  .mm-pair.mm-split .mm-split-grid > .mm-pair-box + .mm-pair-box {
+    border-inline-start-color: transparent;
   }
 
   .mm-split-body {
@@ -2527,13 +2557,14 @@
     display: table-row;
   }
 
+  /* 1 cm of paper under the page's print zoom (--mm-print-zoom, the text scale). */
   .mm-doc.is-browser-print .mm-page-frame > * > tr.mm-page-margin > td {
-    height: 1cm;
+    height: calc(1cm / var(--mm-print-zoom, 1));
     padding: 0;
   }
 
   .mm-doc.is-browser-print .mm-letterhead-footer.mm-footer-fixed {
-    bottom: 1cm;
+    bottom: calc(1cm / var(--mm-print-zoom, 1));
   }
 
   .mm-page-frame > * > tr > td {
@@ -2614,12 +2645,35 @@
     border-top: 1px solid var(--mm-table-outline);
   }
 
-  /* The items above it no longer end the table: their last row keeps square corners, the
-     Total row's are the table's rounded ones (user, 2026-11-02: a rounded corner showed between
-     the last item and the Total row). */
-  .mm-items:has(+ .mm-items[data-mm-totals-split]) > :last-child > tr:last-child > td {
+  /*
+   * The Total row's own table has no rounded corners of its own (user, 2026-11-02: a notch
+   * above the Total row, between it and the last item): the table ends on its last row's
+   * rounded corners (the cells' in the PDF service, the wrapper's in a browser's print), the
+   * last item above the Total row keeps square ones, and no second line runs under them.
+   */
+  .mm-items[data-mm-totals-split] {
+    border-radius: 0;
+  }
+
+  .mm-items > :last-child > tr:last-child > td:is(:first-child, :last-child) {
     border-end-start-radius: 0;
     border-end-end-radius: 0;
+  }
+
+  .mm-items-scroll
+    > .mm-items:last-child
+    > :last-child
+    > tr:last-child
+    > td:first-child {
+    border-end-start-radius: 6px;
+  }
+
+  .mm-items-scroll
+    > .mm-items:last-child
+    > :last-child
+    > tr:last-child
+    > td:last-child {
+    border-end-end-radius: 6px;
   }
 
   /* One solid ground under the totals, so no hairline seams show between their empty cells. */

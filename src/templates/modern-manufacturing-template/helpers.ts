@@ -3276,14 +3276,24 @@ const compactDecimal = (value: number): string =>
 
 /*
  * Refrens' "Text Scale" (pdfOptions.zoomSize, PDF settings): Smaller 0.8 (the default, also
- * when unset), Small 0.9, Normal 1, Large 1.1, Larger 1.2. As Refrens' own templates print it
- * (Classic, Simple, Default, Enterprise, real PDFs 2026-11-02; Refrens' page maths maps 0.8 to
- * 1): Smaller prints at Normal size, the others at their own. The renderer zooms the printed
- * page by it (and leaves 0.8 unzoomed); this is the zoom the page prints at.
+ * when unset), Small 0.9, Normal 1, Large 1.1, Larger 1.2. Each prints at its own size (user,
+ * 2026-11-02: "the smaller text scale is equal to normal, there is no difference"). Refrens'
+ * renderer zooms the printed page by it except at 0.8 and when unset (its page maths maps those
+ * to 1, as its own templates print them), so the template zooms the page to 0.8 itself then
+ * (ownPrintZoom, template.hbs). This is the zoom the page prints at.
  */
-export const printZoom = (pdfOptions: UnknownRecord): number => {
-  const zoom = positiveNumber(pdfOptions.zoomSize);
-  return zoom === undefined || Math.abs(zoom - 0.8) < 1e-9 ? 1 : zoom;
+export const printZoom = (pdfOptions: UnknownRecord): number =>
+  positiveNumber(pdfOptions.zoomSize) ?? 0.8;
+
+/*
+ * The zoom the template draws itself (`@media print { html { zoom } }`, template.hbs): where
+ * Refrens' renderer draws none (src/main/commonUtils.ts: an unset, invalid or 0.8 zoomSize).
+ */
+export const ownPrintZoom = (pdfOptions: UnknownRecord): string | undefined => {
+  const zoom = Number(pdfOptions.zoomSize);
+  return !Number.isFinite(zoom) || zoom <= 0 || zoom === 0.8
+    ? compactDecimal(printZoom(pdfOptions))
+    : undefined;
 };
 
 /*
@@ -3414,6 +3424,8 @@ export const mapPrint = (state: UnknownRecord) => {
     browserPrintWidth: printWidth(pdfOptions, BROWSER_SIDE_MARGIN_PX),
     paperHeight: paperHeight(pdfOptions),
     paperSize: paperSize(pdfOptions),
+    printZoom: compactDecimal(printZoom(pdfOptions)),
+    ownPrintZoom: ownPrintZoom(pdfOptions),
     photoCap: photoCap(pdfOptions),
     bandCap: repeatedBandCap(pdfOptions),
     stretchTable,
@@ -4004,7 +4016,7 @@ export const withPrintMedia = <T>(measure: () => T): T => {
  * and bottom margins unless both are 0 (its print preview turns "Headers and footers" off
  * then), so they are 0 while it prints (user, 2026-11-02: "remove these header footer from
  * print"); the page frame's margin rows (styles.css) give each page its 1 cm back. The side
- * margins stay the browser's; the paper and its orientation are the document's own
+ * margins are the browser's 1 cm; the paper and its orientation are the document's own
  * (paperSize). Never on a Pageless document (no @page: Lydia's Pageless PDF
  * breaks with one), never in the PDF service (already in print media, no beforeprint run).
  * As the E-commerce template does (da17847).
@@ -4018,9 +4030,22 @@ const startBrowserPage = (doc: HTMLElement): void => {
   const style = document.createElement("style");
   style.id = BROWSER_PAGE_STYLE_ID;
   const size = doc.dataset.mmPaperSize;
+  /*
+   * The page's print zoom (the text scale) scales a browser's @page margins with it (1 cm
+   * printed 8 mm at 0.8, 2026-11-02), so the browser's 1 cm sides are written divided by it.
+   */
+  const zoom = parseFloat(
+    getComputedStyle(doc).getPropertyValue("--mm-print-zoom")
+  );
+  const side =
+    Number.isFinite(zoom) && zoom > 0 && zoom !== 1
+      ? ` margin-left: ${compactDecimal(
+          10 / zoom
+        )}mm; margin-right: ${compactDecimal(10 / zoom)}mm;`
+      : "";
   style.textContent = `@page { ${
     size && /^[\d.]+mm [\d.]+mm$/.test(size) ? `size: ${size}; ` : ""
-  }margin-top: 0; margin-bottom: 0; }`;
+  }margin-top: 0; margin-bottom: 0;${side} }`;
   document.head.appendChild(style);
 };
 
@@ -4122,6 +4147,13 @@ export interface PageUnit {
   // on a page it starts.
   fill?: number;
   head?: number;
+  /*
+   * A text box that breaks line by line (terms, notes, additional info, attachments): the
+   * height of its top edge and first line, the least of it a page may hold, and the index of
+   * its rule (data-mm-push) that moves it to the next page when less is left there.
+   */
+  lead?: number;
+  push?: number;
 }
 
 export interface PageFrame {
@@ -4140,6 +4172,16 @@ const lengthAt = (length: PageLength, page: number): number =>
   length.c + length.k * page;
 
 /*
+ * A solid unit (an item, a box kept whole) counts as fitting on a page only with this much to
+ * spare: Chrome cuts a zoomed page a few px before the simulated foot (browser print at text
+ * scale 0.9 and 0.8, MMS/IN/26-27/082 landscape, 2026-11-02: an item the simulation put on the
+ * page went to the next, so the row above was never filled and the page ended in white with the
+ * table's cloned closing rule alone at its foot). Erring this way is safe: the row above is
+ * filled to the foot, which takes the item to the next page in any case.
+ */
+const FIT_SLACK = 6;
+
+/*
  * The room under each item that ends a page, as a length: on the page an item ends, what is
  * left under the last unit on that page. Nothing once an item (or the table's start) has been
  * cut by a page break: where Chrome cuts it is not known, so neither are the pages after.
@@ -4147,7 +4189,8 @@ const lengthAt = (length: PageLength, page: number): number =>
 export const fillPages = (
   units: PageUnit[],
   page: number,
-  frame: PageFrame
+  frame: PageFrame,
+  pushed?: Set<number>
 ): Map<number, PageLength> => {
   const fills = new Map<number, PageLength>();
   let shift: PageLength = { c: 0, k: 0 };
@@ -4166,12 +4209,21 @@ export const fillPages = (
     const bottom = (): PageLength => ({ c: unit.bottom + shift.c, k: shift.k });
     for (
       let guard = 0;
-      guard < 400 && lengthAt(bottom(), page) > lengthAt(end(at), page) + 0.5;
+      guard < 400 &&
+      lengthAt(bottom(), page) >
+        lengthAt(end(at), page) + (unit.solid ? -FIT_SLACK : 0.5);
       guard += 1
     ) {
       const first =
         lengthAt(top(), page) <= lengthAt(start(at, unit), page) + 1;
-      if (unit.solid && !first) {
+      // A text box with less than its top edge and first line left on the page moves on whole
+      // (it printed an empty box there: its edges, nothing between them; 2026-11-02).
+      const lead =
+        !unit.solid &&
+        unit.lead !== undefined &&
+        lengthAt(end(at), page) - lengthAt(top(), page) < unit.lead;
+      if ((unit.solid || lead) && !first) {
+        if (lead && unit.push !== undefined) pushed?.add(unit.push);
         at += 1;
         const was = top();
         const next = start(at, unit);
@@ -4206,6 +4258,9 @@ export const fillPages = (
 // Every page area a page can have, in CSS px (A5 landscape with wide margins to A3).
 const PAGE_HEIGHTS: [number, number] = [280, 1700];
 const FILL_ATTR = "data-mm-fill";
+const PUSH_ATTR = "data-mm-push";
+// A paragraph breaks between its lines: a box needs no more than this of its first part.
+const SPLIT_LEAD_MAX = 80;
 const MEASURING_ATTR = "data-mm-measuring";
 const FILL_STYLE_ID = "mm-fill-rules";
 
@@ -4244,6 +4299,7 @@ const pageUnits = (
   };
   const units: PageUnit[] = [];
   const rows: HTMLElement[] = [];
+  let pushes = 0;
   Array.from(body.children).forEach((child) => {
     const style = getComputedStyle(child);
     if (style.display === "none" || height(child) <= 0) return;
@@ -4253,10 +4309,34 @@ const pageUnits = (
         )
       : null;
     if (!table) {
-      units.push({
+      const unit: PageUnit = {
         ...box(child),
         solid: style.breakInside.startsWith("avoid"),
-      });
+      };
+      if (!unit.solid && child.matches(".mm-split")) {
+        // Its top edge and each box's first line (or the whole box), with its bottom edge.
+        const firsts = Array.from(
+          child.querySelectorAll(".mm-split-grid > *")
+        ).map(
+          (part) =>
+            part.querySelector(
+              ":is(.mm-terms > li, .mm-attachments > li, .mm-info-row, .mm-note-body > *)"
+            ) ?? part
+        );
+        const reach = Math.max(
+          unit.top,
+          ...firsts.map((first) => box(first).bottom)
+        );
+        const cap = height(child.querySelector(".mm-split-edge.is-bottom"));
+        unit.lead = Math.min(
+          unit.bottom - unit.top,
+          Math.min(reach - unit.top, SPLIT_LEAD_MAX) + cap
+        );
+        unit.push = pushes;
+        child.setAttribute(PUSH_ATTR, String(pushes));
+        pushes += 1;
+      }
+      units.push(unit);
       return;
     }
     const head = repeated(table.tHead, "table-header-group");
@@ -4318,6 +4398,9 @@ export const resetItemsTableFill = (root: ParentNode = document): void => {
   root.querySelectorAll(`.mm-doc [${FILL_ATTR}]`).forEach((row) => {
     row.removeAttribute(FILL_ATTR);
   });
+  root.querySelectorAll(`.mm-doc [${PUSH_ATTR}]`).forEach((box) => {
+    box.removeAttribute(PUSH_ATTR);
+  });
   const style = document.getElementById(FILL_STYLE_ID);
   if (style) style.textContent = "";
 };
@@ -4334,6 +4417,12 @@ const FILL_SLACK = 16;
  */
 const BREAK_SLACK = 4;
 const BROWSER_BREAK_SLACK = 1;
+/*
+ * Zoomed out (Text Scale Smaller or Small), Chrome cuts the page up to 2 px of the document's own
+ * before its foot (0.8, INVPD-4323343424, 2026-11-02: a row filled to 4 px of the foot went to the
+ * next page and left the page above part empty), so a break row stops 4 px shorter there.
+ */
+const ZOOMED_OUT_BREAK_SLACK = 4;
 
 /* The print rules filling the table to each page's foot (see fillPages). */
 export const itemsFillRules = (
@@ -4344,28 +4433,35 @@ export const itemsFillRules = (
 ): string => {
   // The last item ends the table (its Total row under it); the others end a page.
   const lastRow = heights.length - 1;
+  const zoomedOut = zoom < 1 ? ZOOMED_OUT_BREAK_SLACK : 0;
   const slackFor = (row: number) =>
-    row === lastRow ? FILL_SLACK : BREAK_SLACK;
+    row === lastRow ? FILL_SLACK : BREAK_SLACK + zoomedOut;
   const ranges: {
     from: number;
     to: number;
     key: string;
     fills: Map<number, PageLength>;
+    pushed: Set<number>;
   }[] = [];
   for (let vh = PAGE_HEIGHTS[0]; vh <= PAGE_HEIGHTS[1]; vh += 1) {
-    const fills = fillPages(units, vh / zoom, frame);
+    const pushed = new Set<number>();
+    const fills = fillPages(units, vh / zoom, frame, pushed);
     fills.forEach((room, row) => {
       if (lengthAt(room, vh / zoom) <= slackFor(row)) fills.delete(row);
     });
-    const key = JSON.stringify([...fills.entries()]);
+    const key = JSON.stringify([[...fills.entries()], [...pushed]]);
     const open = ranges[ranges.length - 1];
     if (open && open.key === key && open.to === vh - 1) open.to = vh;
-    else ranges.push({ from: vh, to: vh, key, fills });
+    else ranges.push({ from: vh, to: vh, key, fills, pushed });
   }
   const page = `100vh / ${compactDecimal(zoom)}`;
   return ranges
-    .filter((range) => range.fills.size > 0)
+    .filter((range) => range.fills.size > 0 || range.pushed.size > 0)
     .map((range) => {
+      const pushes = [...range.pushed].map(
+        (unit) =>
+          `.mm-doc:not([${MEASURING_ATTR}]) [${PUSH_ATTR}="${unit}"] { break-before: page; }`
+      );
       const rules = [...range.fills.entries()]
         .map(([row, room]) => {
           const selector = `.mm-doc:not([${MEASURING_ATTR}]) .mm-items tr[${FILL_ATTR}="${row}"]`;
@@ -4383,10 +4479,16 @@ export const itemsFillRules = (
                 )}px + ${compactDecimal(room.k)} * ${page} + ${compactDecimal(
                   room.c - BROWSER_BREAK_SLACK
                 )}px); } ${browser} > td { border-bottom-color: transparent; }`;
+          // The piece of the table on that page ends on the row: rounded corners there.
+          const corners =
+            row === lastRow
+              ? ""
+              : ` ${selector} > td:first-child { border-end-start-radius: 6px; } ${selector} > td:last-child { border-end-end-radius: 6px; }`;
           return `${selector} { height: calc(${Math.ceil(
             heights[row]
-          )}px + ${fill}); } ${selector} > td { vertical-align: top; }${closing}`;
+          )}px + ${fill}); } ${selector} > td { vertical-align: top; }${corners}${closing}`;
         })
+        .concat(pushes)
         .join(" ");
       return `@media print and (min-height: ${range.from}px) and (max-height: ${
         range.to + 0.99

@@ -388,6 +388,20 @@ describe("Modern Manufacturing — the table fills every page it prints on", () 
     expect(
       itemsFillRules(units(), [360, 200, 400], { head: 0, foot: 0 }, 1.25)
     ).toContain("100vh / 1.25");
+    // Zoomed out (Smaller, 0.8) a break row stops 4 px shorter: Chrome cuts those pages up to
+    // 2 px early (the row went to the next page); the last item keeps its 16 px.
+    const zoomedOut = itemsFillRules(
+      units(),
+      [360, 200, 400],
+      { head: 0, foot: 0 },
+      0.8
+    );
+    expect(zoomedOut).toMatch(
+      /tr\[data-mm-fill="1"\] \{ height: calc\(200px \+ 1 \* 100vh \/ 0\.8 \+ -908px\); \}/
+    );
+    expect(zoomedOut).toMatch(
+      /is-browser-print[^{]*tr\[data-mm-fill="1"\] \{ height: calc\(200px \+ 1 \* 100vh \/ 0\.8 \+ -901px\); \}/
+    );
   });
 
   it("marks the item rows and writes the rules; always on, never on a Pageless document", () => {
@@ -916,6 +930,15 @@ describe("Modern Manufacturing — a browser's own print", () => {
     endBrowserPrint();
     expect(doc.classList.contains("is-browser-print")).toBe(false);
     expect(document.getElementById("mm-browser-page")).toBeNull();
+
+    // Under a print zoom (Smaller, 0.8) the 1 cm sides are written divided by it: Chrome
+    // scales a page's @page margins with the html zoom.
+    document.body.innerHTML = `<div class="mm-doc" data-mm-paper-size="210mm 297mm" style="--mm-print-zoom: 0.8;"></div>`;
+    prepareBrowserPrint();
+    expect(document.getElementById("mm-browser-page")?.textContent).toBe(
+      "@page { size: 210mm 297mm; margin-top: 0; margin-bottom: 0; margin-left: 12.5mm; margin-right: 12.5mm; }"
+    );
+    endBrowserPrint();
 
     // A Pageless document keeps its page as it is (an @page breaks Lydia's Pageless PDF).
     document.body.innerHTML = `<div class="mm-doc" data-mm-pageless></div>`;
