@@ -1661,6 +1661,14 @@
     break-inside: avoid;
   }
 
+  /* The document details break between fields, never inside one (user, 2026-11-03): whole, a
+     long list of them left the first page's letterhead alone on its page. */
+  .pt-meta > .pt-meta-row > *,
+  .pt-title-row,
+  .pt-doc-qr {
+    break-inside: avoid;
+  }
+
   /* The totals stay together. */
   .pt-totals-table {
     break-inside: avoid;
@@ -1677,7 +1685,6 @@
   /* Boxes and short sections never split across pages; a heading stays with its content. The
      bank | totals row too, now that terms, notes and the summaries follow it: the totals never
      drop to the next page beside an empty column (2026-10-24). */
-  .pt-header,
   .pt-bottom,
   .pt-cards,
   .pt-card,
@@ -2101,7 +2108,9 @@ body[class~="isDibella"]
      when the totals start a page. Overlapping by a fixed pixel left the rule covered at one print
      size and doubled at another (user, 2026-11-03). */
   .pt-items[data-pt-totals-split] {
-    margin-top: calc(-1 * var(--pt-joint-rule, 1px));
+    /* Two rules up: its ground covers the page-break corner row's rule, which lands a hair off
+       the same spot on the last piece (a doubled line), and its own rule is the one drawn. */
+    margin-top: calc(-2 * var(--pt-joint-rule, 1px));
   }
 
   .pt-items[data-pt-totals-split] > tbody:first-of-type > tr:first-child > td {
@@ -2112,11 +2121,6 @@ body[class~="isDibella"]
     border-bottom-color: transparent;
   }
 
-  /* Nor does the page-break corner row's rule, which falls on the same spot on the last piece
-     (each page's foot keeps the wrapper's rule). */
-  .pt-items:has(+ table[data-pt-totals-split]) > .pt-items-corners td {
-    box-shadow: none;
-  }
 
   /* One solid ground under the totals: painted cell by cell, the hairline seams between their
      empty cells let the stretch column rules (columnRules) show through. */

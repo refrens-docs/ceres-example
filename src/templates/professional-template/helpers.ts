@@ -5399,7 +5399,9 @@ const flowAt = (length: FlowLength, page: number): number =>
 export const flowFiller = (
   units: FlowUnit[],
   anchor: number,
-  layout: FlowLayout
+  layout: FlowLayout,
+  // Only where everything after the table ends on the table's own page (the preview).
+  lastPageOnly = false
 ): FlowLength | undefined => {
   const { page, head, foot, start } = layout;
   let index = 0;
@@ -5448,6 +5450,11 @@ export const flowFiller = (
   });
   const at = placed[anchor];
   if (!at || unsure) return undefined;
+  if (
+    lastPageOnly &&
+    placed.slice(anchor + 1).some((unit) => unit.page !== at.page)
+  )
+    return undefined;
   const room = (from: { bottom: FlowLength; end: FlowLength }): FlowLength => ({
     c: from.end.c - from.bottom.c,
     k: from.end.k - from.bottom.k,
@@ -5586,7 +5593,9 @@ const flowUnits = (
       let rowBottom = box(children[i]).bottom;
       while (
         i + row.length < children.length &&
-        box(children[i + row.length]).top < rowBottom - 1
+        // Side by side, not merely overlapping by a rule (the totals' table sits a couple of
+        // pixels into the item table's foot, styles.css).
+        box(children[i + row.length]).top < rowBottom - 4
       ) {
         rowBottom = Math.max(rowBottom, box(children[i + row.length]).bottom);
         row.push(children[i + row.length]);
@@ -5594,6 +5603,18 @@ const flowUnits = (
       const child = row[0];
       const style = getComputedStyle(child);
       const join = afterAvoid || avoids(style.breakBefore);
+      // The document details break between fields (styles.css): measured field by field, the
+      // logo beside them (a line or two at the top) going with the first.
+      const details = child.classList.contains("pt-header")
+        ? child.querySelector(":scope > .pt-header-main")
+        : null;
+      if (details) {
+        walk(details);
+        afterAvoid = false;
+        i += row.length;
+        // eslint-disable-next-line no-continue
+        continue;
+      }
       if (row.length > 1) {
         push({ top: box(child).top, bottom: rowBottom }, join, row);
         if (row.some((el) => el.contains(filler))) anchor = units.length - 1;
@@ -5712,10 +5733,15 @@ const stretchOnScreen = (doc: HTMLElement, filler: HTMLElement): void => {
   const flow = measureFlow(doc, filler, false);
   if (!flow) return;
   const page = sheet * A4_ASPECT;
-  const room = flowFiller(flowAtHeight(flow.units, page), flow.anchor, {
-    ...flow.layout,
-    page,
-  });
+  // Only where the table and all that follows it end on one sheet: the preview shows no sheet
+  // edges, so space filling the foot of a sheet mid-document read as a stray gap above the
+  // totals (user, 2026-11-03). Print fills each page's foot (pages show).
+  const room = flowFiller(
+    flowAtHeight(flow.units, page),
+    flow.anchor,
+    { ...flow.layout, page },
+    true
+  );
   const spare = room ? Math.floor(flowAt(room, page)) : 0;
   filler.style.setProperty("--pt-filler-height", `${Math.max(0, spare)}px`);
   if (spare > 0) doc.classList.add("is-filled");
