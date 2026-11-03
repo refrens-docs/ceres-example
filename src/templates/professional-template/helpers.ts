@@ -6000,6 +6000,23 @@ export const placeStampRoom = (root: ParentNode = document): void => {
   );
   doc.style.setProperty("--pt-stamp-top", `${compactDecimal(top)}px`);
   doc.style.setProperty("--pt-stamp-bottom", `${compactDecimal(bottom)}px`);
+  // The same room outside the document (the print watermark on the body), under the html zoom
+  // only (styles.css: the watermark keeps between the letterhead and the footer).
+  const docScale =
+    parseFloat(getComputedStyle(doc).getPropertyValue("--pt-print-scale")) || 1;
+  document.documentElement.toggleAttribute(
+    "data-pt-stamp-room",
+    top > 0 || bottom > 0
+  );
+  const page = document.documentElement.style;
+  page.setProperty(
+    "--pt-stamp-page-top",
+    `${compactDecimal(top * docScale)}px`
+  );
+  page.setProperty(
+    "--pt-stamp-page-bottom",
+    `${compactDecimal(bottom * docScale)}px`
+  );
 };
 
 const requestedScriptFonts = new Set<string>();

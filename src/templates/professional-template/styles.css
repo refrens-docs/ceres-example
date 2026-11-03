@@ -1807,6 +1807,30 @@
     height: var(--pt-stamp-bottom, 0);
   }
 
+  /* The stamped letterhead and footer reach into the page area there: the document's white
+     ground and the watermark painted over their edges (user, 2026-11-03). The paper is white;
+     the watermark keeps to the room between them (only where that room is added: A4 portrait
+     keeps its watermark as it was). */
+  body[class~="isDibella"] .pt-doc {
+    background: transparent;
+  }
+
+  /* The watermark setting's scale grows the box around its centre: the box is that much
+     smaller, so the scaled watermark still fits the room. */
+  :root[data-pt-stamp-room] body[class~="isDibella"]::after {
+    --pt-mark-room: calc(100% - var(--pt-stamp-page-top, 0px) - var(--pt-stamp-page-bottom, 0px));
+
+    /* A turned watermark reaches further: |cos| + |sin| of its angle (a square one). */
+    --pt-mark-cos: max(cos(var(--watermark-rotate, 0deg)), -1 * cos(var(--watermark-rotate, 0deg)));
+    --pt-mark-sin: max(sin(var(--watermark-rotate, 0deg)), -1 * sin(var(--watermark-rotate, 0deg)));
+    --pt-mark-turn: calc(var(--pt-mark-cos) + var(--pt-mark-sin));
+    --pt-mark-shrink: max(1, calc(var(--watermark-scale, 1) * var(--pt-mark-turn)));
+    --pt-mark-gap: calc((var(--pt-mark-room) - var(--pt-mark-room) / var(--pt-mark-shrink)) / 2);
+
+    top: calc(var(--pt-stamp-page-top, 0px) + var(--pt-mark-gap));
+    height: calc(var(--pt-mark-room) / var(--pt-mark-shrink));
+  }
+
   body:not([class~="isDibella"]) .pt-doc:not(.is-pageless) .pt-page-frame-header:has(.pt-letterhead:not(.is-empty)) > tr.pt-page-margin,
   body:not([class~="isDibella"]) .pt-doc:not(.is-pageless) .pt-page-frame-footer:has(.pt-footer-spacer:not(.is-empty)) > tr.pt-page-margin {
     display: none;
