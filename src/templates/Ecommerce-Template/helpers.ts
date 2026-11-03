@@ -4831,12 +4831,15 @@ const roomBelow = (from: FlowPlaced): FlowLength => ({
 export const flowFiller = (
   units: FlowUnit[],
   anchor: number,
-  layout: FlowLayout
+  layout: FlowLayout,
+  // Only where the whole document is one page (the preview).
+  onePageOnly = false
 ): FlowLength | undefined => {
   const { page } = layout;
   const { placed, split } = placeUnits(units, anchor, layout);
   const at = placed[anchor];
   if (!at || split <= anchor) return undefined;
+  if (onePageOnly && placed.some((unit) => unit.page !== 0)) return undefined;
   const room = roomBelow;
   const after = placed
     .slice(anchor + 1)
@@ -5095,10 +5098,15 @@ const stretchOnScreen = (doc: HTMLElement, filler: HTMLElement): void => {
   const flow = measureFlow(doc, filler, false);
   if (!flow) return;
   const page = (box.width * A4_RATIO) / flow.scale;
-  const room = flowFiller(flowAtHeight(flow.units, page), flow.anchor, {
-    ...flow.layout,
-    page,
-  });
+  // Only where the whole document is one sheet: the preview shows no sheet edges, so space
+  // filling a sheet's foot with more content below read as a stray gap above the totals
+  // (user, 2026-11-03). Print fills each page's foot (pages show).
+  const room = flowFiller(
+    flowAtHeight(flow.units, page),
+    flow.anchor,
+    { ...flow.layout, page },
+    true
+  );
   const spare = room ? Math.floor(flowAt(room, page)) : 0;
   if (spare <= 0) return;
   filler.style.setProperty("--ec-screen-filler-height", `${spare}px`);
