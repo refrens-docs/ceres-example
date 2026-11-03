@@ -593,10 +593,13 @@ describe("Professional Template — boolean settings", () => {
   );
 
   it("caps the printed page at the width between the margins, at any print size", () => {
+    // At Normal text scale (1); unset is Smaller (0.8), whose zoom widens the page in CSS px.
     const width = (pdfOptions: Json) =>
       mapPrint(
         state((invoice) => {
-          invoice.template = { pdfOptions };
+          invoice.template = {
+            pdfOptions: { zoomSize: 1, ...(pdfOptions as object) },
+          };
         })
       ).printWidth;
     // A4 is 793.7 px wide; 1 cm is 37.8 px; 4 px kept back for rounding.
@@ -2264,9 +2267,11 @@ describe("Professional Template — real PDF findings (2026-11-01)", () => {
   // Tabloid fell back to A4: the page was laid out an A4 column wide.
   it("lays a Tabloid page out at Tabloid width", () => {
     const tabloid = mapPrint({
-      pdfOptions: { format: "tabloid", xMargins: 1 },
+      pdfOptions: { format: "tabloid", xMargins: 1, zoomSize: 1 },
     });
-    const a4 = mapPrint({ pdfOptions: { format: "a4", xMargins: 1 } });
+    const a4 = mapPrint({
+      pdfOptions: { format: "a4", xMargins: 1, zoomSize: 1 },
+    });
     expect(tabloid.printWidth).toBe(
       Math.floor((279.4 / 25.4) * 96 - (2 * 96) / 2.54 - 4)
     );
@@ -2307,17 +2312,25 @@ describe("Professional Template — line height and browser-print margins (2026-
 });
 
 describe("Professional Template — print size (2026-11-02)", () => {
-  // Print at the screen's size, like the E-commerce template; 0.8 prints as 1 (Refrens).
-  it("prints at 100 %, with 0.8 and 0.9 as 1 and 1.1 / 1.2 larger", () => {
-    const scale = (zoomSize: string) =>
-      mapPrint({ pdfOptions: { zoomSize } }).printScale;
-    // The renderer zooms <html> by 0.9, 1.1 and 1.2 (not 0.8); the document's own zoom
-    // makes 0.8, 0.9 and 1 print the same.
-    expect(scale("0.8")).toBe("1");
-    expect(scale("1")).toBe("1");
-    expect(Number(scale("0.9")) * 0.9).toBeCloseTo(1, 3);
-    expect(scale("1.2")).toBe("1");
-    expect(printScaleFor(1.2) * 1.2).toBeCloseTo(1.2, 5);
+  // Print at the screen's size, like the E-commerce template, zoomed by the text scale alone:
+  // each size prints at its own (user, 2026-11-02: Smaller printed as Normal).
+  it("prints every text scale at its own size, 0.8 and unset by the template's own zoom", () => {
+    const print = (pdfOptions: Json) => mapPrint({ pdfOptions });
+    // No zoom of the document's own: the page's html zoom is the text scale.
+    ["0.8", "0.9", "1", "1.2"].forEach((zoomSize) =>
+      expect(print({ zoomSize }).printScale).toBe("1")
+    );
+    expect(printScaleFor()).toBe(1);
+    // Refrens' renderer zooms <html> by 0.9, 1, 1.1 and 1.2, not 0.8 nor unset: the template's.
+    expect(print({}).ownPrintZoom).toBe("0.8");
+    expect(print({ zoomSize: "0.8" }).ownPrintZoom).toBe("0.8");
+    expect(print({ zoomSize: "0.9" }).ownPrintZoom).toBeUndefined();
+    expect(print({ zoomSize: 1 }).ownPrintZoom).toBeUndefined();
+    expect(render()).toContain(
+      '<style id="pt-own-zoom">@media print { :where(html) { zoom: 0.8; } }</style>'
+    );
+    // The page is laid out under that zoom: wider in CSS px.
+    expect(print({}).printWidth).toBe(893);
   });
 
   // Chrome prints its date / title / URL / page-number stamps in a page's top and bottom

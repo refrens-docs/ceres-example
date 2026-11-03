@@ -3897,9 +3897,9 @@ export const mapDocumentContact = (state: UnknownRecord) => {
  * (A4: 718 px; the document has no padding of its own); it depends only on the format, never on the
  * window, because the PDF service renders in a window narrower than its page.
  *
- * zoomSize is the print size picked in Lydia (0.8 smaller … 1.2 larger). The renderer zooms
- * <html> by it (except at 0.8, as refrens.com's own templates print 0.8 at full size), which
- * narrows the page in CSS px. textScale scales text only.
+ * zoomSize is the print size picked in Lydia (0.8 smaller … 1.2 larger). The page prints zoomed
+ * by it (the renderer's html zoom, or the template's own at 0.8 and when unset), which narrows
+ * the page in CSS px. textScale scales text only.
  *
  * Nothing shrinks to fit the paper: every text, the item table's included, prints at the
  * print size, and a table too wide for the page is cut off at its edge; landscape gives it
@@ -3936,13 +3936,14 @@ const PAPER_HEIGHT_MM: Record<string, number> = {
 
 /*
  * Print at the screen's size (user, 2026-11-02: like the E-commerce template; Refrens' own 75 %
- * read too small). Text scale 0.8 prints the same as 1, as in Refrens' own templates, and so
- * does 0.9: the renderer zooms <html> by 0.9 (not 0.8), so that zoom is divided back out here.
- * 1.1 and 1.2 stay larger.
+ * read too small), zoomed by the text scale alone: Smaller 0.8 (Refrens' default, also when
+ * unset), Small 0.9, Normal 1, Large 1.1, Larger 1.2, each at its own size (user, 2026-11-02:
+ * "the smaller text scale is equal to normal, there is no difference"; 0.8 and 0.9 printed as
+ * 1). Refrens' renderer zooms <html> by it except at 0.8 and when unset (src/main/commonUtils.ts),
+ * so the template draws that zoom itself then (ownPrintZoom, template.hbs).
  */
 const PRINT_BASE_SCALE = 1;
-export const printScaleFor = (rendererZoom: number): number =>
-  PRINT_BASE_SCALE / Math.min(1, rendererZoom > 0 ? rendererZoom : 1);
+export const printScaleFor = (): number => PRINT_BASE_SCALE;
 
 export const mapPrint = (state: UnknownRecord) => {
   const pdfOptions = asRecord(state.pdfOptions);
@@ -3952,8 +3953,15 @@ export const mapPrint = (state: UnknownRecord) => {
   const paperMm = landscape
     ? PAPER_HEIGHT_MM[format] ?? PAPER_HEIGHT_MM.a4
     : PAPER_WIDTH_MM[format] ?? PAPER_WIDTH_MM.a4;
-  const pageZoom = positiveNumber(pdfOptions.zoomSize) ?? 1;
-  const rendererZoom = pageZoom === 0.8 ? 1 : pageZoom;
+  const rendererZoom = positiveNumber(pdfOptions.zoomSize) ?? 0.8;
+  const rawZoom = Number(text(pdfOptions.zoomSize));
+  const ownPrintZoom =
+    !hasValue(pdfOptions.zoomSize) ||
+    !Number.isFinite(rawZoom) ||
+    rawZoom <= 0 ||
+    rawZoom === 0.8
+      ? compactDecimal(rendererZoom)
+      : undefined;
   /*
    * The printable width in the document's own pixels, which caps the page in print
    * (styles.css): Refrens' PDF service lays the page out in a window wider than the paper
@@ -3995,7 +4003,8 @@ export const mapPrint = (state: UnknownRecord) => {
   const textScale = Math.min(2, Math.max(0.3, ratio ?? 1));
   return {
     textScale: compactDecimal(textScale),
-    printScale: compactDecimal(printScaleFor(rendererZoom)),
+    printScale: compactDecimal(printScaleFor()),
+    ownPrintZoom,
     printWidth,
     browserPrintWidth,
     browserPrintHeight,
@@ -4879,15 +4888,24 @@ export const splitTotals = (root: ParentNode = document): void => {
  * template carries (--pt-print-base, --pt-browser-print-base).
  */
 const ZOOM_STYLE_ID = "ceres-template-zoom";
+// The template's own print zoom (template.hbs), where the renderer draws none (0.8, unset).
+const OWN_ZOOM_STYLE_ID = "pt-own-zoom";
 let zoomStyleSeen = false;
 
-export const syncPrintWidths = (root: ParentNode = document): void => {
-  const style = document.getElementById(ZOOM_STYLE_ID);
-  if (style) zoomStyleSeen = true;
-  if (!zoomStyleSeen) return;
+/* The zoom the page prints at: the renderer's, else the template's own, else none. */
+const drawnPrintZoom = (): number => {
+  const style =
+    document.getElementById(ZOOM_STYLE_ID) ??
+    document.getElementById(OWN_ZOOM_STYLE_ID);
   const match = /zoom:\s*([\d.]+)/.exec(style?.textContent || "");
   const value = match ? Number(match[1]) : 1;
-  const zoom = Number.isFinite(value) && value > 0 ? value : 1;
+  return Number.isFinite(value) && value > 0 ? value : 1;
+};
+
+export const syncPrintWidths = (root: ParentNode = document): void => {
+  if (document.getElementById(ZOOM_STYLE_ID)) zoomStyleSeen = true;
+  if (!zoomStyleSeen) return;
+  const zoom = drawnPrintZoom();
   root.querySelectorAll<HTMLElement>(".pt-doc").forEach((doc) => {
     [
       ["--pt-print-base", "--pt-print-width"],
@@ -4900,8 +4918,7 @@ export const syncPrintWidths = (root: ParentNode = document): void => {
         doc.style.setProperty(width, next);
       }
     });
-    // The 75 % print base, kept for 0.9 (printScaleFor).
-    const scale = compactDecimal(printScaleFor(zoom));
+    const scale = compactDecimal(printScaleFor());
     if (doc.style.getPropertyValue("--pt-print-scale") !== scale) {
       doc.style.setProperty("--pt-print-scale", scale);
     }
@@ -5666,14 +5683,8 @@ export const stretchPrintRules = (
   return rules.join("\n");
 };
 
-/* The print size (zoomSize) the renderer draws as `@media print { html { zoom } }`. */
-const printZoom = (): number => {
-  const match = /zoom:\s*([\d.]+)/.exec(
-    document.getElementById(ZOOM_STYLE_ID)?.textContent || ""
-  );
-  const value = match ? Number(match[1]) : 1;
-  return Number.isFinite(value) && value > 0 ? value : 1;
-};
+/* The print size (zoomSize): the renderer's `@media print { html { zoom } }`, or the template's. */
+const printZoom = (): number => drawnPrintZoom();
 
 /*
  * The filler row shows (styles.css, .pt-doc.is-filled) in print when the business stretches

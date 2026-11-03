@@ -1515,10 +1515,10 @@
 
 /*
  * Print at the screen's size, as the E-commerce template does (user, 2026-11-02, after a day at
- * Refrens' 75 %: the print preview read too small): 13 px body text prints at 13 px. Text scale
- * 0.8, 0.9 and 1 print the same, as Refrens' own templates print 0.8 and 1; 1.1 and 1.2 print
- * 10 % and 20 % larger (the renderer's html zoom; --pt-print-scale on .pt-doc divides the
- * renderer's 0.9 back out, helpers.ts printScaleFor). The page fills the printable width with
+ * Refrens' 75 %: the print preview read too small): 13 px body text prints at 13 px at text
+ * scale 1; 0.8, 0.9, 1.1 and 1.2 print at 80, 90, 110 and 120 % (user, 2026-11-02: Smaller
+ * printed as Normal), by the renderer's html zoom or, at 0.8 and unset, the template's own
+ * (helpers.ts mapPrint ownPrintZoom). The page fills the printable width with
  * no gutter of its own (margins belong to the browser or the PDF service).
  */
 @media print {

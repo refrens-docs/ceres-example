@@ -3655,8 +3655,8 @@ export const statusTag = (
  * (A4: 718 px; the document has no padding of its own); it depends only on the format, never on the
  * window, because the PDF service renders in a window narrower than its page.
  *
- * zoomSize is the print size picked in Lydia (0.8 smaller … 1.2 larger). The renderer zooms
- * <html> by it (except at 0.8), which narrows the page in CSS px. textScale scales text only.
+ * zoomSize is the print size picked in Lydia (0.8 smaller … 1.2 larger). The page prints zoomed
+ * by it (the renderer's html zoom, or the template's own at 0.8), which narrows the page in CSS px. textScale scales text only.
  *
  * compactTable: when the items table's other columns, shrunk to content, would leave
  * Description less than its 22% share of that page, the table prints at the small step
@@ -3698,13 +3698,22 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
   const paperMm = landscape
     ? PAPER_HEIGHT_MM[format] ?? PAPER_HEIGHT_MM.a4
     : PAPER_WIDTH_MM[format] ?? PAPER_WIDTH_MM.a4;
-  const pageZoom = positiveNumber(pdfOptions.zoomSize) ?? 1;
   /*
-   * The renderer zooms the printed page by the text scale (zoomSize), except 0.8, printed at 1
-   * as Refrens' own templates print it (real PDFs, 2 Nov 2026: Classic invoices 0029 at 0.8 and
-   * 0006 at 1 both set their text at 6.75 pt; Enterprise and Default the same on 1 Nov).
+   * The page prints at its text scale (zoomSize): Smaller 0.8 (Refrens' default, also when
+   * unset), Small 0.9, Normal 1, Large 1.1, Larger 1.2, each at its own size (user, 2 Nov 2026:
+   * "the smaller text scale is equal to normal, there is no difference"). Refrens' renderer
+   * zooms <html> by it except at 0.8 and when unset (src/main/commonUtils.ts; its own templates
+   * print those at 1), so the template draws that zoom itself then (ownPrintZoom, template.hbs).
    */
-  const rendererZoom = pageZoom === 0.8 ? 1 : pageZoom;
+  const rendererZoom = positiveNumber(pdfOptions.zoomSize) ?? 0.8;
+  const rawZoom = Number(text(pdfOptions.zoomSize));
+  const ownPrintZoom =
+    !hasValue(pdfOptions.zoomSize) ||
+    !Number.isFinite(rawZoom) ||
+    rawZoom <= 0 ||
+    rawZoom === 0.8
+      ? compactDecimal(rendererZoom)
+      : undefined;
   const pageWidth = ((paperMm / 25.4) * 96 - PRINT_MARGINS_PX) / rendererZoom;
   /*
    * The printable width in the document's own pixels, which caps the page in print
@@ -3751,6 +3760,7 @@ export const mapPrint = (state: UnknownRecord, tableFixedWidth = 0) => {
     browserTurnedWidth,
     // The renderer's print zoom: the print table's 10 px text floor is 10 px on paper.
     printZoom: compactDecimal(rendererZoom),
+    ownPrintZoom,
     // The side margins in centimetres, for a browser's own print's page rule.
     sideMargin: compactDecimal(sideMarginCm),
     /*

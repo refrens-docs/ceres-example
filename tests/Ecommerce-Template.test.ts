@@ -1311,10 +1311,12 @@ describe("Ecommerce template — files and CSS", () => {
   });
 
   it("caps the printed page at the paper's printable width, whatever the window", () => {
+    // At Normal text scale (1); unset is Smaller (0.8), whose zoom widens the page in CSS px.
     const width = (pdfOptions: Record<string, unknown>) =>
-      mapPrint({ pdfOptions }).printWidth;
+      mapPrint({ pdfOptions: { zoomSize: 1, ...pdfOptions } }).printWidth;
     // A4 at 1 cm side margins: 794 - 76 - 4 px kept back.
     expect(width({})).toBe(714);
+    expect(mapPrint({ pdfOptions: {} }).printWidth).toBe(893);
     expect(width({ xMargins: "0.5" })).toBe(751);
     // 0 cm runs to the paper's edges; it is not "unset" (1 cm).
     expect(width({ xMargins: "0" })).toBe(789);
@@ -1328,16 +1330,29 @@ describe("Ecommerce template — files and CSS", () => {
     expect(width({ format: "Tabloid", landscape: true })).toBe(1552);
     const print = css.slice(css.indexOf("@media print"));
     expect(print).toMatch(/max-width: var\(--ec-print-width, none\);/);
-    expect(render()).toContain("--ec-print-width: 714px;");
+    expect(render()).toContain("--ec-print-width: 893px;");
   });
 
   it("prints every table at the document's text scale, never shrunk to fit the page", () => {
     const zoom = (pdfOptions: Record<string, unknown>) =>
       mapPrint({ pdfOptions }).printZoom;
-    expect(zoom({})).toBe("1");
+    // Every text scale prints at its own size (user, 2 Nov 2026: Smaller printed as Normal);
+    // unset is Refrens' default, Smaller.
+    expect(zoom({})).toBe("0.8");
     expect(zoom({ zoomSize: "1.2" })).toBe("1.2");
-    // 0.8 prints at 1, as Refrens' own templates (Classic, Enterprise, Default) print it.
-    expect(zoom({ zoomSize: "0.8" })).toBe("1");
+    expect(zoom({ zoomSize: "0.8" })).toBe("0.8");
+    expect(zoom({ zoomSize: "0.9" })).toBe("0.9");
+    expect(zoom({ zoomSize: 1 })).toBe("1");
+    // Refrens' renderer draws no zoom at 0.8 or unset: the template draws its own.
+    const own = (pdfOptions: Record<string, unknown>) =>
+      mapPrint({ pdfOptions }).ownPrintZoom;
+    expect(own({})).toBe("0.8");
+    expect(own({ zoomSize: 0.8 })).toBe("0.8");
+    expect(own({ zoomSize: "0.9" })).toBeUndefined();
+    expect(own({ zoomSize: "1" })).toBeUndefined();
+    expect(render()).toContain(
+      "<style>@media print { :where(html) { zoom: 0.8; } }</style>"
+    );
     // The preview: text scaled by the print size, gutter at the margins' share of the paper.
     expect(css).toMatch(
       /--ec-text-scale: calc\(\s*var\(--ec-doc-text-scale, 1\) \* var\(--ec-print-zoom, 1\)\s*\);/
@@ -1355,11 +1370,11 @@ describe("Ecommerce template — files and CSS", () => {
     );
     expect(print).not.toMatch(/\bzoom:/);
     // A browser print fills the paper either way the dialog turns it: the turned width too.
-    const a4 = mapPrint({ pdfOptions: { format: "a4" } });
+    const a4 = mapPrint({ pdfOptions: { format: "a4", zoomSize: 1 } });
     expect(a4.browserPrintWidth).toBe(714);
     expect(a4.browserTurnedWidth).toBe(1042);
     expect(
-      mapPrint({ pdfOptions: { format: "a4", landscape: true } })
+      mapPrint({ pdfOptions: { format: "a4", landscape: true, zoomSize: 1 } })
         .browserTurnedWidth
     ).toBe(714);
     expect(print).toMatch(/\.ec-doc\.is-browser-print \{\s*max-width: none;/);
