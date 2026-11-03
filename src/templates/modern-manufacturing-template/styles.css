@@ -2618,6 +2618,80 @@
     .no-dibella:is(.invoice-letterhead, .invoice-letterhead-footer) {
     display: none;
   }
+
+  /*
+   * The PDF service's stamped letterhead and footer, taller than their margins on a page wider
+   * than A4 portrait (landscape, A3): the page keeps that much more room at its top and foot,
+   * a hidden copy of the image as wide as the reach (--mm-stamp-width, helpers.ts mapPrint),
+   * and the document's white ground does not paint over them (user, 2026-11-03).
+   */
+  body[class~="isDibella"] .mm-doc:not([data-mm-pageless]) .mm-page-frame > * > tr.mm-stamp-room {
+    display: table-row;
+  }
+
+  .mm-page-frame > * > tr.mm-stamp-room > td {
+    padding: 0;
+    border: 0;
+  }
+
+  .mm-page-frame > * > tr.mm-stamp-room .mm-stamp-image {
+    display: block;
+    width: var(--mm-stamp-width, 0);
+    max-width: none;
+    height: auto;
+    visibility: hidden;
+  }
+
+  body[class~="isDibella"] .mm-doc {
+    background: transparent;
+  }
+
+  /* The watermark keeps to the room between them (helpers.ts placeStampRoom). */
+  :root[data-mm-stamp-room] body[class~="isDibella"]::after {
+    --mm-mark-room: calc(100% - var(--mm-stamp-page-top, 0px) - var(--mm-stamp-page-bottom, 0px));
+
+    /* A turned watermark reaches further: |cos| + |sin| of its angle (a square one). */
+    --mm-mark-cos: max(cos(var(--watermark-rotate, 0deg)), -1 * cos(var(--watermark-rotate, 0deg)));
+    --mm-mark-sin: max(sin(var(--watermark-rotate, 0deg)), -1 * sin(var(--watermark-rotate, 0deg)));
+    --mm-mark-turn: calc(var(--mm-mark-cos) + var(--mm-mark-sin));
+    --mm-mark-shrink: max(1, calc(var(--watermark-scale, 1) * var(--mm-mark-turn)));
+    --mm-mark-gap: calc((var(--mm-mark-room) - var(--mm-mark-room) / var(--mm-mark-shrink)) / 2);
+
+    top: calc(var(--mm-stamp-page-top, 0px) + var(--mm-mark-gap));
+    height: calc(var(--mm-mark-room) / var(--mm-mark-shrink));
+  }
+
+  /* The PDF service's own "electronically generated" line where it leaves its footer out
+     (footer on the last page only): centred at the foot of every page (helpers.ts
+     ownSignatureNote), at the template's smallest text size. */
+  body[class~="isDibella"] .mm-doc:not([data-mm-pageless]) .mm-page-frame > * > tr.mm-signature-note {
+    display: table-row;
+  }
+
+  .mm-page-frame > * > tr.mm-signature-note > td {
+    padding: 0;
+    border: 0;
+  }
+
+  .mm-page-frame > * > tr.mm-signature-note > td > p {
+    margin: 0;
+    padding-top: 12px;
+    color: var(--mm-ink);
+    font-size: calc(var(--mm-font-size-s) * var(--mm-text-scale, 1));
+    line-height: 1.4545;
+    text-align: center;
+  }
+
+  /* A group's Sub total stays with its last item: the page's room goes above it, under the
+     item (user, 2026-11-02: the summary rows never stretch). */
+  .mm-items tr + .mm-group-total-row {
+    break-before: avoid;
+  }
+}
+
+/* The stamp room and the signature note print in Refrens' PDF only (print rules above). */
+.mm-page-frame > * > tr:is(.mm-stamp-room, .mm-signature-note) {
+  display: none;
 }
 
 /*

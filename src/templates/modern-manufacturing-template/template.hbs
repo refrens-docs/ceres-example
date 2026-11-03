@@ -13,7 +13,7 @@
   data-role / data-col are the spec's test hooks (section 11).
 --}}
 {{#with (mmView @root) as |view|}}
-<div class="mm-doc" data-testid="invoice-root"{{#if view.foreignCurrency}} data-mm-currency="{{view.foreignCurrency}}"{{/if}}{{#if view.print.stretchTable}} data-mm-stretch-table{{/if}}{{#if view.print.pageless}} data-mm-pageless{{/if}}{{#if view.theme.light}} data-mm-light-theme{{/if}} data-mm-paper-height="{{view.print.paperHeight}}" data-mm-paper-size="{{view.print.paperSize}}" dir="{{view.script.direction}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}} style="--mm-text-scale: {{view.print.textScale}}; --mm-print-zoom: {{view.print.printZoom}}; --mm-print-width: {{view.print.printWidth}}px; --mm-browser-print-width: {{view.print.browserPrintWidth}}px; --mm-photo-cap: {{view.print.photoCap}}px; --mm-band-cap: {{view.print.bandCap}}px;{{#if view.script.font}} --mm-script-font: '{{view.script.font}}';{{/if}}{{#if view.theme}} --mm-theme: {{view.theme.accent}}; --mm-theme-tint: {{view.theme.tint}};{{/if}}">
+<div class="mm-doc" data-testid="invoice-root"{{#if view.foreignCurrency}} data-mm-currency="{{view.foreignCurrency}}"{{/if}}{{#if view.print.stretchTable}} data-mm-stretch-table{{/if}}{{#if view.print.pageless}} data-mm-pageless{{/if}}{{#if view.theme.light}} data-mm-light-theme{{/if}} data-mm-paper-height="{{view.print.paperHeight}}" data-mm-paper-size="{{view.print.paperSize}}" dir="{{view.script.direction}}"{{#if view.script.lang}} lang="{{view.script.lang}}"{{/if}} style="--mm-text-scale: {{view.print.textScale}}; --mm-print-zoom: {{view.print.printZoom}}; --mm-print-width: {{view.print.printWidth}}px; --mm-browser-print-width: {{view.print.browserPrintWidth}}px; --mm-photo-cap: {{view.print.photoCap}}px; --mm-band-cap: {{view.print.bandCap}}px; --mm-stamp-width: {{view.print.stampWidth}}px;{{#if view.script.font}} --mm-script-font: '{{view.script.font}}';{{/if}}{{#if view.theme}} --mm-theme: {{view.theme.accent}}; --mm-theme-tint: {{view.theme.tint}};{{/if}}">
   {{!-- Text Scale Smaller (0.8, also unset): Refrens' renderer leaves the page unzoomed then, so the template zooms it (helpers.ts ownPrintZoom). --}}
   {{#if view.print.ownPrintZoom}}<style>@media print { :where(html) { zoom: {{view.print.ownPrintZoom}}; } }</style>{{/if}}
   {{#unless view.letterheadEveryPage}}
@@ -41,6 +41,9 @@
     <thead class="mm-page-frame-header">
       <tr class="mm-page-margin" aria-hidden="true"><td></td></tr>
     {{#if view.letterheadEveryPage}}
+        {{!-- What the PDF service's stamped letterhead takes past its margin on a page wider than
+             A4 portrait: a hidden copy of it, view.print.stampWidth wide (styles.css). --}}
+        {{#if @root.invoice.letterHead}}<tr class="mm-stamp-room is-top" aria-hidden="true"><td><img class="mm-stamp-image" src="{{@root.invoice.letterHead}}" alt="" /></td></tr>{{/if}}
         <tr>
           <td>
             <div class="no-dibella invoice-letterhead mm-letterhead{{#unless @root.invoice.letterHead}} is-empty{{/unless}}">
@@ -58,11 +61,15 @@
     {{#if view.footerEveryPage}}
         <tr>
           <td>
-            <div class="no-dibella invoice-letterhead-footer mm-letterhead-footer mm-footer-spacer{{#unless @root.invoice.letterHeadFooter}} is-empty{{/unless}}" aria-hidden="true">
+            <div class="{{#if view.serviceFooter}}no-dibella {{/if}}invoice-letterhead-footer mm-letterhead-footer mm-footer-spacer{{#unless @root.invoice.letterHeadFooter}} is-empty{{/unless}}" aria-hidden="true">
               {{#if @root.invoice.letterHeadFooter}}<img src="{{@root.invoice.letterHeadFooter}}" alt="" />{{else}}<img alt="" />{{/if}}
             </div>
           </td>
         </tr>
+        {{#if view.serviceFooter}}{{#if @root.invoice.letterHeadFooter}}<tr class="mm-stamp-room is-bottom" aria-hidden="true"><td><img class="mm-stamp-image" src="{{@root.invoice.letterHeadFooter}}" alt="" /></td></tr>{{/if}}{{/if}}
+    {{/if}}
+    {{#if view.ownSignatureNote}}
+        <tr class="mm-signature-note"><td><p>This is an electronically generated document, no signature is required.</p></td></tr>
     {{/if}}
       <tr class="mm-page-margin" aria-hidden="true"><td></td></tr>
     </tfoot>
@@ -646,7 +653,7 @@
     </tbody>
   </table>
 
-  <div class="no-dibella invoice-letterhead-footer mm-letterhead-footer{{#if view.footerEveryPage}} mm-footer-fixed{{/if}}{{#unless @root.invoice.letterHeadFooter}} is-empty{{/unless}}">
+  <div class="{{#unless view.footerEveryPage}}no-dibella {{/unless}}{{#if view.serviceFooter}}no-dibella {{/if}}invoice-letterhead-footer mm-letterhead-footer{{#if view.footerEveryPage}} mm-footer-fixed{{/if}}{{#unless @root.invoice.letterHeadFooter}} is-empty{{/unless}}">
     {{#if @root.invoice.letterHeadFooter}}
       <img src="{{@root.invoice.letterHeadFooter}}" alt="Letterhead footer" data-ceres-height="letterhead-footer" />
     {{else}}

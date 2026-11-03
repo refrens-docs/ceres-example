@@ -636,7 +636,7 @@ describe("Modern Manufacturing template — render", () => {
       invoice.template = { languageScript: "Arabic", enableRtl: true };
     });
     expect(html).toContain(
-      '<div class="mm-doc" data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-zoom: 0.8; --mm-print-width: 950px; --mm-browser-print-width: 893px; --mm-photo-cap: 600px; --mm-band-cap: 307px; --mm-script-font: \'Noto Sans Arabic\';'
+      '<div class="mm-doc" data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-zoom: 0.8; --mm-print-width: 950px; --mm-browser-print-width: 893px; --mm-photo-cap: 600px; --mm-band-cap: 307px; --mm-stamp-width: 0px; --mm-script-font: \'Noto Sans Arabic\';'
     );
     expect(render()).toContain(
       'data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" dir="ltr" style='
@@ -2468,12 +2468,28 @@ describe("Modern Manufacturing template — view model", () => {
     );
     const lastOnly = render((invoice) => {
       invoice.letterHeadFooter = "https://cdn.example/footer.png";
-      invoice.template = { pdfOptions: { footerOnLastPage: true } };
+      invoice.template = {
+        pdfOptions: { footerOnLastPage: true, letterHeadOnFirstPage: true },
+      };
     });
     expect(lastOnly).not.toContain("mm-footer-fixed");
+    // An every-page letterhead: the service draws its band and the line in it, so not here.
+    const lastFooterOnly = render((invoice) => {
+      invoice.template = { pdfOptions: { footerOnLastPage: true } };
+    });
+    expect(lastFooterOnly).not.toContain("mm-signature-note");
+    // Letterhead first page and footer last page only: the PDF service stamps no band and
+    // leaves its "electronically generated" line out, so the frame's footer carries it.
     expect(lastOnly).toMatch(
-      /<tfoot class="mm-page-frame-footer">\s*<tr class="mm-page-margin" aria-hidden="true"><td><\/td><\/tr>\s*<\/tfoot>/
+      /<tfoot class="mm-page-frame-footer">\s*<tr class="mm-signature-note"><td><p>This is an electronically generated document, no signature is required.<\/p><\/td><\/tr>\s*<tr class="mm-page-margin" aria-hidden="true"><td><\/td><\/tr>\s*<\/tfoot>/
     );
+    // Hide footer drops the line; the letterhead footer stays the template's own to draw.
+    const hidden = render((invoice) => {
+      invoice.letterHeadFooter = "https://cdn.example/footer.png";
+      invoice.template = { pdfOptions: { hideFooter: true } };
+    });
+    expect(hidden).not.toContain("mm-signature-note");
+    expect(hidden).not.toMatch(/no-dibella invoice-letterhead-footer/);
     expect(render()).toMatch(
       /<tr class="mm-hsn-words">\s*<td colspan="7">Total Tax In Words: EIGHTEEN THOUSAND/
     );
@@ -3312,6 +3328,8 @@ describe("Modern Manufacturing template — view model", () => {
       ownPrintZoom: "0.8",
       photoCap: 600,
       bandCap: 307,
+      // A4 portrait: the PDF service's stamps fit their margins (stamp room 0).
+      stampWidth: "0",
       stretchTable: true,
       pageless: false,
     });
@@ -3420,7 +3438,7 @@ describe("Modern Manufacturing template — view model", () => {
       invoice.template = { pdfOptions: { format: "a5", textScale: 1.1 } };
     });
     expect(html).toContain(
-      'style="--mm-text-scale: 1.1; --mm-print-zoom: 0.8; --mm-print-width: 657px; --mm-browser-print-width: 600px; --mm-photo-cap: 519px; --mm-band-cap: 204px;"'
+      'style="--mm-text-scale: 1.1; --mm-print-zoom: 0.8; --mm-print-width: 657px; --mm-browser-print-width: 600px; --mm-photo-cap: 519px; --mm-band-cap: 204px; --mm-stamp-width: 0px;"'
     );
     // Smaller (unset here): the template zooms the printed page itself.
     expect(html).toContain(

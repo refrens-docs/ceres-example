@@ -3401,6 +3401,33 @@ export const repeatedBandCap = (pdfOptions: UnknownRecord): number => {
   return Math.floor(pageArea / printZoom(pdfOptions) / 4) - 20;
 };
 
+const stampWidth = (pdfOptions: UnknownRecord): number => {
+  const [width, height] =
+    PAPER_MM[text(pdfOptions.format).toLowerCase()] ?? PAPER_MM.a4;
+  const paperMm = flagSetting(pdfOptions.landscape) === true ? height : width;
+  return (
+    Math.max(0, ((paperMm - PAPER_MM.a4[0]) / 25.4) * 96) /
+    printZoom(pdfOptions)
+  );
+};
+
+/*
+ * "Hide Footer" (pdfOptions.hideFooter) drops the PDF service's own footer, its "electronically
+ * generated" line, and with it the every-page letterhead footer the service would stamp. It
+ * never hides the letterhead footer itself (user rule 2026-10-26): the template draws it then.
+ */
+export const hidesServiceFooter = (state: UnknownRecord): boolean => {
+  const invoice = asRecord(state.invoice);
+  const template = asRecord(invoice.template);
+  return [
+    asRecord(state.pdfOptions).hideFooter,
+    asRecord(invoice.pdfOptions).hideFooter,
+    asRecord(template.pdfOptions).hideFooter,
+    template.hideFooter,
+    invoice.hideFooter,
+  ].some((value) => flagSetting(value) === true);
+};
+
 export const mapPrint = (state: UnknownRecord) => {
   const pdfOptions = asRecord(state.pdfOptions);
   const rawScale =
@@ -3428,6 +3455,14 @@ export const mapPrint = (state: UnknownRecord) => {
     ownPrintZoom: ownPrintZoom(pdfOptions),
     photoCap: photoCap(pdfOptions),
     bandCap: repeatedBandCap(pdfOptions),
+    /*
+     * Refrens' PDF service stamps an every-page letterhead and footer image as wide as an A4
+     * portrait page, then as wide as the paper on a wider one (landscape, A3), where it reaches
+     * past its margin into the page (user, 2026-11-03, as the Professional template): a hidden
+     * copy of the image this wide (CSS px under the print zoom) is as tall as that reach
+     * (template.hbs mm-stamp-room).
+     */
+    stampWidth: compactDecimal(stampWidth(pdfOptions)),
     stretchTable,
     // Lydia's Pageless PDF: one page as tall as the content, no sheet to fill.
     pageless:
@@ -3590,9 +3625,27 @@ export const buildModernManufacturingView = (root: unknown) => {
     // The letterhead footer repeats at the foot of every printed page unless the document
     // asks for it on the last page only (pdfOptions.footerOnLastPage).
     footerEveryPage: !visibility.footerOnLastPage,
+    // The PDF service draws the every-page footer itself, unless "Hide Footer" turns its footer
+    // off; the letterhead footer stays, so the template then draws it in the PDF (as Ecommerce).
+    serviceFooter: !visibility.footerOnLastPage && !hidesServiceFooter(state),
     // The letterhead repeats at the head of every printed page unless the document asks for
     // it on the first page only (pdfOptions.letterHeadOnFirstPage), as Sri Lankan / Vaishnavi.
     letterheadEveryPage: !visibility.letterHeadOnFirstPage,
+    /*
+     * "This is an electronically generated document, no signature is required." Refrens' PDF
+     * service prints it at the foot of every page of an unsigned document, in its own page
+     * footer, which it leaves out for a custom template when it stamps no band at all
+     * (letterhead on the first page and footer on the last page only; with an every-page
+     * letterhead it draws its band and the line in it: two lines, user 2026-11-03) (user, 2026-11-03, as the Professional template): the template prints it then (not
+     * on a Long PDF, where the service still prints it); "Hide footer" drops it.
+     */
+    ownSignatureNote:
+      Boolean(visibility.footerOnLastPage) &&
+      Boolean(visibility.letterHeadOnFirstPage) &&
+      !mapPrint(state).pageless &&
+      ["", "NONE"].includes(text(invoice.signatureMethod).toUpperCase()) &&
+      !text(invoice.signature) &&
+      !hidesServiceFooter(state),
     print: mapPrint(state),
     // Mapped in the data mapper (withDocumentScript); read again for a state built without it.
     script:
@@ -4114,10 +4167,22 @@ export const prepareBrowserPrint = (
  */
 const STRETCH_ATTR = "data-mm-stretch-table";
 const STRETCH_ROW = ".mm-items > tbody > tr:last-child";
+/*
+ * The row the preview's sheet lengthens: the table's last, or above the Sub total rows that
+ * close it (user, 2026-11-02: the summary rows never stretch; the space goes under the item).
+ */
+const sheetStretchRow = (doc: ParentNode): HTMLElement | null => {
+  let row = doc.querySelector<HTMLElement>(STRETCH_ROW);
+  while (row?.matches(".mm-group-total-row") && row.previousElementSibling)
+    row = row.previousElementSibling as HTMLElement;
+  return row;
+};
 
 export const resetItemsTableStretch = (root: ParentNode = document): void => {
   root
-    .querySelectorAll<HTMLElement>(`.mm-doc ${STRETCH_ROW}[data-mm-stretched]`)
+    .querySelectorAll<HTMLElement>(
+      ".mm-doc .mm-items > tbody > tr[data-mm-stretched]"
+    )
     .forEach((row) => {
       row.style.removeProperty("height");
       row.removeAttribute("data-mm-stretched");
@@ -4343,14 +4408,18 @@ const pageUnits = (
     let item: HTMLElement[] = [];
     const close = () => {
       if (!item.length) return;
-      const last = item[item.length - 1];
+      // The summary rows never stretch (user, 2026-11-02): a Sub total kept with its item is
+      // not the row that takes the page's room; the item's own last row does, above it.
+      const own = item.filter((row) => !row.matches(".mm-group-total-row"));
+      const last = own.length ? own[own.length - 1] : item[item.length - 1];
+      const end = item[item.length - 1];
       const first = rows.length === 0;
       rows.push(last);
       // The first item carries the headings above it (its top is theirs): on a new page it
       // starts at the page's top, the headings with it, not under a repeated copy.
       units.push({
         top: first && table.tHead ? box(table.tHead).top : box(item[0]).top,
-        bottom: box(last).bottom,
+        bottom: box(end).bottom,
         solid: true,
         fill: rows.length - 1,
         head: first ? 0 : head,
@@ -4363,7 +4432,7 @@ const pageUnits = (
           return;
         const joins =
           row.matches(
-            ".mm-detail-row, .mm-image-row:not(.mm-group-image-row)"
+            ".mm-detail-row, .mm-image-row:not(.mm-group-image-row), .mm-group-total-row"
           ) ||
           (item.length > 0 &&
             item[item.length - 1].matches(
@@ -4556,7 +4625,7 @@ export const stretchItemsToSheet = (root: ParentNode = document): void => {
   if (printing) return;
   resetItemsTableStretch(root);
   root.querySelectorAll<HTMLElement>(".mm-doc").forEach((doc) => {
-    const row = doc.querySelector<HTMLElement>(STRETCH_ROW);
+    const row = sheetStretchRow(doc);
     if (
       !row ||
       !row.getClientRects().length ||
@@ -4902,6 +4971,34 @@ export const fitItemsToScreen = (root: ParentNode = document): void => {
   });
 };
 
+/*
+ * The room the PDF service's stamped letterhead and footer take past their margins (styles.css
+ * mm-stamp-room), on the root too: the print watermark keeps between them there (user,
+ * 2026-11-03, as the Professional template). Set again when an image arrives.
+ */
+export const placeStampRoom = (root: ParentNode = document): void => {
+  const doc = root.querySelector<HTMLElement>(".mm-doc");
+  if (!doc || typeof document === "undefined") return;
+  const width = parseFloat(doc.style.getPropertyValue("--mm-stamp-width")) || 0;
+  const room = (selector: string): number => {
+    const img = doc.querySelector<HTMLImageElement>(
+      `tr.mm-stamp-room${selector} .mm-stamp-image`
+    );
+    return img && img.naturalWidth > 0
+      ? (width * img.naturalHeight) / img.naturalWidth
+      : 0;
+  };
+  const top = room(".is-top");
+  const bottom = room(".is-bottom");
+  const page = document.documentElement;
+  page.toggleAttribute("data-mm-stamp-room", top > 0 || bottom > 0);
+  page.style.setProperty("--mm-stamp-page-top", `${compactDecimal(top)}px`);
+  page.style.setProperty(
+    "--mm-stamp-page-bottom",
+    `${compactDecimal(bottom)}px`
+  );
+};
+
 export const registerModernManufacturingPrint = (): void => {
   const state = window as typeof window & { mmPrintRegistered?: boolean };
   if (state.mmPrintRegistered || typeof window.matchMedia !== "function") {
@@ -4920,6 +5017,7 @@ export const registerModernManufacturingPrint = (): void => {
   };
   // The table first (its width sets its height), then the stretch, then the footer.
   const printLayout = () => {
+    placeStampRoom();
     fitItemsToScreen();
     stackCrampedFields();
     joinTotals();
