@@ -5369,6 +5369,11 @@ export const flowFiller = (
   const after = placed
     .slice(anchor + 1)
     .filter((unit) => unit.page === at.page);
+  // What follows the table starts on the next page: no space. The table's side rules already
+  // run to this page's foot, and a space sized to the last pixel of the page moved whole to the
+  // next page when the page came out a little shorter, an empty table on a page of its own
+  // (real PDF of invoice 0024, 2026-11-03).
+  if (!after.length && placed.length > anchor + 1) return undefined;
   const best = (after.length ? after : [at])
     .map(room)
     .reduce((least, next) =>

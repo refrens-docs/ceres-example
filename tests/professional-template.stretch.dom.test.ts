@@ -91,8 +91,8 @@ describe("Professional Template — the stretch's pages", () => {
       { top: 0, bottom: 950 },
       { top: 950, bottom: 1100 },
     ];
-    // The totals go to page 2: what is left of page 1 under the table is the room.
-    expect(room(units, 0, 1000)).toBe(50);
+    // The totals go to page 2: no space (an empty table never moves to a page of its own).
+    expect(room(units, 0, 1000)).toBeUndefined();
   });
 
   it("does not stretch where a page break cuts a row before the table ends", () => {
@@ -147,14 +147,13 @@ describe("Professional Template — the preview's A4 sheet", () => {
     expect(fillerHeight(filler)).toBe("814px");
   });
 
-  it("fills the sheet the table ends on in a longer document", () => {
+  it("adds no space when the totals move to the next sheet, as in print", () => {
     media(false);
     // The item ends at 1300 px on sheet 1 (1414 px tall); the totals (400 px) move to sheet 2.
     const { doc, filler } = mount("", 1300, 1700);
     stretchItemTable();
-    // The table runs down to sheet 1's foot.
-    expect(fillerHeight(filler)).toBe("114px");
-    expect(doc.classList.contains("is-filled")).toBe(true);
+    expect(fillerHeight(filler)).toBe("0px");
+    expect(doc.classList.contains("is-filled")).toBe(false);
   });
 
   // User (2026-11-02): the summary rows never stretch; the space goes under the last item.
