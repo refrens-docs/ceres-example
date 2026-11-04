@@ -4,7 +4,7 @@
  * Professional Template — Figma Document-Templates, node 1801:8109 ("Professional Template").
  *
  * Design canvas 1000 px, 32 px page padding (934 px of content), 20 px between sections.
- * Colours are the design's variables (primary-500 #7d3bdf, neutral-25 … 900); the item
+ * Colours are the design's variables (primary #6539c0 as refrens.com, neutral-25 … 900); the item
  * table's header, the card titles and the tinted party cards follow the document's theme
  * colour (helpers.ts sets --pt-theme, Lydia's live picker --primary-color). Inter throughout;
  * the business's Heading / Body fonts (--title-font / --subtitle-font) replace it when set.
@@ -25,12 +25,13 @@
 
   /* The host's live colour (Lydia's theme picker sets --primary-color on <html>) wins over the
      document's colour as rendered, so a change shows without a re-render. */
-  --pt-accent: var(--primary-color, var(--pt-theme, #7d3bdf));
+  --pt-accent: var(--primary-color, var(--pt-theme, #6539c0));
   --pt-on-accent: #fff;
 
-  /* The party, shipping, transport and bank cards' ground and the table's zebra rows: a 6 %
-     tint of the theme colour (user, 2026-11-04: a little darker than the 3 % before). */
-  --pt-tint: color-mix(in srgb, var(--pt-accent) 6%, var(--pt-paper));
+  /* The party, shipping, transport and bank cards' ground and the table's zebra rows: the
+     theme colour at 10 %, as refrens.com's own Professional template paints them
+     (rgba(theme, 0.1) on white; user, 2026-11-04). */
+  --pt-tint: color-mix(in srgb, var(--pt-accent) 10%, var(--pt-paper));
 
   /* The item table's zebra rows in the same light tint as the cards (Bank Details, Billed By):
      the theme at 3 %, not the document's 20 % Secondary Color (user request, 2026-10-24). */
@@ -1113,31 +1114,25 @@
   text-align: end;
 }
 
-/* The grand total at 20 px between two neutral-800 rules, everything spaced by gaps: 12 px
-   from the rules to the figures and from the rules to the rows (user requests, 2026-10-24). */
-.pt-totals-table .pt-totals > .pt-grand-row {
-  row-gap: 12px;
-}
-
-/* The rules are the row's own grid rows, 12 px from the figures by its gap (user request,
-   2026-10-24: gaps, no padding or margin); the widget's own rule and 6 px over each
-   grand-total cell go. */
-.pt-totals-table .pt-totals > .pt-grand-row::before,
-.pt-totals-table .pt-totals > .pt-grand-row::after {
-  grid-column: 1 / -1;
-  border-top: 1px solid var(--pt-ink);
-  content: "";
-}
-
+/*
+ * The grand total at 20 px between two rules, 12 px from the figures, each cell drawing its own
+ * as refrens.com's Professional template does: the rules break for a moment between the label
+ * and the figure (user, 2026-11-04). The label's reach into the 20 px column gap leaves that
+ * break 3 px wide.
+ */
 .pt-totals-table .pt-totals .pt-grand-row > * {
-  padding: 0;
+  padding: 12px 0;
   border: 0;
+  border-block: 1px solid var(--pt-ink);
   font-size: calc(var(--pt-font-size-grand) * var(--pt-text-scale, 1));
   line-height: 1.3;
 }
 
-/* "Total (INR)" regular beside its semibold figure (user request, 2026-10-24). */
+
+/* "Total (INR)" regular beside its semibold figure (user request, 2026-10-24); its rules run
+   on into the column gap, to 3 px from the figure's. */
 .pt-totals-table .pt-totals .pt-grand-row > .ceres-subtotal-label {
+  margin-inline-end: -17px;
   font-weight: 400;
 }
 

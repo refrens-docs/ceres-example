@@ -300,7 +300,9 @@ const heading = (labels: UnknownRecord, key: string, fallback: string) =>
  * Every other toggle is the document's own data (a section shows when it has content and the
  * business has not switched it off).
  */
-const DEFAULT_THEME = "#7d3bdf";
+// refrens.com's own Professional template: rgb(101, 57, 192) where the document sets none
+// (its render, 2026-11-04; the Figma's #7d3bdf read brighter and its 10 % tint lighter).
+const DEFAULT_THEME = "#6539c0";
 
 const hexColor = (value: unknown): string => {
   const raw = text(value).toLowerCase();
@@ -2963,7 +2965,7 @@ export const mapItemTable = (
         // thumbnails under its name, originalImages[] in a full-width row below it.
         return {
           isGroupHeader: true,
-          isStripe: stripeIndex % 2 === 1,
+          isStripe: stripeIndex % 2 === 0,
           name: groupName(text(item.name)),
           images: imageList(item.images),
           originalImages: imageList(item.originalImages),
@@ -3011,9 +3013,10 @@ export const mapItemTable = (
         isItem: !isGroupTotal,
         isGroupTotal,
         itemIndex,
-        // Zebra rows as refrens.com's Professional template: the first row white, the second
-        // tinted, and so on; an item's name, detail and image rows share its colour.
-        isStripe: stripeIndex % 2 === 1,
+        // Zebra rows as refrens.com's Professional template: the first row tinted, the second
+        // white, and so on (seen on its own render, 2026-11-04); an item's name, detail and
+        // image rows share its colour.
+        isStripe: stripeIndex % 2 === 0,
         // "1.", as refrens.com numbers items (from 1 again in each group).
         serial: isGroupTotal ? "" : `${serial}.`,
         name: text(item.name),

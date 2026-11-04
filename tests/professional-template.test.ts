@@ -1229,7 +1229,7 @@ describe("Professional Template — files and CSS", () => {
 
   it("uses the design's colour tokens (text colours as refrens.com, 2026-10-24)", () => {
     [
-      "#7d3bdf",
+      "#6539c0",
       "--pt-ink: #1d1d1d;",
       "--pt-muted: rgb(0 0 0 / 50%);",
       "--pt-code: #666670;",
@@ -1415,7 +1415,7 @@ describe("Professional Template — the platform's other settings, under every a
     expect(onThemeColor("#1f4e79")).toBe("#ffffff");
     const css = fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8");
     expect(css).toContain(
-      "--pt-accent: var(--primary-color, var(--pt-theme, #7d3bdf))"
+      "--pt-accent: var(--primary-color, var(--pt-theme, #6539c0))"
     );
   });
 });
@@ -1889,12 +1889,12 @@ describe("Professional Template — tax and discount rows as refrens.com prints 
 });
 
 describe("Professional Template — item table look (refrens.com Professional)", () => {
-  // refrens.com: the first row white, the second in the document's Secondary Color, and so on
-  // (user request, 2026-10-24: "read the api how it works").
-  it("tints every other row, the second one first, in the document's Secondary Color", () => {
+  // refrens.com's own Professional template: the first row tinted, the second white, and so
+  // on (its render, 2026-11-04).
+  it("tints every other row, the first one first, in the document's Secondary Color", () => {
     const { rows } = view().table;
     rows.forEach((row: Json, index: number) =>
-      expect(row.isStripe).toBe(index % 2 === 1)
+      expect(row.isStripe).toBe(index % 2 === 0)
     );
     const css = fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8");
     expect(css).toMatch(
@@ -1907,7 +1907,7 @@ describe("Professional Template — item table look (refrens.com Professional)",
     const { rows } = view().table;
     const group = rows.findIndex((row: Json) => row.isGroupHeader);
     expect(group).toBeGreaterThanOrEqual(0);
-    expect(rows[group].isStripe).toBe(group % 2 === 1);
+    expect(rows[group].isStripe).toBe(group % 2 === 0);
     expect(rows[group + 1].isStripe).toBe(!rows[group].isStripe);
     const html = render();
     expect(html).toMatch(
@@ -2091,14 +2091,13 @@ describe("Professional Template — review round 6 (2026-10-24)", () => {
     );
   });
 
-  it("spaces the grand total by gaps alone: no padding, no margin", () => {
+  it("draws the grand total's rules per cell, broken between label and figure", () => {
     expect(css()).toMatch(
-      /\.pt-totals-table \.pt-totals > \.pt-grand-row \{\s*row-gap: 12px;\s*\}/
+      /\.pt-grand-row > \* \{\s*padding: 12px 0;\s*border: 0;\s*border-block: 1px solid var\(--pt-ink\);/
     );
     expect(css()).toMatch(
-      /\.pt-grand-row::after \{\s*grid-column: 1 \/ -1;\s*border-top: 1px solid var\(--pt-ink\);/
+      /\.pt-grand-row > \.ceres-subtotal-label \{\s*margin-inline-end: -17px;/
     );
-    expect(css()).not.toMatch(/\.pt-grand-row \{[^}]*(?:padding|margin)/);
   });
 
   it("keeps the enquiry line and group headings with what they belong to in print", () => {
