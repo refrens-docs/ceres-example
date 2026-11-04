@@ -2478,11 +2478,9 @@ describe("Modern Manufacturing template — view model", () => {
       invoice.template = { pdfOptions: { footerOnLastPage: true } };
     });
     expect(lastFooterOnly).not.toContain("mm-signature-note");
-    // Letterhead first page and footer last page only: the PDF service stamps no band and
-    // leaves its "electronically generated" line out, so the frame's footer carries it.
-    expect(lastOnly).toMatch(
-      /<tfoot class="mm-page-frame-footer">\s*<tr class="mm-signature-note"><td><p>This is an electronically generated document, no signature is required.<\/p><\/td><\/tr>\s*<tr class="mm-page-margin" aria-hidden="true"><td><\/td><\/tr>\s*<\/tfoot>/
-    );
+    // Letterhead first page and footer last page only: the PDF service still prints its own
+    // "electronically generated" line (user, 2026-11-04: two lines), so the template does not.
+    expect(lastOnly).not.toContain("mm-signature-note");
     // Hide footer drops the line; the letterhead footer stays the template's own to draw.
     const hidden = render((invoice) => {
       invoice.letterHeadFooter = "https://cdn.example/footer.png";
@@ -3863,7 +3861,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(print).toMatch(/\.mm-doc \{[^}]*width: 100%;[^}]*margin: 0 auto;/);
     // The planner's screen widths give way to the page; a wider table is never shrunk.
     expect(print).toMatch(
-      /\.mm-doc \.mm-items th\[style\] \{\s*width: auto !important;/
+      /\.mm-doc \.mm-items:not\(\.is-planned\) th\[style\] \{\s*width: auto !important;/
     );
     expect(source).not.toContain("is-print-fit");
     expect(source).not.toContain("is-print-compact");
@@ -4090,7 +4088,7 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
 
   it("shows the business logo up to 120 px tall and every QR at 120 px", () => {
     expect(rule(".mm-logo .mm-logo-image")).toMatch(
-      /max-width: min\(240px, 100%\);\s*max-height: 120px;/
+      /max-width: 240px;\s*max-height: 120px;/
     );
     expect(rule(".mm-qr.mm-header-qr img")).toMatch(
       /width: 120px;\s*height: 120px;/

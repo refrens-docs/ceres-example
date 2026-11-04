@@ -267,12 +267,16 @@
 .mm-logo {
   flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
 }
 
-/* The business logo: up to 120 px tall (user request), up to 240 px wide for a wide mark. */
+/* The business logo: up to 120 px tall (user request), up to 240 px wide for a wide mark. A
+   plain 240 px cap, not min(240px, 100%): sizing the box, Chrome drops a percentage cap, so a
+   wide logo's box kept the picture's own width and pushed the seller details far from it
+   (user, 2026-11-04). The box hugs the logo; the details follow 14 px after it. */
 .mm-logo .mm-logo-image {
   display: block;
-  max-width: min(240px, 100%);
+  max-width: 240px;
   max-height: 120px;
   object-fit: contain;
 }
@@ -360,11 +364,13 @@
 
 /* ------------------------------------------------------------ 2. banner */
 
+/* Title, copy tag and status together at the start; the subtitle at the end (its own auto
+   margin), also when it has to go under them on a narrow screen. */
 .mm-banner {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   padding: 10px 12px;
   border-radius: 6px;
@@ -400,8 +406,12 @@
   font-weight: 600;
 }
 
+/* The subtitle keeps its place at the end of the title row and wraps in the room left there:
+   only its own long text wraps, never the title or tags (user, 2026-11-04: a long subtitle
+   dropped whole under them). Under the title only when less than 160 px is left beside it. */
 .mm-subtitle {
-  min-width: 0;
+  flex: 1 1 0;
+  min-width: min(160px, 100%);
   margin-inline-start: auto;
   font-size: calc(var(--mm-font-size-base) * var(--mm-text-scale, 1));
   line-height: 1.5385;
@@ -2273,10 +2283,12 @@
   }
 
   /*
-   * The planner's column widths are for the 1000 px screen canvas: on paper the table sizes
-   * itself to the page, never wider than its content needs.
+   * On paper the columns keep the preview's widths, the item column taking the rest, as long
+   * as they fit the page (helpers.ts planPrintColumns marks the table is-planned; user,
+   * 2026-11-04: the PDF spread the spare width over every column, a wide Sr. column under
+   * short item names, unlike the preview). A table too wide for the page sizes itself to it.
    */
-  .mm-doc .mm-items th[style] {
+  .mm-doc .mm-items:not(.is-planned) th[style] {
     width: auto !important;
   }
 

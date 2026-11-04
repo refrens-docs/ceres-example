@@ -3633,19 +3633,12 @@ export const buildModernManufacturingView = (root: unknown) => {
     letterheadEveryPage: !visibility.letterHeadOnFirstPage,
     /*
      * "This is an electronically generated document, no signature is required." Refrens' PDF
-     * service prints it at the foot of every page of an unsigned document, in its own page
-     * footer, which it leaves out for a custom template when it stamps no band at all
-     * (letterhead on the first page and footer on the last page only; with an every-page
-     * letterhead it draws its band and the line in it: two lines, user 2026-11-03) (user, 2026-11-03, as the Professional template): the template prints it then (not
-     * on a Long PDF, where the service still prints it); "Hide footer" drops it.
+     * service prints it itself at the page foot of an unsigned document, also with the
+     * letterhead on the first page and the footer on the last page only (user, 2026-11-04:
+     * two lines, the template's and the service's; "keep the real one"). The template never
+     * prints its own.
      */
-    ownSignatureNote:
-      Boolean(visibility.footerOnLastPage) &&
-      Boolean(visibility.letterHeadOnFirstPage) &&
-      !mapPrint(state).pageless &&
-      ["", "NONE"].includes(text(invoice.signatureMethod).toUpperCase()) &&
-      !text(invoice.signature) &&
-      !hidesServiceFooter(state),
+    ownSignatureNote: false,
     print: mapPrint(state),
     // Mapped in the data mapper (withDocumentScript); read again for a state built without it.
     script:
@@ -5000,6 +4993,24 @@ export const stackCrampedPairs = (root: ParentNode = document): void => {
   });
 };
 
+/*
+ * Print: the item columns keep their preview widths (the item column takes the rest) when the
+ * table then still fits its wrapper, the page's width; otherwise the table sizes itself to the
+ * page as before (styles.css, ".mm-items:not(.is-planned) th[style]").
+ */
+export const planPrintColumns = (root: ParentNode = document): void => {
+  root.querySelectorAll<HTMLTableElement>(".mm-items").forEach((table) => {
+    table.classList.remove("is-planned");
+    if (table.matches("[data-mm-totals-split], .is-cards, .is-grid")) return;
+    const wrapper = table.parentElement;
+    if (!wrapper) return;
+    table.classList.add("is-planned");
+    if (table.offsetWidth > wrapper.clientWidth + 1) {
+      table.classList.remove("is-planned");
+    }
+  });
+};
+
 export const fitItemsToScreen = (root: ParentNode = document): void => {
   const printing =
     typeof window.matchMedia === "function" &&
@@ -5074,6 +5085,7 @@ export const registerModernManufacturingPrint = (): void => {
     fitItemsToScreen();
     stackCrampedFields();
     joinTotals();
+    planPrintColumns();
     splitTotals();
     stretchItemsTable();
   };
