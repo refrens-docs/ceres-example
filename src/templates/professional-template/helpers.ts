@@ -4979,18 +4979,30 @@ export const splitTotals = (root: ParentNode = document): void => {
     // Layout pixels: the print zoom scales the measured boxes, not the widths set here.
     const scale =
       table.getBoundingClientRect().width / (table.offsetWidth || 1) || 1;
+    // Never wider than the wrapper: a table a pixel over it (its content's minimum width) had
+    // its right rule cut off by the wrapper's clip, a faint or missing right edge and a notch
+    // at the heading's corner in the PDF (user, 2026-11-04). The columns give up the pixel in
+    // proportion. Only a rounding's worth: a table truly wider than the page keeps its columns
+    // and is cropped (user rule: tables never shrink to fit).
+    const natural = table.getBoundingClientRect().width / scale;
+    const room = table.parentElement.getBoundingClientRect().width / scale;
+    const fit =
+      room > 0 && natural > room && natural - room <= 2 ? room / natural : 1;
     const split = document.createElement("table");
     split.className = table.className;
     split.setAttribute(TOTALS_SPLIT, "");
     const style = table.getAttribute("style");
     if (style) split.setAttribute("style", style);
     split.style.tableLayout = "fixed";
-    split.style.width = `${table.offsetWidth}px`;
+    const exact = `${natural * fit}px`; // offsetWidth rounds: up, it overflowed again
+    split.style.width = exact;
     const cols = document.createElement("colgroup");
     Array.from(row.cells).forEach((cell) => {
       const col = document.createElement("col");
       col.span = cell.colSpan || 1;
-      col.style.width = `${cell.getBoundingClientRect().width / scale}px`;
+      col.style.width = `${
+        (cell.getBoundingClientRect().width / scale) * fit
+      }px`;
       cols.appendChild(col);
     });
     split.appendChild(cols);
@@ -5001,7 +5013,7 @@ export const splitTotals = (root: ParentNode = document): void => {
     keep.setAttribute(TOTALS_SPLIT, "");
     table.insertBefore(keep, table.firstChild);
     table.style.tableLayout = "fixed";
-    table.style.width = `${table.offsetWidth}px`;
+    table.style.width = exact;
     groups[0].before(document.createComment(TOTALS_SPLIT));
     groups.forEach((group) => split.appendChild(group));
     table.after(split);
