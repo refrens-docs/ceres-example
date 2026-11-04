@@ -5378,6 +5378,19 @@ export interface FlowImage {
   natural: number;
 }
 
+/*
+ * A card that breaks between its lines in print: its top and bottom, its repeated top edge and
+ * title (head) and its bottom edge (close), drawn on every page it spans, and the places it
+ * may break: after a line ending at `fit`, the next page going on from `resume`.
+ */
+export interface FlowCard {
+  top: number;
+  bottom: number;
+  head: number;
+  close: number;
+  breaks: { fit: number; resume: number }[];
+}
+
 export interface FlowUnit {
   top: number;
   bottom: number;
@@ -5395,19 +5408,6 @@ export interface FlowUnit {
   images?: FlowImage[];
   // Cards side by side (or one) that break between their lines (styles.css pt-split-frame).
   cards?: FlowCard[];
-}
-
-/*
- * A card that breaks between its lines in print: its top and bottom, its repeated top edge and
- * title (head) and its bottom edge (close), drawn on every page it spans, and the places it
- * may break: after a line ending at `fit`, the next page going on from `resume`.
- */
-export interface FlowCard {
-  top: number;
-  bottom: number;
-  head: number;
-  close: number;
-  breaks: { fit: number; resume: number }[];
 }
 
 /*
@@ -6167,7 +6167,7 @@ let fitTimer = 0;
 let tableWatch: ResizeObserver | undefined;
 const refitSoon = (): void => {
   window.clearTimeout(fitTimer);
-  // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  // eslint-disable-next-line no-use-before-define, @typescript-eslint/no-use-before-define
   fitTimer = window.setTimeout(() => fitItemsToScreen(), 0);
 };
 
