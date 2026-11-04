@@ -24,6 +24,12 @@
  * backgrounds from the same pick, which turned the whole page that colour (user, 2026-11-01).
  */
 .mm-doc {
+  /* Smooth, lighter glyph edges on macOS screens (user, 2026-11-04). */
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -webkit-font-smoothing: antialiased;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -moz-osx-font-smoothing: grayscale;
+
   --mm-accent: var(--mm-theme, var(--primary-color, #013d7f));
   --mm-accent-200: var(--mm-theme-tint, #bddcff);
   --mm-ink: #1a2130;

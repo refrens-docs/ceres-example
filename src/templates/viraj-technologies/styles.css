@@ -34,6 +34,12 @@
  */
 
 .vt-doc {
+  /* Smooth, lighter glyph edges on macOS screens (user, 2026-11-04). */
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -webkit-font-smoothing: antialiased;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -moz-osx-font-smoothing: grayscale;
+
   --vt-ink: #22272f; /* neutral-900: text */
   --vt-rule: #95949f; /* neutral-400: every rule */
   --vt-fill: color-mix(

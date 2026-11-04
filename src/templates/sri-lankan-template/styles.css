@@ -24,6 +24,11 @@ body {
 }
 
 .sri-lankan-invoice {
+  /* Smooth, lighter glyph edges on macOS screens (user, 2026-11-04). */
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -webkit-font-smoothing: antialiased;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -moz-osx-font-smoothing: grayscale;
   width: min(100%, 794px);
   margin: 0 auto;
   padding: 16px 13px 26px;

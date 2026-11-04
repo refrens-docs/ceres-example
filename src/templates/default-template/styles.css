@@ -5,7 +5,6 @@
   .notes-modern-block,
   .terms-modern-block {
     break-inside: avoid;
-    break-inside: avoid;
   }
 }
 
@@ -50,6 +49,11 @@ body {
 }
 
 .invoice-modern-shell {
+  /* Smooth, lighter glyph edges on macOS screens (user, 2026-11-04). */
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -webkit-font-smoothing: antialiased;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -moz-osx-font-smoothing: grayscale;
   max-width: 1000px;
   margin: 0 auto;
   display: flex;

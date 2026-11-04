@@ -17,6 +17,12 @@
 
 
 .ec-doc {
+  /* Smooth, lighter glyph edges on macOS screens (user, 2026-11-04). */
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -webkit-font-smoothing: antialiased;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -moz-osx-font-smoothing: grayscale;
+
   --ec-ink: #282828; /* neutral-800: text, frame and table rules */
   --ec-muted: #666670; /* neutral-500: the UPI limit note */
   --ec-soft-rule: #d9d9d9; /* the payment strip */

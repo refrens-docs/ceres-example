@@ -1,4 +1,7 @@
 .sr-trading-document {
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -moz-osx-font-smoothing: grayscale;
+
   --sr-border-color: var(--ceres-border-color, #95949f);
   --sr-muted-color: #555;
   --sr-page-gutter: 32px;

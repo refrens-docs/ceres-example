@@ -16,6 +16,12 @@
  */
 
 .ax-doc {
+  /* Smooth, lighter glyph edges on macOS screens (user, 2026-11-04). */
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -webkit-font-smoothing: antialiased;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -moz-osx-font-smoothing: grayscale;
+
   /* The host's live colour (Lydia's theme picker sets --primary-color on <html>) wins over the
      document's colour as rendered, so a change shows without a re-render. */
   --ax-accent: var(--primary-color, var(--ax-theme, #000));

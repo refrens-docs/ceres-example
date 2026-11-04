@@ -1,4 +1,9 @@
 .sr-trading {
+  /* Smooth, lighter glyph edges on macOS screens (user, 2026-11-04). */
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -webkit-font-smoothing: antialiased;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- no standard property */
+  -moz-osx-font-smoothing: grayscale;
   font-family: var(--ceres-font-family, 'Inter', 'Helvetica Neue', Arial, sans-serif);
   color: var(--ceres-primary-color, #111);
   font-size: 13px;
