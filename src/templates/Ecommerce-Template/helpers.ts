@@ -5506,20 +5506,24 @@ export const splitTotals = (root: ParentNode = document): void => {
     const room = table.parentElement.clientWidth;
     const over = table.offsetWidth - room;
     const rtl = getComputedStyle(table).direction === "rtl";
+    // Cut by what it overhangs its box as it prints (100cqw: the box, styles.css), not as laid
+    // out here: a browser print turned to landscape has room for all of it.
+    const cut = "max(0px, calc(100% - 100cqw))";
     if (over > 0) {
       split.style.clipPath = rtl
-        ? `inset(-2px -2px -2px ${over}px)`
-        : `inset(-2px ${over}px -2px -2px)`;
+        ? `inset(-2px -2px -2px ${cut})`
+        : `inset(-2px ${cut} -2px -2px)`;
     }
     /*
      * A table that fits the frame is pinned in shares of its width, so it still fills the
      * frame on a wider page than the one laid out (a browser print turned to landscape: the
-     * pixel widths held the portrait width, user, 2 Nov 2026); one cut at the edge keeps
-     * its pixels.
+     * pixel widths held the portrait width, user, 2 Nov 2026). One cut at the edge keeps its
+     * pixels, or the frame's width where that is more: turned to landscape, a ten-column
+     * table kept its portrait width and left the page's right third empty (user, 4 Nov 2026).
      */
     const fits = over <= 0;
     const whole = table.getBoundingClientRect().width || 1;
-    if (fits) split.style.width = "100%";
+    split.style.width = fits ? "100%" : `max(${table.offsetWidth}px, 100%)`;
     const cols = document.createElement("colgroup");
     Array.from(row.cells).forEach((cell) => {
       const col = document.createElement("col");
@@ -5554,7 +5558,7 @@ export const splitTotals = (root: ParentNode = document): void => {
       fit.className = table.className;
       fit.setAttribute(TOTALS_SPLIT, "");
       fit.setAttribute("data-ec-totals-fit", "");
-      fit.style.width = `${room}px`;
+      fit.style.width = "100%";
       fitted.forEach((group) => fit.appendChild(group));
       if (close) fit.appendChild(close.cloneNode(true));
       (split.childElementCount > 1 ? split : table).after(fit);

@@ -36,12 +36,18 @@ describe("Ecommerce template — totals in print", () => {
     });
     splitTotals();
     const split = table.nextElementSibling as HTMLTableElement;
-    expect(split.style.clipPath).toBe("inset(-2px 270px -2px -2px)");
+    // Cut by its overhang of the box as it prints (100cqw), so a page turned to landscape with
+    // room for it all cuts nothing; at least its laid-out width, more where the page has it.
+    expect(split.style.clipPath).toBe(
+      "inset(-2px max(0px, calc(100% - 100cqw)) -2px -2px)"
+    );
+    // (jsdom drops max(); Chrome takes "max(825px, 100%)".)
+    expect(split.style.width).toContain("825px");
     // The TOTAL row stays on the item columns; the other totals and the words fit the frame.
     expect(split.querySelectorAll(".ec-items-total")).toHaveLength(1);
     const fit = split.nextElementSibling as HTMLTableElement;
     expect(fit.hasAttribute("data-ec-totals-fit")).toBe(true);
-    expect(fit.style.width).toBe("555px");
+    expect(fit.style.width).toBe("100%");
     expect(fit.querySelectorAll(".ec-totals")).toHaveLength(1);
     joinTotals();
     // Joined back in order, the split tables gone.
@@ -55,7 +61,7 @@ describe("Ecommerce template — totals in print", () => {
     table.style.direction = "rtl";
     splitTotals();
     expect((table.nextElementSibling as HTMLElement).style.clipPath).toBe(
-      "inset(-2px -2px -2px 270px)"
+      "inset(-2px -2px -2px max(0px, calc(100% - 100cqw)))"
     );
     joinTotals();
     table.style.direction = "";

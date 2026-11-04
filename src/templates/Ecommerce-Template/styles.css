@@ -1388,6 +1388,12 @@
     overflow: clip;
   }
 
+  /* The item table's box, as it prints: the totals of a table cut at its edge are cut by it
+     (helpers.ts splitTotals, 100cqw), on whichever paper the print dialog picks. */
+  .ec-items-scroll {
+    container-type: inline-size;
+  }
+
   /* Column headings repeat on every page a table spans; its totals print once, at the end. */
   .ec-items thead,
   .ec-summary .ceres-table thead {
