@@ -1818,3 +1818,17 @@
 body[class~="isDibella"] .no-dibella:is(.invoice-letterhead, .invoice-letterhead-footer) {
   display: none;
 }
+
+/*
+ * Cell by cell, fractional column widths left faint vertical lines across a filled row in the
+ * PDF and the preview (user, 2026-11-04, as in the Professional template): each filled cell's
+ * colour runs 1px under its neighbour. The rules between cells, drawn over it, stay as they are.
+ */
+.ec-items thead th:not(:last-child),
+.ec-doc :is(.ec-item-desc, .ec-note-body) .toastui-editor-contents th:not(:last-child) {
+  box-shadow: 1px 0 0 var(--ec-head-fill);
+}
+
+.ec-doc[dir="rtl"] :is(.ec-items thead, .ec-item-desc .toastui-editor-contents, .ec-note-body .toastui-editor-contents) th:not(:last-child) {
+  box-shadow: -1px 0 0 var(--ec-head-fill);
+}

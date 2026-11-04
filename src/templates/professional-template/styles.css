@@ -888,6 +888,15 @@
   box-shadow: -1px 0 0 var(--pt-zebra);
 }
 
+/* The same across a summary table's total row (payments, tax summary). */
+.pt-widget-table .ceres-table tfoot td:not(:last-child) {
+  box-shadow: 1px 0 0 var(--pt-fill);
+}
+
+.pt-doc[dir="rtl"] .pt-widget-table .ceres-table tfoot td:not(:last-child) {
+  box-shadow: -1px 0 0 var(--pt-fill);
+}
+
 /* The stretch row (shown by .pt-doc.is-filled, below): empty, the side rules running through it. */
 .pt-items .pt-filler {
   display: none;

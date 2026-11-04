@@ -3084,3 +3084,68 @@
 body[class~="isDibella"] .no-dibella:is(.invoice-letterhead, .invoice-letterhead-footer) {
   display: none;
 }
+
+/*
+ * Cell by cell, fractional column widths left faint vertical lines across a filled row in the
+ * PDF and the preview (user, 2026-11-04, as in the Professional template): each filled cell's
+ * colour runs 1px under its neighbour. The rules between cells, drawn over it, stay as they are.
+ */
+.mm-items thead th:not(:last-child) {
+  box-shadow: 1px 0 0 var(--mm-accent);
+}
+
+.mm-items tr.is-stripe td:not(:last-child),
+.mm-hsn-table tbody tr:nth-child(even) td:not(:last-child) {
+  box-shadow: 1px 0 0 var(--mm-stripe);
+}
+
+.mm-items .mm-group-row td:not(:last-child),
+.mm-widget-table .ceres-table thead th:not(:last-child),
+.mm-hsn-table thead th:not(:last-child),
+.mm-doc :is(.mm-item-desc, .mm-note-body) .toastui-editor-contents th:not(:last-child) {
+  box-shadow: 1px 0 0 var(--mm-title-bar);
+}
+
+.mm-doc[dir="rtl"] .mm-items thead th:not(:last-child) {
+  box-shadow: -1px 0 0 var(--mm-accent);
+}
+
+.mm-doc[dir="rtl"] :is(.mm-items tr.is-stripe, .mm-hsn-table tbody tr:nth-child(even)) td:not(:last-child) {
+  box-shadow: -1px 0 0 var(--mm-stripe);
+}
+
+.mm-doc[dir="rtl"] :is(.mm-items .mm-group-row td, .mm-widget-table .ceres-table thead th, .mm-hsn-table thead th, .mm-item-desc .toastui-editor-contents th, .mm-note-body .toastui-editor-contents th):not(:last-child) {
+  box-shadow: -1px 0 0 var(--mm-title-bar);
+}
+
+/*
+ * The grey outline rounded up beside the coloured header: at its top corners a grey crescent
+ * showed past the header's own curve (user, 2026-11-04, as fixed in the Professional template).
+ * A sliver of the header's colour, over the outline beside the header row and along the same
+ * 6 px curve, covers it; the outline shows beside the rows only. In every mode: on screen the
+ * table draws the outline, in a browser's print the wrapper, in the PDF the edge cells.
+ */
+.mm-items > thead > tr:first-child > th:is(:first-child, :last-child) {
+  position: relative;
+}
+
+.mm-items > thead > tr:first-child > th:first-child::before,
+.mm-items > thead > tr:first-child > th:last-child::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  background: var(--mm-accent);
+  content: "";
+  pointer-events: none;
+}
+
+.mm-items > thead > tr:first-child > th:first-child::before {
+  inset-inline-start: -1px;
+  border-start-start-radius: 6px;
+}
+
+.mm-items > thead > tr:first-child > th:last-child::after {
+  inset-inline-end: -1px;
+  border-start-end-radius: 6px;
+}

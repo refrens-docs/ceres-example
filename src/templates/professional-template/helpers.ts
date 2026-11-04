@@ -5020,6 +5020,26 @@ export const splitTotals = (root: ParentNode = document): void => {
     alignTotalsColumns(row, split, cols);
     if (table.closest(".pt-doc.is-browser-print"))
       proportionalColumns(table, split);
+    else if (fit < 1 || natural <= room) {
+      // A table that fits keeps to its wrapper as shares of it: in pixels, the wrapper narrowed
+      // a fraction after this measured it and the table ran 0.3 px past the clip again.
+      [table, split].forEach((each) => {
+        const set = Array.from(
+          each.querySelectorAll<HTMLTableColElement>(":scope > colgroup > col")
+        );
+        const sum = set.reduce(
+          (t, col) => t + (parseFloat(col.style.width) || 0),
+          0
+        );
+        if (sum <= 0) return;
+        set.forEach((col) => {
+          col.style.width = `${
+            ((parseFloat(col.style.width) || 0) / sum) * 100
+          }%`;
+        });
+        each.style.width = "100%";
+      });
+    }
     markJointCorners(table, split);
   });
 };
