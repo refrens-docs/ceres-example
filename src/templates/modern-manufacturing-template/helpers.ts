@@ -3812,9 +3812,12 @@ export const placeFootersOnPageEdge = (root: ParentNode = document): void => {
  * row's figures stay under their columns. joinTotals puts them back in the one table.
  */
 const TOTALS_SPLIT = "data-mm-totals-split";
-const TOTALS_GROUPS = ":scope > tfoot";
+const TOTALS_GROUPS = ":scope > tfoot:not(.mm-items-corners)";
 
 export const joinTotals = (root: ParentNode = document): void => {
+  root
+    .querySelectorAll(".mm-items.is-cropped")
+    .forEach((table) => table.classList.remove("is-cropped"));
   root
     .querySelectorAll<HTMLTableElement>(`table[${TOTALS_SPLIT}]`)
     .forEach((split) => {
@@ -3852,6 +3855,20 @@ export const splitTotals = (root: ParentNode = document): void => {
     typeof window.matchMedia === "function" &&
     window.matchMedia("print").matches;
   if (!printing) return;
+  /*
+   * A table wider than its wrapper is cut off at the wrapper's edge (user, 2026-11-01). Its
+   * page-break corner on that side (styles.css) is off the paper, and Chrome 122 let such a
+   * mark escape the cut: the PDF service shrank the whole page to show it (2026-11-04: text
+   * printed at 91 %, and the terms and additional-information boxes moved to new pages). Such
+   * a table draws no corner at its cut end.
+   */
+  root.querySelectorAll<HTMLTableElement>(".mm-items").forEach((table) => {
+    const wrapper = table.parentElement;
+    table.classList.toggle(
+      "is-cropped",
+      !!wrapper && table.offsetWidth > wrapper.clientWidth + 1
+    );
+  });
   root.querySelectorAll<HTMLTableElement>(".mm-items").forEach((table) => {
     const groups = Array.from(
       table.querySelectorAll<HTMLElement>(TOTALS_GROUPS)
@@ -3899,6 +3916,21 @@ export const splitTotals = (root: ParentNode = document): void => {
     groups[0].before(document.createComment(TOTALS_SPLIT));
     groups.forEach((group) => split.appendChild(group));
     table.after(split);
+    /*
+     * The page-break corners (styles.css) round the item table's foot on its last page too,
+     * where the totals carry on under it: two pieces hung from the totals' top corners cover
+     * those curves in the last row's ground (a striped row's tint, else the paper).
+     */
+    const lastRow = Array.from(table.tBodies)
+      .flatMap((body) => Array.from(body.rows))
+      .filter((each) => each.getClientRects().length > 0)
+      .pop();
+    const ground = lastRow?.cells[0]
+      ? getComputedStyle(lastRow.cells[0]).backgroundColor
+      : "";
+    if (ground && !/^(transparent|rgba\([^)]*,\s*0\))$/.test(ground)) {
+      split.style.setProperty("--mm-joint-bg", ground);
+    }
   });
 };
 
@@ -4857,28 +4889,30 @@ export const labelSummaryCells = (root: ParentNode = document): void => {
           col += span(cell);
         });
       });
-      table.querySelectorAll("tbody tr, tfoot tr").forEach((row) => {
-        let col = 0;
-        const isTotal = row.parentElement?.tagName === "TFOOT";
-        [...row.children].forEach((cell, index) => {
-          const label =
-            span(cell) === 1 && !(isTotal && index === 0)
-              ? (headings[col] ?? []).join(" ")
-              : "";
-          if (label) cell.setAttribute("data-label", label);
-          else cell.removeAttribute("data-label");
-          const value = cell.textContent?.trim() ?? "";
-          cell.toggleAttribute(
-            "data-mm-empty",
-            !value && !cell.querySelector("img, svg")
-          );
-          cell.toggleAttribute(
-            "data-mm-figure",
-            /\d/.test(value) && FIGURE_OR_DATE.test(value)
-          );
-          col += span(cell);
+      table
+        .querySelectorAll("tbody tr, tfoot:not(.mm-items-corners) tr")
+        .forEach((row) => {
+          let col = 0;
+          const isTotal = row.parentElement?.tagName === "TFOOT";
+          [...row.children].forEach((cell, index) => {
+            const label =
+              span(cell) === 1 && !(isTotal && index === 0)
+                ? (headings[col] ?? []).join(" ")
+                : "";
+            if (label) cell.setAttribute("data-label", label);
+            else cell.removeAttribute("data-label");
+            const value = cell.textContent?.trim() ?? "";
+            cell.toggleAttribute(
+              "data-mm-empty",
+              !value && !cell.querySelector("img, svg")
+            );
+            cell.toggleAttribute(
+              "data-mm-figure",
+              /\d/.test(value) && FIGURE_OR_DATE.test(value)
+            );
+            col += span(cell);
+          });
         });
-      });
     });
 };
 
@@ -4914,6 +4948,25 @@ export const stackCrampedFields = (root: ParentNode = document): void => {
   });
   // eslint-disable-next-line @typescript-eslint/no-use-before-define
   stackCrampedPairs(root);
+  // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  placeScanTitle(root);
+};
+
+/*
+ * The UPI QR sits beside the bank rows, its "Scan to pay via UPI" label in the heading row
+ * above it. On a box too narrow for both it drops below the rows, and the label goes down with
+ * it, right above the code (user, 2026-11-04: the label stayed up top, away from its QR).
+ */
+export const placeScanTitle = (root: ParentNode = document): void => {
+  root.querySelectorAll<HTMLElement>(".mm-bank").forEach((bank) => {
+    bank.classList.remove("is-qr-below");
+    const qr = bank.querySelector(".mm-upi-qr-box");
+    const rows = bank.querySelector(".mm-bank-rows");
+    if (!qr || !rows) return;
+    if (qr.getBoundingClientRect().top > rows.getBoundingClientRect().top + 1) {
+      bank.classList.add("is-qr-below");
+    }
+  });
 };
 
 /*

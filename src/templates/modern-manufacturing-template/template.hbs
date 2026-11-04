@@ -247,6 +247,13 @@
                     {{/each}}
                   </tr>
                 </thead>
+                {{!-- PDF service only: repeated at the foot of each page the table spans, it closes the
+                      page's piece with a rule and rounded corners, a row cut by the break too
+                      (styles.css, "corners at a page break"). Placed before the rows, it still
+                      prints at the foot. --}}
+                <tfoot class="mm-items-corners" aria-hidden="true">
+                  <tr><td class="mm-col-serial"></td>{{#each view.table.header}}<td></td>{{/each}}</tr>
+                </tfoot>
                 <tbody>
                   {{#each view.table.rows}}
                     {{#if isGroupHeader}}
@@ -348,7 +355,12 @@
                       {{/if}}
                     </div>
                     {{#if view.bank.upi.qr}}
-                      <img class="mm-upi-qr" data-testid="upi-qr" src="{{view.bank.upi.qr}}" alt="{{view.bank.upi.label}} {{view.bank.upi.id}}" />
+                      {{!-- The scan label goes down with the QR when it drops below the rows
+                            (helpers.ts placeScanTitle). --}}
+                      <div class="mm-upi-qr-box">
+                        <span class="mm-section-title mm-scan-title mm-scan-below" aria-hidden="true">{{view.bank.upi.scanLabel}}</span>
+                        <img class="mm-upi-qr" data-testid="upi-qr" src="{{view.bank.upi.qr}}" alt="{{view.bank.upi.label}} {{view.bank.upi.id}}" />
+                      </div>
                     {{/if}}
                   </div>
                   {{#if view.bank.upi.note}}<p class="mm-upi-note">{{view.bank.upi.note}}</p>{{/if}}

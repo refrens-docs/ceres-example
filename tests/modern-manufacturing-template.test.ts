@@ -3685,9 +3685,9 @@ describe("Modern Manufacturing template — CSS (spec tokens and scope)", () => 
     expect(css).toMatch(
       /\[data-role="grand-total"\]\s*\{[^}]*font-size: 18px;\s*line-height: [\d.]+;\s*font-weight: 600;/
     );
-    // Grand total label 18/500.
+    // Grand total label 18/400 (user, 2026-11-04).
     expect(css).toMatch(
-      /\.ceres-subtotal-row-grand > \.ceres-subtotal-label \{\s*font-weight: 500;/
+      /\.ceres-subtotal-row-grand > \.ceres-subtotal-label \{\s*font-weight: 400;/
     );
     // Nothing below the 10 px floor.
     Array.from(css.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g), (m) =>

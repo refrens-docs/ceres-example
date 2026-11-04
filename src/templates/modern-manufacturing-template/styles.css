@@ -817,6 +817,11 @@
   border-end-end-radius: 5px;
 }
 
+/* The page-break corners are drawn by Refrens' PDF service only (print, below). */
+.mm-items > tfoot.mm-items-corners {
+  display: none;
+}
+
 .mm-items tr.is-stripe td {
   background: var(--mm-stripe);
 }
@@ -1096,6 +1101,29 @@
   margin-inline-start: 0;
 }
 
+/* The QR beside the bank rows, or under them on a narrow box. Under them it takes its "Scan to
+   pay via UPI" label with it, and the heading row's copy gives way (user, 2026-11-04;
+   helpers.ts placeScanTitle). Hidden, not removed: the heading row keeps its size. */
+.mm-upi-qr-box {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.mm-scan-below {
+  display: none;
+}
+
+.mm-bank.is-qr-below .mm-scan-below {
+  display: block;
+}
+
+.mm-bank.is-qr-below .mm-bank-head > .mm-scan-title {
+  visibility: hidden;
+}
+
 .mm-upi-qr {
   display: block;
   flex: none;
@@ -1142,7 +1170,7 @@
 }
 
 /*
- * Grand total: a theme bar edge to edge, 12 × 14, label 18/500 and amount 18/800. The label's
+ * Grand total: a theme bar edge to edge, 12 × 14, label 18/400 and amount 18/600. The label's
  * fill runs 1 px under the amount cell, so a scaled print or PDF shows no seam between them.
  */
 .mm-totals .ceres-subtotal-row-grand > .ceres-subtotal-label,
@@ -1157,8 +1185,9 @@
   vertical-align: middle;
 }
 
+/* The label at 400 (user, 2026-11-04), the amount beside it stays bold. */
 .mm-totals .ceres-subtotal-row-grand > .ceres-subtotal-label {
-  font-weight: 500;
+  font-weight: 400;
 }
 
 /* The converted amount under the grand total: 600, not the shared widget's 700. */
@@ -1948,8 +1977,11 @@
 }
 
 /* As refrens.com's own Professional template signs (user, 2026-11-03): up to 110 px tall and
-   220 px wide in proportion; a wide signature no longer shrinks into a 100 px square. */
-.mm-signature-image {
+   220 px wide in proportion; a wide signature no longer shrinks into a 100 px square. A square
+   one prints 110 × 110, a wide one 220 px across. Under .mm-signature: the image widget's own
+   .ceres-image { max-width: 100% } loads after this sheet and undid the 220 px cap (user,
+   2026-11-04: a wide signature printed twice that, across half the page). */
+.mm-signature .mm-signature-image {
   display: block;
   width: auto;
   max-width: min(220px, 100%);
@@ -2377,6 +2409,130 @@
     border-bottom-color: transparent;
   }
 
+  /*
+   * Corners at a page break in Refrens' PDF service, as the Professional template draws them
+   * (user, 2026-11-04: a tall item cut by the break left the table open at the page's foot).
+   * Chrome 122 repeats no block border, but it repeats a table's footer on every page: an
+   * empty footer row draws the closing rule under the page's last row, cut or whole, and its
+   * end cells draw the rounded corners over the rows' square ones, the curve in the rule's
+   * colour and the paper outside it. Shapes, not a gradient: a PDF stores a gradient as a
+   * small picture that a zoomed viewer shows with square edges.
+   */
+  body[class~="isDibella"] .mm-doc .mm-items > .mm-items-corners {
+    display: table-footer-group;
+  }
+
+  body[class~="isDibella"] .mm-doc .mm-items > .mm-items-corners td {
+    height: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: 0 -0.5px 0 0.5px var(--mm-table-outline);
+    line-height: 0;
+  }
+
+  body[class~="isDibella"] .mm-doc .mm-items > .mm-items-corners td:is(:first-child, :last-child) {
+    position: relative;
+  }
+
+  body[class~="isDibella"] .mm-doc .mm-items > .mm-items-corners td:first-child::before,
+  body[class~="isDibella"] .mm-doc .mm-items > .mm-items-corners td:last-child::after {
+    position: absolute;
+
+    /* Above the rows: the footer comes first in the table, so positioned cells after it in the
+       rows would paint over a piece with no z-index of its own. */
+    z-index: 1;
+    bottom: 0;
+    box-sizing: border-box;
+    width: 6px;
+    height: 8px; /* its side line starts above the curve, over the table's own */
+    border: 0 solid var(--mm-table-outline);
+    border-bottom-width: 1px;
+    background: none;
+    box-shadow: 0 0 0 6px #fff;
+    content: "";
+    pointer-events: none;
+  }
+
+  /* The paper reaches 2 px past the table's box, over the side and closing rules' soft edges there
+     (a faint square tick showed outside the curve), and no further (a mark past a cropped
+     table's edge made the PDF service shrink the page, Professional 2026-11-01); 2 px off the
+     top, where a white tick showed on the side line. */
+  body[class~="isDibella"] .mm-doc .mm-items > .mm-items-corners td:first-child::before,
+  body[class~="isDibella"] .mm-doc[dir="rtl"] .mm-items > .mm-items-corners td:last-child::after {
+    right: auto;
+    left: 0;
+    border-right-width: 0;
+    border-left-width: 1px;
+    border-radius: 0 0 0 6px;
+    clip-path: inset(2px 0 -2px -2px);
+  }
+
+  body[class~="isDibella"] .mm-doc .mm-items > .mm-items-corners td:last-child::after,
+  body[class~="isDibella"] .mm-doc[dir="rtl"] .mm-items > .mm-items-corners td:first-child::before {
+    right: 0;
+    left: auto;
+    border-right-width: 1px;
+    border-left-width: 0;
+    border-radius: 0 0 6px;
+    clip-path: inset(2px -2px -2px 0);
+  }
+
+  /* A table cut off at the wrapper's edge draws no corner at its cut end (helpers.ts
+     splitTotals marks it is-cropped): off the paper, such a mark made the PDF service shrink
+     the whole page (2026-11-04). */
+  body[class~="isDibella"] .mm-doc .mm-items.is-cropped > .mm-items-corners td:last-child::after,
+  body[class~="isDibella"] .mm-doc:not([dir="rtl"]) .mm-items[data-mm-totals-split].is-cropped::after,
+  body[class~="isDibella"] .mm-doc[dir="rtl"] .mm-items[data-mm-totals-split].is-cropped::before {
+    content: none;
+  }
+
+  /* The totals follow on the last page: two pieces hung from their top corners cover the
+     curves above, in the last row's ground with the table's side rule (helpers.ts
+     splitTotals), down to the rule the two tables share. */
+  body[class~="isDibella"] .mm-doc .mm-items[data-mm-totals-split] {
+    position: relative;
+
+    /* Over the corner pieces (z-index 1) where the two tables meet: the curve's paper reached
+       into the totals' own top rule and side, a notch at the joint. */
+    z-index: 1;
+  }
+
+  /* Two rules up, as in the Professional template: their white ground covers the item table's
+     last rule and the corner row's (laid a hair apart, the two printed as one darker line, and
+     lighter where the corner covered them), and their own top rule is the one line drawn. */
+  body[class~="isDibella"] .mm-doc .mm-items[data-mm-totals-split] {
+    margin-top: -2px;
+  }
+
+  body[class~="isDibella"] .mm-doc .mm-items[data-mm-totals-split]::before,
+  body[class~="isDibella"] .mm-doc .mm-items[data-mm-totals-split]::after {
+    position: absolute;
+    z-index: 1;
+    top: -8px;
+    box-sizing: border-box;
+    width: 8px;
+
+    /* Down over the totals' own top rule, drawn again as its bottom border: ending where the rule
+       starts, the piece took a hair off it at the corner (a thinner line there). */
+    height: 9px;
+    border: 0 solid var(--mm-table-outline);
+    border-bottom-width: 1px;
+    background: var(--mm-joint-bg, #fff);
+    content: "";
+    pointer-events: none;
+  }
+
+  body[class~="isDibella"] .mm-doc .mm-items[data-mm-totals-split]::before {
+    left: 0;
+    border-left-width: 1px;
+  }
+
+  body[class~="isDibella"] .mm-doc .mm-items[data-mm-totals-split]::after {
+    right: 0;
+    border-right-width: 1px;
+  }
+
   /* Boxes and short sections never split across pages; a heading stays with its content. */
   .mm-header,
   .mm-banner,
@@ -2724,8 +2880,14 @@
     break-before: avoid;
   }
 
-  /* Its own rule above, lying over the last item's closing rule where they meet. */
-  .mm-items[data-mm-totals-split] > :first-child > tr:first-child > td {
+  /* Its own rule above, lying over the last item's closing rule where they meet. Its first
+     child is the <colgroup> splitTotals locks the columns with, so the row group is named
+     (user, 2026-11-04: no rule above the Total row in the PDF; the table's white ground hid
+     the item's own rule under it). */
+  .mm-items[data-mm-totals-split]
+    > :is(thead, tbody, tfoot):first-of-type
+    > tr:first-child
+    > td {
     border-top: 1px solid var(--mm-table-outline);
   }
 
