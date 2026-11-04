@@ -1424,19 +1424,40 @@
   margin-top: 4px;
 }
 
-/* Tables written into a description or note: 6 px 8 px in every cell, like the items table. */
+/*
+ * Tables written into a description or note, as Refrens' own Professional template draws them
+ * (user, 2026-11-04): the heading row in the theme colour with white text, the body on a light
+ * tint of it, no rules between the cells, a thin tinted outline, square corners; 6 px 8 px in
+ * every cell, like the items table.
+ */
+.pt-doc .pt-item-desc .toastui-editor-contents table,
+.pt-doc .pt-note-body .toastui-editor-contents table {
+  border: 1px solid color-mix(in srgb, var(--pt-accent) 22%, var(--pt-paper));
+  border-collapse: collapse;
+  background: color-mix(in srgb, var(--pt-accent) 12%, var(--pt-paper));
+}
+
 .pt-doc .pt-item-desc .toastui-editor-contents :is(th, td),
 .pt-doc .pt-note-body .toastui-editor-contents :is(th, td) {
   padding: 6px 8px;
-  border-color: var(--pt-line);
+  border: 0;
+  background: none;
+  color: var(--pt-ink);
   text-align: start;
 }
 
 .pt-doc .pt-item-desc .toastui-editor-contents th,
 .pt-doc .pt-note-body .toastui-editor-contents th {
-  background: var(--pt-fill);
-  color: var(--pt-ink);
-  font-weight: 600;
+  background: var(--pt-accent);
+  color: var(--pt-on-accent);
+  font-weight: 500;
+}
+
+/* Each heading overlaps the next by a pixel, as the items table's: painted cell by cell, the
+   hairline seams between them showed the body's tint as light lines. */
+.pt-doc .pt-item-desc .toastui-editor-contents th:not(:last-child),
+.pt-doc .pt-note-body .toastui-editor-contents th:not(:last-child) {
+  box-shadow: 1px 0 0 var(--pt-accent);
 }
 
 /* List markers in the text's own colour (user request): the viewer greys both. */
