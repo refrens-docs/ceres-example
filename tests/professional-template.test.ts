@@ -622,15 +622,14 @@ describe("Professional Template — boolean settings", () => {
     );
   });
 
-  // The business's toggle alone stretches the printed table; the document's own is ignored
-  // (user, 2026-10-31).
+  // The printed table always stretches, whatever either toggle says (user, 2026-11-04).
   it.each([
     [true, undefined, true],
     [true, true, true],
     [true, false, true],
-    [false, true, false],
-    [undefined, true, false],
-    [undefined, undefined, false],
+    [false, true, true],
+    [undefined, true, true],
+    [undefined, undefined, true],
   ])(
     "stretches in print with the business toggle %s and the document toggle %s: %s",
     (business, document, stretched) => {

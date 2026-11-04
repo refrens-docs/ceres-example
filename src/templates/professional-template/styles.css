@@ -2070,9 +2070,10 @@ body[class~="isDibella"]
     margin-top: 6px;
   }
 
+  /* The name and the address stay whole, as the page's stretch reckons them (helpers.ts
+     splitCard): a break falls between lines of fields, never inside them. */
   .pt-card-flow :is(.pt-party-name, .pt-party-address) {
-    orphans: 2;
-    widows: 2;
+    break-inside: avoid;
   }
 
   .pt-card-flow :is(.pt-fields, .pt-kv) > *,

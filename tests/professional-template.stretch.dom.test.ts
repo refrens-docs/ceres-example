@@ -2,6 +2,7 @@
  * @jest-environment jsdom
  */
 import {
+  cutCards,
   fitItemsToScreen,
   flowFiller,
   stretchItemTable,
@@ -86,13 +87,36 @@ describe("Professional Template — the stretch's pages", () => {
     expect(room(units, 11, 1000)).toBe(700);
   });
 
-  it("leaves the table as it is when the totals move to the next page", () => {
+  it("runs the table down its page, short of the foot, when the totals move to the next page", () => {
     const units = [
-      { top: 0, bottom: 950 },
-      { top: 950, bottom: 1100 },
+      { top: 0, bottom: 900 },
+      { top: 900, bottom: 1150 },
     ];
-    // The totals go to page 2: no space (an empty table never moves to a page of its own).
-    expect(room(units, 0, 1000)).toBeUndefined();
+    // The totals go to page 2: 100 px left under the table, 24 kept back from the page's
+    // foot (an empty table never moves to a page of its own).
+    expect(room(units, 0, 1000)).toBe(76);
+  });
+
+  // The party, shipping and transport cards break between their lines in print.
+  it("places a row of cards cut between its lines", () => {
+    const card = (bottom: number) => ({
+      top: 0,
+      bottom,
+      head: 50,
+      close: 17,
+      breaks: [
+        { fit: 200, resume: 204 },
+        { fit: 400, resume: 404 },
+        { fit: 600, resume: 604 },
+      ],
+    });
+    // Page end 500: each card breaks after its line ending at 400; the taller card's rest
+    // (from 604 to 820, its title and top edge again) sets the row's height on page 2.
+    expect(cutCards([card(700), card(820)], 500)).toEqual({
+      rest: 50 + 820 - 404,
+    });
+    // No line fits above the bottom edge: the row moves on whole.
+    expect(cutCards([card(700)], 150)).toBeUndefined();
   });
 
   it("does not stretch where a page break cuts a row before the table ends", () => {

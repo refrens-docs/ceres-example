@@ -3952,7 +3952,6 @@ export const printScaleFor = (): number => PRINT_BASE_SCALE;
 
 export const mapPrint = (state: UnknownRecord) => {
   const pdfOptions = asRecord(state.pdfOptions);
-  const invoice = asRecord(state.invoice);
   const format = text(pdfOptions.format).toLowerCase();
   const landscape = optionalFlag(pdfOptions.landscape) === true;
   const paperMm = landscape
@@ -4020,16 +4019,14 @@ export const mapPrint = (state: UnknownRecord) => {
     // The paper's width in px, as printed (placeStampRoom).
     paperWidth: compactDecimal((paperMm / 25.4) * 96),
     /*
-     * "Stretch invoice & quotation tables to fill the page" (Settings > Experimental,
-     * owner.configuration.experimental.stretchInvoiceTable): on a one-page printout the item
-     * table runs down to the footer (stretchItemTable). The business's toggle alone decides;
-     * the document's own (pdfOptions.fullHeightTable) is ignored, on, off or unset (user,
-     * 2026-10-31). Every document type (standing decision). On screen the table always fills
-     * the A4 sheet, whatever either toggle says (stretchItemTable).
+     * The printed item table runs down to the foot of the page it ends on, always (user,
+     * 2026-11-04: "stretch ke baare me kitna batana padega", as the E-commerce and Modern
+     * Manufacturing templates): neither the business's "Stretch invoice & quotation tables"
+     * (owner.configuration.experimental.stretchInvoiceTable) nor the document's own
+     * (pdfOptions.fullHeightTable) changes it. Every document type. Not a Long PDF (one page as
+     * tall as its content, stretchItemTable). The preview fills its A4 sheet as before.
      */
-    stretchTable:
-      asRecord(asRecord(asRecord(invoice.owner).configuration).experimental)
-        .stretchInvoiceTable === true,
+    stretchTable: true,
   };
 };
 
@@ -5393,7 +5390,47 @@ export interface FlowUnit {
   tail?: boolean;
   // Images sized by the page's height (55vh, styles.css), as measured and uncapped.
   images?: FlowImage[];
+  // Cards side by side (or one) that break between their lines (styles.css pt-split-frame).
+  cards?: FlowCard[];
 }
+
+/*
+ * A card that breaks between its lines in print: its top and bottom, its repeated top edge and
+ * title (head) and its bottom edge (close), drawn on every page it spans, and the places it
+ * may break: after a line ending at `fit`, the next page going on from `resume`.
+ */
+export interface FlowCard {
+  top: number;
+  bottom: number;
+  head: number;
+  close: number;
+  breaks: { fit: number; resume: number }[];
+}
+
+/*
+ * Where a page ending at `end` (the unit's own coordinates) cuts a row of cards: each card
+ * breaks after its last line that fits above its bottom edge, or moves on whole. `rest`: the
+ * row's height on the next page (the tallest card's rest, its edge and title repeated); none
+ * when every card moves on whole (the row goes to the next page as one).
+ */
+export const cutCards = (
+  cards: FlowCard[],
+  end: number
+): { rest: number } | undefined => {
+  let moved = 0;
+  const rests = cards.map((card) => {
+    if (card.bottom <= end) return 0;
+    const at = card.breaks.filter((cut) => cut.fit + card.close <= end).pop();
+    if (!at) {
+      moved += 1;
+      return card.bottom - card.top;
+    }
+    return card.head + card.bottom - at.resume;
+  });
+  return moved === cards.filter((card) => card.bottom > end).length
+    ? undefined
+    : { rest: Math.max(...rests) };
+};
 
 // styles.css .pt-large-image in print: 55 % of the page's height, 600 px at most.
 const LARGE_IMAGE_SHARE = 0.55;
@@ -5448,6 +5485,10 @@ const flowAt = (length: FlowLength, page: number): number =>
  * up to the table's end is cut by a page break — where Chrome cuts it (an image or a line that
  * will not split moves down whole) is not known, so neither is the room left (a074dd1).
  */
+// Kept back from the page's foot where the table ends a page the content after it does not
+// share (flowFiller), on top of the stretch's own slack.
+const NEXT_PAGE_KEEP = 24;
+
 export const flowFiller = (
   units: FlowUnit[],
   anchor: number,
@@ -5479,7 +5520,22 @@ export const flowFiller = (
     ) {
       const begin = pageStart(index, unit);
       const firstOnPage = flowAt(top(), page) <= flowAt(begin, page) + 1;
-      if (!unit.fluid && !firstOnPage) {
+      const cardCut = unit.cards
+        ? cutCards(
+            unit.cards,
+            flowAt(regionEnd(index, unit), page) - flowAt(shift, page)
+          )
+        : undefined;
+      if (unit.cards && (cardCut || firstOnPage)) {
+        // Cut between the cards' lines (none fits on a page of its own: cut at its foot, as
+        // Chrome does): the row goes on at the next page's top with what is left of it.
+        index += 1;
+        const rest =
+          cardCut?.rest ??
+          unit.bottom -
+            (flowAt(regionEnd(index - 1, unit), page) - flowAt(shift, page));
+        shift = { c: head + rest - unit.bottom, k: index };
+      } else if (!unit.fluid && !firstOnPage) {
         // Moves whole to the next page, its spacing above it dropped.
         index += 1;
         const next = pageStart(index, unit);
@@ -5510,11 +5566,17 @@ export const flowFiller = (
   const after = placed
     .slice(anchor + 1)
     .filter((unit) => unit.page === at.page);
-  // What follows the table starts on the next page: no space. The table's side rules already
-  // run to this page's foot, and a space sized to the last pixel of the page moved whole to the
-  // next page when the page came out a little shorter, an empty table on a page of its own
-  // (real PDF of invoice 0024, 2026-11-03).
-  if (!after.length && placed.length > anchor + 1) return undefined;
+  /*
+   * What follows the table starts on the next page: the table still runs down this page (user,
+   * 2026-11-04: half a page left empty under it), short of its foot by NEXT_PAGE_KEEP. A space
+   * sized to the last pixel moved whole to the next page when the page came out a little
+   * shorter, an empty table on a page of its own (real PDF of invoice 0024, 2026-11-03).
+   */
+  if (!after.length && placed.length > anchor + 1) {
+    const kept = room(at);
+    const rest = { c: kept.c - NEXT_PAGE_KEEP, k: kept.k };
+    return flowAt(rest, page) > 0 ? rest : undefined;
+  }
   const best = (after.length ? after : [at])
     .map(room)
     .reduce((least, next) =>
@@ -5624,6 +5686,44 @@ const flowUnits = (
         ? flatChildren(child)
         : [child]
     );
+  // A card's lines (a field's label and value, side by side, are one), its edges and title.
+  const splitCard = (card: Element): FlowCard => {
+    const frame = card.querySelector(
+      ":scope > .pt-split-frame"
+    ) as HTMLTableElement;
+    const at = box(card);
+    const height = (el: Element | null) => {
+      if (!el) return 0;
+      const edge = box(el);
+      return edge.bottom - edge.top;
+    };
+    const bands: { top: number; bottom: number }[] = [];
+    Array.from(
+      frame.querySelectorAll(
+        ":scope > tbody :is(.pt-party-name, .pt-party-address, .pt-field-label, .pt-field-value, .pt-kv-label, .pt-kv-value)"
+      )
+    )
+      .filter((el) => getComputedStyle(el).display !== "none")
+      .map(box)
+      .filter((line) => line.bottom > line.top)
+      .sort((a, b) => a.top - b.top)
+      .forEach((line) => {
+        const last = bands[bands.length - 1];
+        if (last && line.top < last.bottom - 1)
+          last.bottom = Math.max(last.bottom, line.bottom);
+        else bands.push({ ...line });
+      });
+    return {
+      top: at.top,
+      bottom: at.bottom,
+      head: height(frame.tHead),
+      close: height(frame.tFoot),
+      breaks: bands.slice(0, -1).map((band, n) => ({
+        fit: band.bottom,
+        resume: bands[n + 1].top,
+      })),
+    };
+  };
   const walk = (parent: Element) => {
     const children = flatChildren(parent).filter((child) => {
       if (child === filler) return false;
@@ -5663,21 +5763,23 @@ const flowUnits = (
         // eslint-disable-next-line no-continue
         continue;
       }
-      if (row.length > 1) {
-        // Cards side by side that may split between their lines (the party, shipping and
-        // transport cards in print): a page break may cut the row too.
-        const breakable = row.every(
-          (el) => !avoids(getComputedStyle(el).breakInside)
-        );
-        push(
-          {
-            top: box(child).top,
-            bottom: rowBottom,
-            ...(breakable ? { fluid: true, line: lineOf(style) } : {}),
-          },
-          join,
-          row
-        );
+      const cards = row.every(
+        (el) =>
+          el.matches(".pt-card") &&
+          el.querySelector(":scope > .pt-split-frame") &&
+          !avoids(getComputedStyle(el).breakInside) &&
+          getComputedStyle(el.querySelector(".pt-split-frame") as Element)
+            .display === "table"
+      )
+        ? row.map(splitCard)
+        : undefined;
+      if (cards) {
+        // The party, shipping and transport cards in print break between their lines, each
+        // piece with its edges and title (styles.css pt-split-frame): placed line by line.
+        push({ top: box(child).top, bottom: rowBottom, cards }, join, row);
+        if (row.some((el) => el.contains(filler))) anchor = units.length - 1;
+      } else if (row.length > 1) {
+        push({ top: box(child).top, bottom: rowBottom }, join, row);
         if (row.some((el) => el.contains(filler))) anchor = units.length - 1;
       } else if (child instanceof HTMLTableElement) {
         table(child, join);
