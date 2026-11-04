@@ -130,8 +130,8 @@
             <section class="pt-cards pt-parties" data-testid="section" data-section="parties">
               {{#each view.parties}}
                 <div class="pt-card pt-party is-tinted" data-role="{{role}}">
-                  {{!-- In print the card's edges and title on every page it spans (styles.css pt-split-frame). --}}
-                  <table class="pt-split-frame" role="presentation"><thead class="pt-split-head"><tr class="pt-split-edge is-top" aria-hidden="true"><td class="pt-split-cap"></td></tr>{{#if title}}<tr class="pt-split-title"><td class="pt-split-body"><h2 class="pt-card-title">{{title}}</h2></td></tr>{{/if}}</thead><tbody><tr><td class="pt-split-body">
+                  {{!-- In print the card's edges on every page it spans; the title once, at its start (styles.css pt-split-frame). --}}
+                  <table class="pt-split-frame" role="presentation"><thead class="pt-split-head"><tr class="pt-split-edge is-top" aria-hidden="true"><td class="pt-split-cap"></td></tr></thead><tbody>{{#if title}}<tr class="pt-split-title"><td class="pt-split-body"><h2 class="pt-card-title">{{title}}</h2></td></tr>{{/if}}<tr><td class="pt-split-body">
                   <div class="pt-party-body">
                     <p class="pt-party-name" dir="auto">{{name}}</p>
                     {{#if address}}<p class="pt-party-address" data-role="address">{{address}}</p>{{/if}}
@@ -154,8 +154,8 @@
             <section class="pt-cards pt-shipping" data-testid="section" data-section="dispatch">
               {{#each view.dispatchParties}}
                 <div class="pt-card pt-party pt-col-{{column}}" data-role="{{role}}">
-                  {{!-- In print the card's edges and title on every page it spans (styles.css pt-split-frame). --}}
-                  <table class="pt-split-frame" role="presentation"><thead class="pt-split-head"><tr class="pt-split-edge is-top" aria-hidden="true"><td class="pt-split-cap"></td></tr>{{#if title}}<tr class="pt-split-title"><td class="pt-split-body"><h2 class="pt-card-title">{{title}}</h2></td></tr>{{/if}}</thead><tbody><tr><td class="pt-split-body">
+                  {{!-- In print the card's edges on every page it spans; the title once, at its start (styles.css pt-split-frame). --}}
+                  <table class="pt-split-frame" role="presentation"><thead class="pt-split-head"><tr class="pt-split-edge is-top" aria-hidden="true"><td class="pt-split-cap"></td></tr></thead><tbody>{{#if title}}<tr class="pt-split-title"><td class="pt-split-body"><h2 class="pt-card-title">{{title}}</h2></td></tr>{{/if}}<tr><td class="pt-split-body">
                   <div class="pt-party-body">
                     <p class="pt-party-name" dir="auto">{{name}}</p>
                     {{#if address}}<p class="pt-party-address" data-role="address">{{address}}</p>{{/if}}
@@ -181,7 +181,7 @@
           <section class="pt-cards pt-logistics{{#unless view.transport}}{{#if view.compliance.isBelowItems}} is-empty{{/if}}{{/unless}}" data-testid="section" data-section="logistics">
             {{#if view.transport}}
               <div class="pt-card pt-transport pt-col-1">
-                <table class="pt-split-frame" role="presentation"><thead class="pt-split-head"><tr class="pt-split-edge is-top" aria-hidden="true"><td class="pt-split-cap"></td></tr>{{#if view.transport.title}}<tr class="pt-split-title"><td class="pt-split-body"><h2 class="pt-card-title">{{view.transport.title}}</h2></td></tr>{{/if}}</thead><tbody><tr><td class="pt-split-body">
+                <table class="pt-split-frame" role="presentation"><thead class="pt-split-head"><tr class="pt-split-edge is-top" aria-hidden="true"><td class="pt-split-cap"></td></tr></thead><tbody>{{#if view.transport.title}}<tr class="pt-split-title"><td class="pt-split-body"><h2 class="pt-card-title">{{view.transport.title}}</h2></td></tr>{{/if}}<tr><td class="pt-split-body">
                 <div class="pt-kv">
                   {{#each view.transport.rows}}
                     <span class="pt-kv-label pt-transport-{{key}}">{{label}}</span>

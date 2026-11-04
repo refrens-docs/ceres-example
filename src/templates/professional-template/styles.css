@@ -2014,7 +2014,7 @@ body[class~="isDibella"]
    * of them too (user, 2026-11-03), and each page's piece closes with the card's own rounded
    * edges (user rule: a split box closes at the page foot; Chrome 122 cannot clone a block's
    * border): the card prints as a one-cell table whose header and footer rows are its top and
-   * bottom edges, repeated on every page it spans, as the Modern Manufacturing template's
+   * bottom edges, repeated on every page it spans (its title is not, user 2026-11-04), as the Modern Manufacturing template's
    * text boxes, grown to the card's height so two cards in a row end level. A line never
    * splits; a title stays with what follows it.
    */
@@ -2047,14 +2047,19 @@ body[class~="isDibella"]
     display: table-row;
   }
 
-  /* The top edge and the title repeat on every page the card spans (user, 2026-11-03: the
-     fields carried to the next page under their heading, as a table's rows). */
+  /* The top edge repeats on every page the card spans; the title prints once, at the card's
+     start, with its first line (user, 2026-11-04: not again over the fields carried on). */
   .pt-card-flow .pt-split-frame > .pt-split-head {
     display: table-header-group;
   }
 
   .pt-card-flow .pt-split-title > .pt-split-body {
     padding-bottom: 8px;
+    break-after: avoid;
+  }
+
+  .pt-card-flow .pt-split-title {
+    break-after: avoid;
   }
 
   .pt-card-flow .pt-split-frame > .pt-split-edge.is-bottom {
