@@ -1444,6 +1444,7 @@
   background: none;
   color: var(--pt-ink);
   text-align: start;
+  height: auto; /* the viewer's 32 px on top of the padding made every row 44 px tall */
 }
 
 .pt-doc .pt-item-desc .toastui-editor-contents th,
