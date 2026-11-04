@@ -4888,6 +4888,29 @@ export const flowFiller = (
  * column rules run down to that page's foot. Up to the first item a page break cuts (after
  * it, where things fall is not known).
  */
+/*
+ * The item rows on the page the table ends on. Chrome prints a narrow column's text a little
+ * wider than it lays it out on screen, and a word then wraps a line later: each such row came
+ * out about 19 px taller in the PDF than measured (invoice MMS/IN/26-27/082, 2 Nov 2026), and
+ * the filler sized to the measure pushed the totals onto the next page. The filler keeps back
+ * ROW_SLACK for each item row on its page.
+ */
+export const flowRowsOnEndPage = (
+  units: FlowUnit[],
+  anchor: number,
+  layout: FlowLayout
+): number => {
+  const group = units[anchor]?.group;
+  const { placed } = placeUnits(units, anchor, layout);
+  const page = placed[anchor]?.page;
+  return units.filter(
+    (unit, at) =>
+      unit.group !== undefined &&
+      unit.group === group &&
+      placed[at]?.page === page
+  ).length;
+};
+
 export const flowBreakFills = (
   units: FlowUnit[],
   anchor: number,
@@ -5155,12 +5178,7 @@ const stretchOnScreen = (doc: HTMLElement, filler: HTMLElement): void => {
  * every size a page can be, each giving the filler its formula of 100vh.
  */
 const STRETCH_STYLE_ID = "ec-stretch-pages";
-/*
- * An item lengthened at a page break runs to the page's foot less this: its table's closing
- * rule then falls on the frame's own (user, 2 Nov 2026: the 16 px kept back drew a second
- * line under the table).
- */
-const BREAK_SLACK = 4;
+const ROW_SLACK = 24;
 // The browser's own side margins against the 1 cm the browser print is laid out for, either way.
 const BROWSER_WIDTH_SLACK = 24;
 const PAGE_HEIGHTS: [number, number] = [280, 1700];
@@ -5194,24 +5212,21 @@ export const stretchPrintRules = (
     const pageLayout = { ...layout, page };
     const parts: string[] = [];
     const room = flowFiller(sized, anchor, pageLayout);
-    if (room && flowAt(room, page) > slack)
+    const keep =
+      slack + ROW_SLACK * flowRowsOnEndPage(sized, anchor, pageLayout);
+    if (room && flowAt(room, page) > keep)
       parts.push(
         `.ec-doc.is-stretch .ec-items .ec-filler { --ec-filler-height: ${length(
-          room
+          room,
+          keep
         )}; }`
       );
-    flowBreakFills(sized, anchor, pageLayout)
-      .filter((fill) => flowAt(fill.room, page) > BREAK_SLACK)
-      .forEach((fill) =>
-        parts.push(
-          `.ec-doc.is-stretch .ec-items tr[data-ec-break="${
-            fill.unit
-          }"] > td::after { content: ""; display: block; height: ${length(
-            fill.room,
-            BREAK_SLACK
-          )}; }`
-        )
-      );
+    /*
+     * No space at the page breaks inside the table (flowBreakFills is kept for its tests): it
+     * rests on the measured row heights, and Chrome prints a narrow column's words a line later
+     * than measured, so the space pushed items, and the totals with them, onto further pages
+     * (invoice MMS/IN/26-27/082 on A4, 2 Nov 2026: 10 pages printed as 14).
+     */
     return parts.join(" ");
   };
   let open: { from: number; to: number; css: string } | undefined;
@@ -5275,10 +5290,11 @@ export const stretchItemTable = (
     parseFloat(getComputedStyle(document.documentElement).zoom || "1") || 1;
   // Measured with the filler at 0 and no item lengthened, whatever an earlier run's rules give.
   filler.style.setProperty("--ec-filler-height", "0px");
-  if (!turned)
+  if (!turned) {
     doc
       .querySelectorAll("[data-ec-break]")
       .forEach((row) => row.removeAttribute("data-ec-break"));
+  }
   const flow = measureFlow(doc, filler, true);
   filler.style.removeProperty("--ec-filler-height");
   const marked = (flow?.units || []).every(

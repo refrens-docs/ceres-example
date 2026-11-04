@@ -224,10 +224,10 @@ describe("Ecommerce template — after the render, in the browser", () => {
       expect(
         flowBreakFills(cut, 4, { ...layout, page: 1000 }).map((f) => f.unit)
       ).toEqual([]);
-      // The rules lengthen those rows in print, per page height.
+      // Not printed: Chrome prints narrow columns a line longer than measured, and the space
+      // pushed items over (no break-fill rules, user's invoice MMS/IN/26-27/082).
       const printed = stretchPrintRules(units, 4, layout, 1, 16);
-      expect(printed).toContain('tr[data-ec-break="1"] > td::after');
-      expect(printed).toContain('tr[data-ec-break="2"] > td::after');
+      expect(printed).not.toContain("ec-break-fill");
     });
 
     it("zeroes a browser print's top and bottom page margins, and only for its run", () => {
@@ -344,11 +344,12 @@ describe("Ecommerce template — after the render, in the browser", () => {
       expect(off.filler.style.getPropertyValue("--ec-filler-height")).toBe("");
       const on = sheet("ec-doc is-stretch", 714, 900);
       stretchItemTable();
-      // In print, the filler's height per page height: one media rule per range of heights.
+      // In print, the filler's height per page height: one media rule per range of heights,
+      // 24 px kept back for the item row on the table's last page.
       const rules =
         document.getElementById("ec-stretch-pages")?.textContent || "";
       expect(rules).toMatch(
-        /@media print and \(min-height: \d+px\) and \(max-height: [\d.]+px\) \{ \.ec-doc\.is-stretch \.ec-items \.ec-filler \{ --ec-filler-height: max\(0px, calc\(1 \* 100vh \/ 1 - 916px\)\); \} \}/
+        /@media print and \(min-height: \d+px\) and \(max-height: [\d.]+px\) \{ \.ec-doc\.is-stretch \.ec-items \.ec-filler \{ --ec-filler-height: max\(0px, calc\(1 \* 100vh \/ 1 - 940px\)\); \} \}/
       );
       expect(on.filler.style.getPropertyValue("--ec-filler-height")).toBe("");
       // Back on screen, the preview's stretch returns.
