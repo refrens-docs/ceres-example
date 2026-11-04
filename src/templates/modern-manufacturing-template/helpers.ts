@@ -3313,9 +3313,6 @@ export const sideMarginPx = (pdfOptions: UnknownRecord): number => {
   );
 };
 
-// A browser's own print (Lydia's print button, Ctrl+P): its own 1 cm at either side.
-const BROWSER_SIDE_MARGIN_PX = 96 / 2.54;
-
 /*
  * The printable width in the document's own pixels, which caps the page in print
  * (styles.css): Refrens' PDF service lays the page out in a window wider than the paper
@@ -3446,9 +3443,11 @@ export const mapPrint = (state: UnknownRecord) => {
   return {
     textScale: compactDecimal(textScale),
     printWidth: printWidth(pdfOptions),
-    // A browser's own print (Lydia's print button, Ctrl+P) keeps its own 1 cm margins,
-    // whatever xMargins says: the page is fitted for the narrower of the two.
-    browserPrintWidth: printWidth(pdfOptions, BROWSER_SIDE_MARGIN_PX),
+    // A browser's own print (Lydia's print button, Ctrl+P) takes the document's own side
+    // margins too (startBrowserPage), as the Professional template does (user, 2026-11-04: too
+    // much margin in print; the browser kept 1 cm whatever the margins said).
+    browserPrintWidth: printWidth(pdfOptions),
+    sideMargin: compactDecimal(sideMarginPx(pdfOptions)),
     paperHeight: paperHeight(pdfOptions),
     paperSize: paperSize(pdfOptions),
     printZoom: compactDecimal(printZoom(pdfOptions)),
@@ -4094,15 +4093,18 @@ export const withPrintMedia = <T>(measure: () => T): T => {
  * and bottom margins unless both are 0 (its print preview turns "Headers and footers" off
  * then), so they are 0 while it prints (user, 2026-11-02: "remove these header footer from
  * print"); the page frame's margin rows (styles.css) give each page its 1 cm back. The side
- * margins are the browser's 1 cm; the paper and its orientation are the document's own
- * (paperSize). Never on a Pageless document (no @page: Lydia's Pageless PDF
- * breaks with one), never in the PDF service (already in print media, no beforeprint run).
+ * margins are the document's own (xMargins, 30 px a step; the browser's 1 cm without one);
+ * the paper and its orientation are the document's own (paperSize). A Long PDF document too (a browser prints it in pages); never in the PDF
+ * service (already in print media, no beforeprint run; an @page broke its Long PDF).
  * As the E-commerce template does (da17847).
  */
 const BROWSER_PAGE_STYLE_ID = "mm-browser-page";
 
 const startBrowserPage = (doc: HTMLElement): void => {
-  if (doc.hasAttribute("data-mm-pageless")) return;
+  // Never in Refrens' PDF service, where an @page rule broke the Long PDF. A browser's own
+  // print of a Long PDF document is paged like any other: without it Chrome printed its date,
+  // URL and page numbers, its own wide margins and no landscape width (user, 2026-11-04).
+  if (document.body.classList.contains("isDibella")) return;
   doc.classList.add("is-browser-print");
   if (document.getElementById(BROWSER_PAGE_STYLE_ID)) return;
   const style = document.createElement("style");
@@ -4112,15 +4114,25 @@ const startBrowserPage = (doc: HTMLElement): void => {
    * The page's print zoom (the text scale) scales a browser's @page margins with it (1 cm
    * printed 8 mm at 0.8, 2026-11-02), so the browser's 1 cm sides are written divided by it.
    */
-  const zoom = parseFloat(
+  const parsed = parseFloat(
     getComputedStyle(doc).getPropertyValue("--mm-print-zoom")
   );
-  const side =
-    Number.isFinite(zoom) && zoom > 0 && zoom !== 1
-      ? ` margin-left: ${compactDecimal(
-          10 / zoom
-        )}mm; margin-right: ${compactDecimal(10 / zoom)}mm;`
-      : "";
+  const zoom = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+  /*
+   * The document's own side margins (pdfOptions.xMargins, 30 px a step), as in the PDF, up to
+   * 1 cm on the page: past that Chrome printed its page number in the side margin (Wide,
+   * 2026-11-04 sweep: "1/12" at the foot). The rest of a wider margin is the
+   * document's own narrower width (--mm-browser-print-width), centred.
+   */
+  const margin = Math.min(Number(doc.dataset.mmSideMargin), 96 / 2.54);
+  let side = "";
+  if (Number.isFinite(margin) && margin >= 0) {
+    const px = compactDecimal(margin / zoom);
+    side = ` margin-left: ${px}px; margin-right: ${px}px;`;
+  } else if (zoom !== 1) {
+    const mm = compactDecimal(10 / zoom);
+    side = ` margin-left: ${mm}mm; margin-right: ${mm}mm;`;
+  }
   style.textContent = `@page { ${
     size && /^[\d.]+mm [\d.]+mm$/.test(size) ? `size: ${size}; ` : ""
   }margin-top: 0; margin-bottom: 0;${side} }`;
@@ -4591,6 +4603,52 @@ export const itemsFillRules = (
     .join("\n");
 };
 
+/*
+ * Long PDF (Pageless): Refrens' PDF service makes the one long page as tall as the pages the
+ * document fills when printed on its paper, so on a document that fits one page the space left
+ * showed as blank under it (user, 2026-11-04: "the table does not stretch" on a Long PDF). The
+ * last item takes that space, as the stretch does on a paged one-page document. A document
+ * longer than a page is left as it is: printed on paper its items and boxes move whole to the
+ * next page, so stretching it to its continuous height added a page (0033, 0028). On a print
+ * page taller than any paper (the long page itself), the document fills that page.
+ */
+export const pagelessFillRules = (
+  row: number,
+  rowHeight: number,
+  contentHeight: number,
+  zoom: number
+): string => {
+  const selector = `.mm-doc:not([${MEASURING_ATTR}]) .mm-items tr[${FILL_ATTR}="${row}"]`;
+  const fill = (pages: number) =>
+    `${selector} { height: calc(${Math.ceil(
+      rowHeight
+    )}px + ${pages} * 100vh / ${compactDecimal(zoom)} - ${Math.ceil(
+      contentHeight + FILL_SLACK
+    )}px); } ${selector} > td { vertical-align: top; }`;
+  const ranges: { from: number; to: number; pages: number }[] = [];
+  for (let vh = PAGE_HEIGHTS[0]; vh <= PAGE_HEIGHTS[1]; vh += 1) {
+    const pages = Math.max(
+      1,
+      Math.ceil((contentHeight + FILL_SLACK) / (vh / zoom))
+    );
+    const open = ranges[ranges.length - 1];
+    if (open && open.pages === pages) open.to = vh;
+    else ranges.push({ from: vh, to: vh, pages });
+  }
+  return ranges
+    .filter((range) => range.pages === 1)
+    .map(
+      (range) =>
+        `@media print and (min-height: ${range.from}px) and (max-height: ${
+          range.to + 0.99
+        }px) { ${fill(range.pages)} }`
+    )
+    .concat(
+      `@media print and (min-height: ${PAGE_HEIGHTS[1] + 1}px) { ${fill(1)} }`
+    )
+    .join("\n");
+};
+
 export const stretchItemsTable = (root: ParentNode = document): void => {
   // A browser's print, once Chrome has cut the layout into pages: what prepareBrowserPrint
   // measured stays (measured in the cut layout, the units are where the breaks put them).
@@ -4600,9 +4658,7 @@ export const stretchItemsTable = (root: ParentNode = document): void => {
   resetItemsTableFill(root);
   const css: string[] = [];
   root
-    .querySelectorAll<HTMLElement>(
-      `.mm-doc[${STRETCH_ATTR}]:not([data-mm-pageless])`
-    )
+    .querySelectorAll<HTMLElement>(`.mm-doc[${STRETCH_ATTR}]`)
     .forEach((doc) => {
       doc.setAttribute(MEASURING_ATTR, "");
       try {
@@ -4618,6 +4674,22 @@ export const stretchItemsTable = (root: ParentNode = document): void => {
         cut.rows.forEach((row, index) =>
           row.setAttribute(FILL_ATTR, String(index))
         );
+        // A browser's own print cuts even a Long PDF document into pages: the paged stretch.
+        // eslint-disable-next-line @typescript-eslint/no-use-before-define
+        const browser = browserPrinting || preparingBrowserPrint;
+        if (doc.hasAttribute("data-mm-pageless") && !browser) {
+          const origin = document.documentElement.getBoundingClientRect().top;
+          const last = cut.rows.length - 1;
+          css.push(
+            pagelessFillRules(
+              last,
+              heights[last],
+              (doc.getBoundingClientRect().bottom - origin) / scale,
+              zoom
+            )
+          );
+          return;
+        }
         css.push(itemsFillRules(cut.units, heights, cut.frame, zoom));
       } finally {
         doc.removeAttribute(MEASURING_ATTR);
@@ -4630,7 +4702,7 @@ export const stretchItemsTable = (root: ParentNode = document): void => {
  * The preview (screen) always fills one A4 sheet, whatever either toggle says (user rule,
  * 2026-10-31): on a document shorter than an A4 page at the sheet's drawn width (width ×
  * 297 / 210) the last item row takes the spare height, as the print stretch does (same
- * attribute, same look). A taller document, a Pageless one (data-mm-pageless) and the phone
+ * attribute, same look; a Pageless one too, user 2026-11-04). A taller document and the phone
  * and tablet layouts (cards, grid) are left as they are. The row is reset before the sheet is
  * measured, so the height Lydia syncs (ceres:content-height) never feeds back into it; the
  * measurement adds nothing to the page, so the page watches never set it off again. In print
@@ -4654,7 +4726,6 @@ export const stretchItemsToSheet = (root: ParentNode = document): void => {
     if (
       !row ||
       !row.getClientRects().length ||
-      doc.hasAttribute("data-mm-pageless") ||
       doc.querySelector(".mm-items:is(.is-cards, .is-grid)")
     ) {
       return;

@@ -299,7 +299,7 @@ describe("Modern Manufacturing template — render", () => {
       });
     [true, false, undefined].forEach((toggle) =>
       expect(business(toggle)).toContain(
-        'data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" dir="ltr"'
+        'data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" data-mm-side-margin="15" dir="ltr"'
       )
     );
     // Always on (user, 2026-11-02): without the business's setting as well.
@@ -636,10 +636,10 @@ describe("Modern Manufacturing template — render", () => {
       invoice.template = { languageScript: "Arabic", enableRtl: true };
     });
     expect(html).toContain(
-      '<div class="mm-doc" data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-zoom: 0.8; --mm-print-width: 950px; --mm-browser-print-width: 893px; --mm-photo-cap: 600px; --mm-band-cap: 307px; --mm-stamp-width: 0px; --mm-script-font: \'Noto Sans Arabic\';'
+      '<div class="mm-doc" data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" data-mm-side-margin="15" dir="rtl" lang="ar" style="--mm-text-scale: 1; --mm-print-zoom: 0.8; --mm-print-width: 950px; --mm-browser-print-width: 950px; --mm-photo-cap: 600px; --mm-band-cap: 307px; --mm-stamp-width: 0px; --mm-script-font: \'Noto Sans Arabic\';'
     );
     expect(render()).toContain(
-      'data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" dir="ltr" style='
+      'data-testid="invoice-root" data-mm-stretch-table data-mm-paper-height="1122" data-mm-paper-size="210mm 297mm" data-mm-side-margin="15" dir="ltr" style='
     );
     const styles = fs.readFileSync(
       path.join(TEMPLATE_DIR, "styles.css"),
@@ -3319,7 +3319,8 @@ describe("Modern Manufacturing template — view model", () => {
     expect(mapPrint({})).toEqual({
       textScale: "1",
       printWidth: 950,
-      browserPrintWidth: 893,
+      browserPrintWidth: 950,
+      sideMargin: "15",
       paperHeight: 1122,
       paperSize: "210mm 297mm",
       printZoom: "0.8",
@@ -3436,7 +3437,7 @@ describe("Modern Manufacturing template — view model", () => {
       invoice.template = { pdfOptions: { format: "a5", textScale: 1.1 } };
     });
     expect(html).toContain(
-      'style="--mm-text-scale: 1.1; --mm-print-zoom: 0.8; --mm-print-width: 657px; --mm-browser-print-width: 600px; --mm-photo-cap: 519px; --mm-band-cap: 204px; --mm-stamp-width: 0px;"'
+      'style="--mm-text-scale: 1.1; --mm-print-zoom: 0.8; --mm-print-width: 657px; --mm-browser-print-width: 657px; --mm-photo-cap: 519px; --mm-band-cap: 204px; --mm-stamp-width: 0px;"'
     );
     // Smaller (unset here): the template zooms the printed page itself.
     expect(html).toContain(

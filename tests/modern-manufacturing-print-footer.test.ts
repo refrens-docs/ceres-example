@@ -404,7 +404,7 @@ describe("Modern Manufacturing — the table fills every page it prints on", () 
     );
   });
 
-  it("marks the item rows and writes the rules; always on, never on a Pageless document", () => {
+  it("marks the item rows and writes the rules; always on, a Pageless document's last item only", () => {
     page();
     mockBoxes();
     stretchItemsTable();
@@ -417,10 +417,15 @@ describe("Modern Manufacturing — the table fills every page it prints on", () 
     expect(fillRules()).toContain('tr[data-mm-fill="1"]');
     expect(document.querySelector("[data-mm-measuring]")).toBeNull();
 
+    // Long PDF: the last item fills the pages the document takes (user, 2026-11-04).
     page(true, " data-mm-pageless");
     stretchItemsTable();
-    expect(document.querySelectorAll("[data-mm-fill]").length).toBe(0);
-    expect(fillRules()).toBe("");
+    expect(document.querySelectorAll("[data-mm-fill]").length).toBe(3);
+    expect(fillRules()).toContain('tr[data-mm-fill="2"]');
+    expect(fillRules()).not.toContain('tr[data-mm-fill="1"]');
+    expect(fillRules()).toMatch(
+      /@media print and \(min-height: 1701px\) \{[^}]*1 \* 100vh/
+    );
 
     document.body.innerHTML =
       '<div class="mm-doc" data-mm-stretch-table></div>';
@@ -940,10 +945,30 @@ describe("Modern Manufacturing — a browser's own print", () => {
     );
     endBrowserPrint();
 
-    // A Pageless document keeps its page as it is (an @page breaks Lydia's Pageless PDF).
+    // The document's own side margins (Narrow 0.5 = 15 px), under the print zoom (user,
+    // 2026-11-04: the browser kept 1 cm whatever the margins said).
+    document.body.innerHTML = `<div class="mm-doc" data-mm-paper-size="210mm 297mm" data-mm-side-margin="15" style="--mm-print-zoom: 0.8;"></div>`;
+    prepareBrowserPrint();
+    expect(document.getElementById("mm-browser-page")?.textContent).toBe(
+      "@page { size: 210mm 297mm; margin-top: 0; margin-bottom: 0; margin-left: 18.75px; margin-right: 18.75px; }"
+    );
+    endBrowserPrint();
+
+    // A Long PDF document prints in pages in a browser too: no stamps, its own margins (user,
+    // 2026-11-04: Chrome's stamps and wide margins on a Long PDF document's printout).
+    document.body.innerHTML = `<div class="mm-doc" data-mm-pageless data-mm-paper-size="279.4mm 431.8mm"></div>`;
+    prepareBrowserPrint();
+    expect(document.getElementById("mm-browser-page")?.textContent).toBe(
+      "@page { size: 279.4mm 431.8mm; margin-top: 0; margin-bottom: 0; }"
+    );
+    endBrowserPrint();
+
+    // Never in Refrens' PDF service (an @page broke its Long PDF).
+    document.body.className = "isDibella";
     document.body.innerHTML = `<div class="mm-doc" data-mm-pageless></div>`;
     prepareBrowserPrint();
     expect(document.getElementById("mm-browser-page")).toBeNull();
+    document.body.className = "";
   });
 });
 
