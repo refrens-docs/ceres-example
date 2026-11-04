@@ -722,6 +722,12 @@
   margin-inline-start: 8px;
 }
 
+/* An item's images start under its thumbnail, across the column: beside it a short item's
+   row of images was squeezed to one a line in print (4 Nov 2026). */
+.ec-item-detail .ceres-image-gallery {
+  clear: both;
+}
+
 .ec-item-thumbnail img {
   display: block;
   width: 64px;
@@ -1323,6 +1329,11 @@
   /* On paper the table fits the page; Description gives up its screen floor. */
   .ec-items .ec-desc-min {
     display: none;
+  }
+
+  /* A table cut at the edge anyway (helpers.ts fitPrintTable) keeps the preview's floor. */
+  .ec-items.is-print-cut .ec-desc-min {
+    display: block;
   }
 
   /*

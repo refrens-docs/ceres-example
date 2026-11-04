@@ -5559,7 +5559,7 @@ export const fitPrintTable = (
     (typeof window.matchMedia === "function" &&
       window.matchMedia("print").matches);
   root.querySelectorAll<HTMLElement>(".ec-items").forEach((table) => {
-    table.classList.remove("is-print-tight");
+    table.classList.remove("is-print-tight", "is-print-cut");
     // mapPrint's estimate (data-ec-print-compact) holds wherever the table is not measured.
     const estimated = table.hasAttribute("data-ec-print-compact");
     table.classList.toggle("is-print-compact", estimated);
@@ -5581,7 +5581,11 @@ export const fitPrintTable = (
     const overflow = () => need() - room();
     // A table that fits at the screen's 6 px padding prints with it (print 1:1, user
     // 2026-10-21); the estimate tightened tables that fit (a ten-column invoice, 4 px in print).
-    table.classList.remove("is-print-compact", "is-print-tight");
+    table.classList.remove(
+      "is-print-compact",
+      "is-print-tight",
+      "is-print-cut"
+    );
     if (overflow() <= PRINT_SLACK) return;
     table.classList.add("is-print-compact");
     if (overflow() <= PRINT_SLACK) return;
@@ -5590,6 +5594,13 @@ export const fitPrintTable = (
     // cut at the frame's edge (user, 1 Nov 2026: the line totals were cut off an ordinary
     // eight-column A4 invoice). The text keeps its size.
     table.classList.add("is-print-tight");
+    if (overflow() <= PRINT_SLACK) return;
+    // Too wide even so: the table is cut at the frame's edge whatever the item column gives,
+    // so it prints as the preview shows it, Description at its readable floor and its words
+    // whole (user, 4 Nov 2026: squeezed to 84 px, an eleven-column invoice broke "Developme-nt"
+    // across lines and was still cut).
+    table.classList.remove("is-print-tight");
+    table.classList.add("is-print-cut");
   });
 };
 

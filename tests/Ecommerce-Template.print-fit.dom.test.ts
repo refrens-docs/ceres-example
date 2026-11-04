@@ -33,10 +33,26 @@ describe("Ecommerce template — print table fit", () => {
     const table = mount(1800, 1100);
     fitPrintTable();
     expect(table.classList.contains("is-print-compact")).toBe(true);
-    // Then the item column's content gives way and the padding goes to 1 px; text keeps its size.
-    expect(table.classList.contains("is-print-tight")).toBe(true);
+    // Still too wide with the item column given way: it is cut at the edge as the preview
+    // shows it, words whole; text keeps its size.
+    expect(table.classList.contains("is-print-tight")).toBe(false);
+    expect(table.classList.contains("is-print-cut")).toBe(true);
     expect(table.getAttribute("style") ?? "").toBe("");
     expect(table.classList.contains("is-print-fit")).toBe(false);
+  });
+
+  it("lets the item column give way when that makes the table fit", () => {
+    printing(true);
+    const table = mount(1800, 1100);
+    const wide = table.getBoundingClientRect;
+    table.getBoundingClientRect = () =>
+      table.classList.contains("is-print-tight")
+        ? ({ width: 400 } as DOMRect)
+        : wide();
+    fitPrintTable();
+    expect(table.classList.contains("is-print-compact")).toBe(true);
+    expect(table.classList.contains("is-print-tight")).toBe(true);
+    expect(table.classList.contains("is-print-cut")).toBe(false);
   });
 
   it("keeps the screen's padding for a table the estimate marked compact but that fits", () => {
