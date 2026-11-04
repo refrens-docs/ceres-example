@@ -6071,8 +6071,12 @@ export interface FooterPlacement {
   footerHeight: number;
 }
 
-// 2 px to spare, so rounding never pushes the footer onto a page of its own.
-const PAGE_EDGE_SLACK = 2;
+// A few px to spare, so rounding never pushes the footer onto a page of its own (2 px let the
+// footer slip onto a page the print had not counted: lost, a blank last page; Professional
+// 2026-10-31, here 4 Nov 2026 in a landscape print of quotation A00052-B).
+const PAGE_EDGE_SLACK = 6;
+// Per page, how much earlier the page ends read off forced breaks are taken.
+const PAGE_END_DRIFT = 4;
 // Shorter than any printed page (A5 landscape at the smallest print size is about 400 px).
 const MIN_PAGE_HEIGHT = 200;
 
@@ -6117,8 +6121,17 @@ export const placeFootersOnPageEdge = (root: ParentNode = document): void => {
       parent.insertBefore(marker, footer);
       return marker;
     });
-    const [pageEnd, nextPageEnd] = breaks.map(pageTop);
+    const [rawPageEnd, rawNextPageEnd] = breaks.map(pageTop);
     breaks.forEach((marker) => marker.remove());
+    // Page ends read off forced breaks run late by 2.4–2.6 px a page (Professional, measured
+    // 2026-10-31 and 2026-11-01), and a footer set on them slipped onto a page the print had
+    // not counted (lost, a blank last page). They are taken 4 px a page earlier.
+    const drift = (end: number) =>
+      rawNextPageEnd > rawPageEnd
+        ? PAGE_END_DRIFT * Math.round(end / (rawNextPageEnd - rawPageEnd))
+        : 0;
+    const pageEnd = rawPageEnd - drift(rawPageEnd);
+    const nextPageEnd = rawNextPageEnd - drift(rawNextPageEnd);
     const pageHeight = nextPageEnd - pageEnd;
     // Not paginated yet (the PDF service switches to print media before it prints, so the
     // forced breaks collapse to the document's 20 px gap): the page edge cannot be measured,

@@ -1729,6 +1729,20 @@
   }
 
   /*
+   * A browser's own print adds its 1 cm margin row to the page frame's header and footer
+   * (above): counted in the bands too, or on a short page they passed a quarter of it, Chrome
+   * stopped repeating them and the fixed footer printed over the items (user, 4 Nov 2026).
+   */
+  .ec-doc.is-browser-print .ec-page-frame-header .ec-letterhead img {
+    max-height: min(22vh, calc(25vh - 41px - 1cm / var(--ec-print-zoom, 1)));
+  }
+
+  .ec-doc.is-browser-print .ec-page-frame-footer .ec-letterhead-footer img,
+  .ec-doc.is-browser-print .ec-letterhead-footer.ec-footer-fixed img {
+    max-height: min(22vh, calc(25vh - 29px - 1cm / var(--ec-print-zoom, 1)));
+  }
+
+  /*
    * The PDF service draws an every-page letterhead and footer in its own page margins (from
    * data-ceres-page-header / -footer, policy "all"), so those copies hide there; a first-page
    * letterhead and a last-page footer stay in the document.
