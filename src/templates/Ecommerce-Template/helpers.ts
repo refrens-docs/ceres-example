@@ -5779,13 +5779,15 @@ export const withReadableStylesheet = <T>(measure: () => T): T => {
  * A browser's own print: Chrome prints its date, title, URL and page number in the page's top
  * and bottom margins unless both are 0 (its print preview turns "Headers and footers" off
  * then), so they are 0 while it prints (user, 2 Nov 2026: "remove these stamps"); the page
- * frame's margin rows (styles.css) give each page its 1 cm back. The side margins stay the
- * browser's. Never on a Long PDF (one page, no @page: Lydia's Pageless PDF breaks with one).
+ * frame's margin rows (styles.css) give each page its 1 cm back; the sides take the
+ * document's margins. A Long PDF too: a browser cuts its pages all the same, and left out it
+ * printed the stamps and an A4-wide column in the middle of a landscape page (user, 4 Nov
+ * 2026, receipt A000145). Refrens' PDF service, which makes the Long PDF's one tall page, is
+ * in print media already and never gets here (prepareBrowserPrint).
  */
 const BROWSER_PAGE_STYLE_ID = "ec-browser-page";
 
 const startBrowserPage = (doc: HTMLElement): void => {
-  if (doc.classList.contains("is-pageless")) return;
   doc.classList.add("is-browser-print");
   if (document.getElementById(BROWSER_PAGE_STYLE_ID)) return;
   const style = document.createElement("style");

@@ -242,10 +242,13 @@ describe("Ecommerce template — after the render, in the browser", () => {
       endBrowserPrint();
       expect(document.querySelector(".is-browser-print")).toBeNull();
       expect(document.getElementById("ec-browser-page")).toBeNull();
-      // A Long PDF keeps its one page: no page rule.
+      // A Long PDF too: a browser cuts it into pages all the same (receipt A000145 printed
+      // the stamps and an A4-wide column on a landscape page).
       document.body.innerHTML = '<div class="ec-doc is-pageless"></div>';
       prepareBrowserPrint(() => undefined);
-      expect(document.getElementById("ec-browser-page")).toBeNull();
+      expect(document.getElementById("ec-browser-page")).not.toBeNull();
+      expect(document.querySelector(".ec-doc.is-browser-print")).not.toBeNull();
+      endBrowserPrint();
     });
 
     it("sizes page-height images for the page they print on, not the window", () => {
