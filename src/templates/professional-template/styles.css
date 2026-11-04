@@ -2206,12 +2206,21 @@ body[class~="isDibella"]
     position: relative;
   }
 
+  /* Drawn as shapes, not a radial-gradient: a PDF stores a gradient as a small picture, and a
+     viewer zoomed in showed its square edges as a faint outline in the corner (user,
+     2026-11-04). The piece's own border is the curve, in the rule's colour; its shadow, spread
+     outward and kept to the outside by its clip, is the paper over the row's square corner. */
   .pt-items > .pt-items-corners td:first-child::before,
   .pt-items > .pt-items-corners td:last-child::after {
     position: absolute;
-    bottom: -1px;
-    width: 9px; /* a pixel past the table's edge, so no trace of the square corner shows */
-    height: 9px;
+    bottom: 0;
+    box-sizing: border-box;
+    width: 8px;
+    height: 10px; /* its side line starts above the curve, over the table's own */
+    border: 0 solid var(--pt-line);
+    border-bottom-width: 1px;
+    background: none;
+    box-shadow: 0 0 0 8px var(--pt-paper);
     content: "";
     pointer-events: none;
   }
@@ -2219,15 +2228,21 @@ body[class~="isDibella"]
   .pt-items > .pt-items-corners td:first-child::before,
   .pt-doc[dir="rtl"] .pt-items > .pt-items-corners td:last-child::after {
     right: auto;
-    left: -1px;
-    background: radial-gradient(circle at 100% 0, transparent 7px, var(--pt-line) 7px 8px, var(--pt-paper) 8px);
+    left: 0;
+    border-right-width: 0;
+    border-left-width: 1px;
+    border-radius: 0 0 0 8px;
+    clip-path: inset(2px 0 -8px -8px);
   }
 
   .pt-items > .pt-items-corners td:last-child::after,
   .pt-doc[dir="rtl"] .pt-items > .pt-items-corners td:first-child::before {
-    right: -1px;
+    right: 0;
     left: auto;
-    background: radial-gradient(circle at 0 0, transparent 7px, var(--pt-line) 7px 8px, var(--pt-paper) 8px);
+    border-right-width: 1px;
+    border-left-width: 0;
+    border-radius: 0 0 8px;
+    clip-path: inset(2px -8px -8px 0);
   }
 
   /* The totals follow: the items' table ends square, a piece hung from the totals' top corners
