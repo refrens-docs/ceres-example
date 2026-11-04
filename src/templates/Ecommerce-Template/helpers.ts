@@ -5061,7 +5061,20 @@ const flowUnits = (
       const style = getComputedStyle(child);
       const join = afterAvoid || avoids(style.breakBefore);
       if (row.length > 1) {
-        push({ top: box(child).top, bottom: rowBottom }, join, row);
+        // Two parties break between their lines, each where the page ends (styles.css): the
+        // row then runs on line by line, as text does.
+        const breaks = row.every(
+          (el) => !avoids(getComputedStyle(el).breakInside)
+        );
+        push(
+          {
+            top: box(child).top,
+            bottom: rowBottom,
+            ...(breaks ? { fluid: true, line: lineOf(style) } : {}),
+          },
+          join,
+          row
+        );
         if (row.some((el) => el.contains(filler))) anchor = units.length - 1;
       } else if (child instanceof HTMLTableElement) {
         table(child, join);

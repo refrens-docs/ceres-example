@@ -1298,8 +1298,11 @@ describe("Ecommerce template — files and CSS", () => {
 
   it("prints every section as a unit, the page breaking between sections", () => {
     expect(css).not.toContain(".ec-items-section ~");
-    const rule = css.slice(css.indexOf("  .ec-masthead,\n  .ec-parties,"));
+    const rule = css.slice(css.indexOf("  .ec-masthead,\n  .ec-references,"));
     const block = rule.slice(0, rule.indexOf("}"));
+    // The parties break between their fields, a party's title kept with its name.
+    expect(block).not.toContain(".ec-parties");
+    expect(css).toMatch(/\.ec-party-title \{\s*break-after: avoid-page;/);
     [
       ".ec-block",
       ".ec-bank",
@@ -1399,13 +1402,13 @@ describe("Ecommerce template — files and CSS", () => {
     );
   });
 
-  it("lets stacked parties break between parties in print, each party whole", () => {
+  it("lets stacked parties break between parties and their fields in print", () => {
     const stacked = css.slice(
       css.indexOf("@container ec-doc (width < 600px)"),
       css.indexOf("@container ec-doc (width < 400px)")
     );
     expect(stacked).toMatch(/\.ec-doc \.ec-parties \{\s*break-inside: auto;/);
-    expect(stacked).toMatch(
+    expect(stacked).not.toMatch(
       /\.ec-doc \.ec-parties \.ec-party \{\s*break-inside: avoid;/
     );
   });

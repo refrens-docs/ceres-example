@@ -1270,15 +1270,10 @@
   }
 
   /* Stacked, the four parties are most of a short page: kept as one unit in print, A5 left page
-     one empty under the title. A page break falls between them instead, each party whole. */
+     one empty under the title. A page break falls between them (or their fields) instead. */
   .ec-doc .ec-parties {
     break-inside: auto;
   }
-
-  .ec-doc .ec-parties .ec-party {
-    break-inside: avoid;
-  }
-
 }
 
 /* On a phone the QR goes under the bank details. */
@@ -1359,12 +1354,14 @@
   /*
    * Too wide even with 4 px padding (helpers.ts fitPrintTable): before any column is cut, the
    * item column's content gives way — a table in a description takes the column's width, its
-   * cells wrapping anywhere; a row of images wraps; a long word breaks — and the cells keep
+   * cells wrapping anywhere; a row of images wraps; a long code breaks — and the cells keep
    * the 4 px padding of a compact table (user, 2 Nov 2026: 1 px was too tight). Text keeps its
-   * size.
+   * size, and the name's and description's words stay whole (4 Nov 2026: at margin 0 an
+   * invoice squeezed to break "Developme-nt" took 10 pages for 7): a table that cannot fit
+   * so is cut at the edge as the preview shows it (is-print-cut).
    */
 
-  .ec-items.is-print-tight :is(.ec-item-name, .ec-item-codes, .ec-item-desc) {
+  .ec-items.is-print-tight .ec-item-codes {
     overflow-wrap: anywhere;
   }
 
@@ -1509,10 +1506,12 @@
   /*
    * Each section prints as a unit (user request): a page break falls between sections, never
    * through one (terms, notes, bank, the summaries, payments…). One taller than a page still
-   * splits. A heading stays with its content.
+   * splits. A heading stays with its content. The parties break between their fields, as the
+   * Professional template's do: kept whole, under a landscape letterhead at print size 1.2 they
+   * moved to page 2 and left page 1 with the logo alone (4 Nov 2026). A party's title stays
+   * with its name.
    */
   .ec-masthead,
-  .ec-parties,
   .ec-references,
   .ec-compliance,
   .ec-signature,
@@ -1532,6 +1531,10 @@
   }
 
   .ec-block-title {
+    break-after: avoid-page;
+  }
+
+  .ec-party-title {
     break-after: avoid-page;
   }
 
@@ -1569,6 +1572,20 @@
     padding-top: 0;
     border-top-width: 0;
     border-bottom-width: 0;
+  }
+
+  /*
+   * The frame's sides are drawn by its page-frame cell, a cell of the same table as the edge
+   * rows: drawn by the block, at a print size of 1.2 the PDF snapped them 0.75 pt off the
+   * bottom rule's ends, a notch at the frame's corners (4 Nov 2026). Same widths either way.
+   */
+  .ec-page-frame > tbody > tr > td.ec-page-frame-cell:has(> .ec-page-body > .ec-frame) {
+    border: 0 solid var(--ec-ink);
+    border-inline-width: max(1px, calc(1px / var(--ec-print-zoom, 1)));
+  }
+
+  .ec-page-frame-cell > .ec-page-body > .ec-frame {
+    border-inline-width: 0;
   }
 
   .ec-page-frame > * > tr.ec-frame-edge > td {
