@@ -1982,7 +1982,7 @@ describe("Professional Template — review round 2 (2026-10-23)", () => {
 
   it("tints every info card like Billed By / To and puts the subtitle under the title", () => {
     expect(css()).toMatch(
-      /\.pt-cards > \.pt-card,\n\.pt-card\.pt-bank \{\s*background: var\(--pt-tint\);/
+      /\.pt-cards > \.pt-card,\n\.pt-card\.pt-bank \{\s*border-color: transparent;[^\n]*\n\s*background: var\(--pt-tint\);/
     );
     const html = render((invoice) => {
       invoice.invoiceSubTitle = "Supply of VRV System";
@@ -2256,7 +2256,7 @@ describe("Professional Template — review round 5 (2026-10-24)", () => {
 
   it("tints Bank Details like Billed By / To", () => {
     expect(css()).toMatch(
-      /\.pt-card\.pt-bank \{\s*background: var\(--pt-tint\);/
+      /\.pt-card\.pt-bank \{\s*border-color: transparent;[^\n]*\n\s*background: var\(--pt-tint\);/
     );
   });
 

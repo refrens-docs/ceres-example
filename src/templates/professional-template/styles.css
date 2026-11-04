@@ -28,8 +28,9 @@
   --pt-accent: var(--primary-color, var(--pt-theme, #7d3bdf));
   --pt-on-accent: #fff;
 
-  /* primary-25: the party cards' ground, a 3 % tint of the theme colour. */
-  --pt-tint: color-mix(in srgb, var(--pt-accent) 3%, var(--pt-paper));
+  /* The party, shipping, transport and bank cards' ground and the table's zebra rows: a 6 %
+     tint of the theme colour (user, 2026-11-04: a little darker than the 3 % before). */
+  --pt-tint: color-mix(in srgb, var(--pt-accent) 6%, var(--pt-paper));
 
   /* The item table's zebra rows in the same light tint as the cards (Bank Details, Billed By):
      the theme at 3 %, not the document's 20 % Secondary Color (user request, 2026-10-24). */
@@ -416,6 +417,7 @@
    (user request, 2026-10-23); Bank Details too (user request, 2026-10-24). */
 .pt-cards > .pt-card,
 .pt-card.pt-bank {
+  border-color: transparent; /* no grey outline, the tint alone (user, 2026-11-04) */
   background: var(--pt-tint);
 }
 
@@ -2042,7 +2044,7 @@ body[class~="isDibella"]
     display: table-cell;
     height: 16px;
     padding: 0;
-    border: 1px solid var(--pt-line);
+    border: 1px solid transparent;
     background: var(--pt-tint);
   }
 
@@ -2059,7 +2061,7 @@ body[class~="isDibella"]
   .pt-card-flow .pt-split-body {
     display: table-cell;
     padding: 0 16px;
-    border-inline: 1px solid var(--pt-line);
+    border-inline: 1px solid transparent;
     background: var(--pt-tint);
     vertical-align: top;
   }
