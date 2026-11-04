@@ -58,17 +58,13 @@
   --ec-font-size-xl: 20px;
 
   /*
-   * Around the frame on screen: the document's side margins (xMargins) at the paper's
-   * proportion of the sheet's width (user, 2 Nov 2026: margins showed no difference in the
-   * preview); 32 px when unknown. The letterhead and footer run to the edges.
+   * 32 px around the frame on screen; the letterhead and footer run to the edges. The page
+   * margins (xMargins) and the text scale (zoomSize) are PDF settings: print only, never in
+   * the preview (user, 4 Nov 2026, reversing 2 Nov).
    */
-  --ec-gutter: calc(min(100vw, 1000px) * var(--ec-margin-share, 0.032));
+  --ec-gutter: 32px;
 
-  /*
-   * Text scale: the document's own (textScale), and on screen the print size (zoomSize) too,
-   * which the renderer applies in print only (user, 2 Nov 2026: the preview showed no
-   * difference). In print the page's zoom does it.
-   */
+  /* The document's own text scale (textScale); in print the page's zoom adds the print size. */
   --ec-text-scale: var(--ec-doc-text-scale, 1);
 
   display: flex;
@@ -1231,14 +1227,6 @@
  */
 .ec-doc {
   container: ec-doc / inline-size;
-}
-
-@media screen {
-  .ec-doc {
-    --ec-text-scale: calc(
-      var(--ec-doc-text-scale, 1) * var(--ec-print-zoom, 1)
-    );
-  }
 }
 
 @media screen and (width <= 720px) {

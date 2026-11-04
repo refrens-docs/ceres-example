@@ -1356,10 +1356,11 @@ describe("Ecommerce template — files and CSS", () => {
     expect(render()).toContain(
       "<style>@media print { :where(html) { zoom: 0.8; } }</style>"
     );
-    // The preview: text scaled by the print size, gutter at the margins' share of the paper.
-    expect(css).toMatch(
+    // The preview keeps neither: text scale and margins are PDF settings (user, 4 Nov 2026).
+    expect(css).not.toMatch(
       /--ec-text-scale: calc\(\s*var\(--ec-doc-text-scale, 1\) \* var\(--ec-print-zoom, 1\)\s*\);/
     );
+    expect(css).toContain("--ec-gutter: 32px;");
     expect(mapPrint({ pdfOptions: { xMargins: "1" } }).marginShare).toBe(
       "0.0476"
     );
