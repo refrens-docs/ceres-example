@@ -724,6 +724,13 @@
   clear: both;
 }
 
+/* An item's and a group's images print plain, square-cornered and unframed, as the item's
+   thumbnail does (user, 5 Nov 2026: the image widget's 1 px grey border and 4 px corners). */
+.ec-doc .ceres-image-gallery .ceres-image {
+  border: 0;
+  border-radius: 0;
+}
+
 .ec-item-thumbnail img {
   display: block;
   width: 64px;
