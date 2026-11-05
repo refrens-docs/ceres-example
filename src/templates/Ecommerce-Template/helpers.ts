@@ -4778,6 +4778,15 @@ interface FlowPlaced {
  * first unit up to `anchor` a page break cuts (where Chrome cuts it is not known, so neither
  * is anything after it); Infinity when none is.
  */
+/*
+ * A unit that ends this close to its page's end, either side, may fall on either page as it
+ * prints: the page's height is known to within the slack, the rows to within a line (invoice
+ * A000136, 5 Nov 2026: its last item, measured just over page 1's end, printed on page 1, and
+ * the stretch space sized for page 2 went over to page 2 alone, an empty piece of table above
+ * the totals). From such a unit on, where things fall is not known: no stretch after it.
+ */
+const FLOW_DOUBT = 24;
+
 const placeUnits = (
   units: FlowUnit[],
   anchor: number,
@@ -4809,6 +4818,11 @@ const placeUnits = (
     ) {
       const begin = pageStart(index, unit);
       const firstOnPage = flowAt(top(), page) <= flowAt(begin, page) + 1;
+      if (
+        flowAt(bottom(), page) - flowAt(regionEnd(index, unit), page) <
+        FLOW_DOUBT
+      )
+        split = Math.min(split, at);
       if (!unit.fluid && !firstOnPage) {
         // Moves whole to the next page, its spacing above it dropped.
         index += 1;
@@ -4828,7 +4842,7 @@ const placeUnits = (
          * moves or breaks where it will, unknown.
          */
         const plainText = unit.fluid && !unit.row && !unit.images?.length;
-        if (at <= anchor && !plainText) split = Math.min(split, at);
+        if (!plainText) split = Math.min(split, at);
         index += 1;
         const next = {
           c: head + (unit.head || 0) + (unit.fluid ? 2 * (unit.line || 0) : 0),
@@ -4837,6 +4851,12 @@ const placeUnits = (
         shift = { c: shift.c + next.c - cut.c, k: shift.k + next.k - cut.k };
       }
     }
+    if (
+      flowAt(regionEnd(index, unit), page) - flowAt(bottom(), page) <
+        FLOW_DOUBT &&
+      !unit.tail
+    )
+      split = Math.min(split, at);
     placed.push({
       page: index,
       bottom: bottom(),
@@ -4861,7 +4881,12 @@ export const flowFiller = (
   const { page } = layout;
   const { placed, split } = placeUnits(units, anchor, layout);
   const at = placed[anchor];
-  if (!at || split <= anchor) return undefined;
+  // Known up to the first unit on the next page (whether it moved there is part of it).
+  const firstNext = placed.findIndex(
+    (unit, i) => i > anchor && unit.page > (at?.page ?? 0)
+  );
+  if (!at || split <= (firstNext < 0 ? units.length - 1 : firstNext))
+    return undefined;
   if (onePageOnly && placed.some((unit) => unit.page !== 0)) return undefined;
   const room = roomBelow;
   const after = placed
@@ -5048,9 +5073,21 @@ const flowUnits = (
       // Side by side (two parties in a row): one unit, a break only above or below the row.
       const row = [children[i]];
       let rowBottom = box(children[i]).bottom;
+      /*
+       * Side by side: beside the one before, not under it. Blocks one under the other may
+       * overlap by a rule's width (the totals table, pulled up a pixel of the zoomed page,
+       * 1.25 px at text scale 0.8): read as side by side, the item table and its totals were
+       * one block of text, and the stretch space sized for the wrong page (invoice A000136).
+       */
+      const beside = (el: Element, before: Element) => {
+        const a = el.getBoundingClientRect();
+        const b = before.getBoundingClientRect();
+        return a.left >= b.right - 1 || a.right <= b.left + 1;
+      };
       while (
         i + row.length < children.length &&
-        box(children[i + row.length]).top < rowBottom - 1
+        box(children[i + row.length]).top < rowBottom - 1 &&
+        beside(children[i + row.length], row[row.length - 1])
       ) {
         rowBottom = Math.max(rowBottom, box(children[i + row.length]).bottom);
         row.push(children[i + row.length]);
@@ -5237,7 +5274,34 @@ export const stretchPrintRules = (
     const sized = flowAtHeight(units, height);
     const pageLayout = { ...layout, page };
     const parts: string[] = [];
-    const room = flowFiller(sized, anchor, pageLayout);
+    const wideSized =
+      wide && wide.length === units.length ? flowAtHeight(wide, height) : [];
+    const pagesOf = (list: FlowUnit[]) =>
+      placeUnits(list, anchor, pageLayout).placed.map((unit) => unit.page);
+    const narrowPages = wideSized.length ? pagesOf(sized) : [];
+    const widePages = wideSized.length ? pagesOf(wideSized) : [];
+    const agree = (upTo: number) =>
+      widePages.slice(0, upTo + 1).every((at, i) => at === narrowPages[i]);
+    /*
+     * The space under the last item: with the wider measure too, only where both put every
+     * unit up to the first on the next page on the same pages, by the smaller room. Sized for
+     * a page the items do not end on in print, it went over there alone (invoice A000136).
+     */
+    const narrowRoom = flowFiller(sized, anchor, pageLayout);
+    const wideRoom = wideSized.length
+      ? flowFiller(wideSized, anchor, pageLayout)
+      : narrowRoom;
+    const firstNext = narrowPages.findIndex(
+      (at, i) => i > anchor && at > narrowPages[anchor]
+    );
+    const room =
+      narrowRoom &&
+      wideRoom &&
+      (!wideSized.length || agree(firstNext < 0 ? units.length - 1 : firstNext))
+        ? [narrowRoom, wideRoom].reduce((least, next) =>
+            flowAt(next, page) < flowAt(least, page) ? next : least
+          )
+        : undefined;
     const keep =
       slack + ROW_SLACK * flowRowsOnEndPage(sized, anchor, pageLayout);
     if (room && flowAt(room, page) > keep)
@@ -5255,14 +5319,6 @@ export const stretchPrintRules = (
      * touch wider than it prints (is-flow-measure, styles.css): every row is then measured at
      * least as tall as it prints, and the space is never more than its page has left.
      */
-    const wideSized =
-      wide && wide.length === units.length ? flowAtHeight(wide, height) : [];
-    const pagesOf = (list: FlowUnit[]) =>
-      placeUnits(list, anchor, pageLayout).placed.map((unit) => unit.page);
-    const narrowPages = wideSized.length ? pagesOf(sized) : [];
-    const widePages = wideSized.length ? pagesOf(wideSized) : [];
-    const agree = (upTo: number) =>
-      widePages.slice(0, upTo + 1).every((at, i) => at === narrowPages[i]);
     flowBreakFills(wideSized, anchor, pageLayout)
       .filter((fill) => agree(fill.unit + 1))
       .filter((fill) => flowAt(fill.room, page) > breakKeep)

@@ -200,6 +200,27 @@ describe("Ecommerce template — after the render, in the browser", () => {
       expect(tall && tall.c + tall.k * 2500).toBe(499);
     });
 
+    it("gives up the stretch from a unit that ends right at a page's end, either side", () => {
+      const layout = { head: 13, foot: 1, start: 0 };
+      // Item 2 measured 11 px over page 1's end: it may print on page 1 (invoice A000136, the
+      // space sized for page 2 went over there alone, an empty piece of table).
+      const units = [
+        { top: 0, bottom: 500 },
+        { top: 500, bottom: 700, group: 1, first: true },
+        { top: 700, bottom: 1010, group: 1 },
+        { top: 1010, bottom: 1200 },
+      ];
+      expect(flowFiller(units, 2, { ...layout, page: 1000 })).toBeUndefined();
+      expect(flowBreakFills(units, 2, { ...layout, page: 1000 })).toEqual([]);
+      // Clear of the end: the page break is known, item 1 runs on to page 1's foot.
+      const clear = units.map((unit, i) =>
+        i === 2 ? { ...unit, bottom: 1100 } : unit
+      );
+      expect(
+        flowBreakFills(clear, 2, { ...layout, page: 1000 }).map((f) => f.unit)
+      ).toContain(1);
+    });
+
     it("lengthens the last item on every page the item table runs over", () => {
       const layout = { head: 13, foot: 1, start: 0 };
       const units = [
