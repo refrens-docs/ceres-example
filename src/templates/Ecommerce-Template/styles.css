@@ -1334,12 +1334,12 @@
     padding-inline: 4px;
   }
 
-  .ec-items.is-print-compact td.is-word {
+  .ec-items.is-print-compact td.is-word:not(.is-figure) {
     white-space: normal;
     overflow-wrap: anywhere;
   }
 
-  .ec-items.is-print-compact td.is-word .ec-num {
+  .ec-items.is-print-compact td.is-word:not(.is-figure) .ec-num {
     white-space: normal;
   }
 

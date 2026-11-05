@@ -268,6 +268,32 @@ describe("Ecommerce template — render", () => {
     expect(html.indexOf('data-testid="signature"')).toBeLessThan(at("hsn"));
   });
 
+  it("keeps a figure in a custom text column on one line, even in a tight print", () => {
+    const html = render((invoice) => {
+      const at =
+        invoice.columns.findIndex((column: Json) => column.key === "name") + 1;
+      invoice.columns.splice(
+        at,
+        0,
+        { key: "col1", label: "Column 1" },
+        { key: "col2", label: "Column 2" }
+      );
+      invoice.items[0].custom = { col1: "₹1,62,84,000.00", col2: "BLOCK-1" };
+    });
+    const cell = (value: string) =>
+      new RegExp(`<td class="([^"]*)"[^>]*>(?:<span[^>]*>)?${value}`).exec(
+        section(html, "items")
+      )?.[1] || "";
+    // Numbers never wrap (user rule): a figure is marked, a code with letters is not.
+    expect(cell("₹1,62,84,000.00")).toContain("is-figure");
+    expect(cell("BLOCK-1")).toContain("is-word");
+    expect(cell("BLOCK-1")).not.toContain("is-figure");
+    const css = fs.readFileSync(path.join(TEMPLATE_DIR, "styles.css"), "utf8");
+    expect(css).toMatch(
+      /td\.is-word:not\(\.is-figure\) \{\s*white-space: normal;\s*overflow-wrap: anywhere;/
+    );
+  });
+
   it("fills the business's batch columns from the item's batch data, never a batch id", () => {
     const html = render((invoice) => {
       invoice.advanceOptions.showBatchColumnsInInvoice = true;

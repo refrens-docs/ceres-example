@@ -2862,11 +2862,15 @@ export const mapItemTable = (
           const isWord =
             column.kind === "text" &&
             (/^\S+$/.test(value) || value.length <= SHORT_TEXT);
+          // A figure in a text column (an amount, a date, a code with no letters) is a
+          // number: never wrapped, not even in a tight print (user rule; custom amount
+          // columns broke mid-figure in print, 5 Nov 2026).
+          const isFigure = isWord && /\d/.test(value) && !/\p{L}/u.test(value);
           return {
             key: column.key,
             col: (COLUMN_SPEC[column.key] || { col: column.key }).col,
             className: isWord
-              ? `${column.className} is-word`
+              ? `${column.className} is-word${isFigure ? " is-figure" : ""}`
               : column.className,
             isName: column.kind === "name",
             isNum:
