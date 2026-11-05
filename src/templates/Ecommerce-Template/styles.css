@@ -1443,6 +1443,13 @@
     display: table-row;
   }
 
+  /* The stretch's measure only (helpers.ts stretchItemTable): text a touch wider than it
+     prints, so no row prints taller than measured and the space at a page break never
+     pushes the next item over. */
+  .ec-doc.is-flow-measure .ec-frame {
+    letter-spacing: 0.02em;
+  }
+
   /*
    * A row taller than the rest of its page breaks (markTallRows), and Chrome draws no rule
    * where a table row is split. The item table's empty footer repeats at the foot of every

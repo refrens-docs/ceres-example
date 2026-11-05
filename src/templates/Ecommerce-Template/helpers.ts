@@ -4819,7 +4819,16 @@ const placeUnits = (
         // Breaks where the page ends and runs on at the next page's start (a table's heading
         // repeated), a line or two later for text (the line across the break, orphans).
         const cut = regionEnd(index, unit);
-        if (at <= anchor) split = Math.min(split, at);
+        /*
+         * Text (a paragraph, two parties side by side) breaks between lines, a line or two
+         * above where the page ends, never below it: laid on as cut right at the page's end
+         * and two lines later, what follows lies at most that much too low, never too high,
+         * so the room it leaves is never more than measured (it was all given up after the
+         * first such cut: no stretch on any later page, user 5 Nov 2026). A row or an image
+         * moves or breaks where it will, unknown.
+         */
+        const plainText = unit.fluid && !unit.row && !unit.images?.length;
+        if (at <= anchor && !plainText) split = Math.min(split, at);
         index += 1;
         const next = {
           c: head + (unit.head || 0) + (unit.fluid ? 2 * (unit.line || 0) : 0),
@@ -5181,6 +5190,11 @@ const stretchOnScreen = (doc: HTMLElement, filler: HTMLElement): void => {
  */
 const STRETCH_STYLE_ID = "ec-stretch-pages";
 const ROW_SLACK = 24;
+/*
+ * An item lengthened at a page break runs to the page's foot less this: its table's closing
+ * rule then falls on the frame's own (user, 2 Nov 2026: 16 px kept back drew a second line).
+ */
+const BREAK_SLACK = 4;
 // The browser's own side margins against the 1 cm the browser print is laid out for, either way.
 const BROWSER_WIDTH_SLACK = 24;
 const PAGE_HEIGHTS: [number, number] = [280, 1700];
@@ -5193,7 +5207,15 @@ export const stretchPrintRules = (
   slack: number,
   // Only on a page this wide (CSS px, min and max): laid out at another width, the units'
   // heights are not these.
-  pageWidth?: [number, number]
+  pageWidth?: [number, number],
+  /*
+   * The same units measured with the text a touch wider than it prints (is-flow-measure):
+   * Chrome prints text a little wider than it lays it out, so each row prints between the
+   * two measures. A page break inside the table is filled only where both put the same units
+   * on every page up to it (the item filled is then the page's last one in print too), by the
+   * wider measure's room (the smaller): never more than the page has left. Without it, none.
+   */
+  wide?: FlowUnit[]
 ): string => {
   const widthQuery = pageWidth
     ? ` and (min-width: ${Math.floor(
@@ -5202,6 +5224,8 @@ export const stretchPrintRules = (
     : "";
   const rules: string[] = [];
   const z = compactDecimal(zoom);
+  // The page's height is 100vh / zoom only to within the slack (see STRETCH_SLACK).
+  const breakKeep = Math.max(BREAK_SLACK, slack);
   const length = (room: FlowLength, keep = slack) => {
     const c = Math.floor(room.c - keep);
     return `max(0px, calc(${compactDecimal(room.k)} * 100vh / ${z} ${
@@ -5224,11 +5248,34 @@ export const stretchPrintRules = (
         )}; }`
       );
     /*
-     * No space at the page breaks inside the table (flowBreakFills is kept for its tests): it
-     * rests on the measured row heights, and Chrome prints a narrow column's words a line later
-     * than measured, so the space pushed items, and the totals with them, onto further pages
-     * (invoice MMS/IN/26-27/082 on A4, 2 Nov 2026: 10 pages printed as 14).
+     * Every page break inside the table: the last item on the page runs on to its foot (user,
+     * 5 Nov 2026: "table stretch nahi ho rahi, kahi kahi"). Chrome prints text a little wider
+     * than it lays it out, a word a line later (invoice MMS/IN/26-27/082: 10 pages printed as
+     * 14 when the space rested on that layout), so the document is measured with its text a
+     * touch wider than it prints (is-flow-measure, styles.css): every row is then measured at
+     * least as tall as it prints, and the space is never more than its page has left.
      */
+    const wideSized =
+      wide && wide.length === units.length ? flowAtHeight(wide, height) : [];
+    const pagesOf = (list: FlowUnit[]) =>
+      placeUnits(list, anchor, pageLayout).placed.map((unit) => unit.page);
+    const narrowPages = wideSized.length ? pagesOf(sized) : [];
+    const widePages = wideSized.length ? pagesOf(wideSized) : [];
+    const agree = (upTo: number) =>
+      widePages.slice(0, upTo + 1).every((at, i) => at === narrowPages[i]);
+    flowBreakFills(wideSized, anchor, pageLayout)
+      .filter((fill) => agree(fill.unit + 1))
+      .filter((fill) => flowAt(fill.room, page) > breakKeep)
+      .forEach((fill) =>
+        parts.push(
+          `.ec-doc.is-stretch .ec-items tr[data-ec-break="${
+            fill.unit
+          }"] > td::after { content: ""; display: block; height: ${length(
+            fill.room,
+            breakKeep
+          )}; }`
+        )
+      );
     return parts.join(" ");
   };
   let open: { from: number; to: number; css: string } | undefined;
@@ -5298,6 +5345,9 @@ export const stretchItemTable = (
       .forEach((row) => row.removeAttribute("data-ec-break"));
   }
   const flow = measureFlow(doc, filler, true);
+  doc.classList.add("is-flow-measure");
+  const wide = measureFlow(doc, filler, true);
+  doc.classList.remove("is-flow-measure");
   filler.style.removeProperty("--ec-filler-height");
   const marked = (flow?.units || []).every(
     (unit, at) =>
@@ -5338,7 +5388,8 @@ export const stretchItemTable = (
         flow.layout,
         zoom,
         slack,
-        pageWidth
+        pageWidth,
+        wide?.anchor === flow.anchor ? wide.units : undefined
       )
     : "";
   style.textContent = turned ? `${style.textContent}\n${rules}` : rules;

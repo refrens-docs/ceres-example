@@ -217,17 +217,53 @@ describe("Ecommerce template — after the render, in the browser", () => {
       // the page ends at 1999: 586 px left (item 3, 700 px tall, does not fit).
       expect(fills.map((fill) => fill.unit)).toEqual([1, 2]);
       expect(fills.map(at)).toEqual([299, 586]);
-      // Not across a unit a page break cuts: after it nothing is known.
+      // Not across a row a page break cuts: where Chrome cuts it is not known.
+      const row = document.createElement("tr");
       const cut = units.map((unit, i) =>
-        i === 2 ? { ...unit, fluid: true } : unit
+        i === 2 ? { ...unit, fluid: true, row } : unit
       );
       expect(
         flowBreakFills(cut, 4, { ...layout, page: 1000 }).map((f) => f.unit)
       ).toEqual([]);
-      // Not printed: Chrome prints narrow columns a line longer than measured, and the space
-      // pushed items over (no break-fill rules, user's invoice MMS/IN/26-27/082).
-      const printed = stretchPrintRules(units, 4, layout, 1, 16);
-      expect(printed).not.toContain("ec-break-fill");
+      // Text cut by a break (it breaks between lines, never lower): the fills go on after it.
+      const text = units.map((unit, i) =>
+        i === 0 ? { ...unit, bottom: 1200, fluid: true, line: 20 } : unit
+      );
+      expect(
+        flowBreakFills(text, 4, { ...layout, page: 1000 }).length
+      ).toBeGreaterThan(0);
+      // Printed only with the wider measure, and only where both measures agree on the pages.
+      expect(stretchPrintRules(units, 4, layout, 1, 16)).not.toContain(
+        "data-ec-break"
+      );
+      const printed = stretchPrintRules(
+        units,
+        4,
+        layout,
+        1,
+        16,
+        undefined,
+        units
+      );
+      expect(printed).toContain('tr[data-ec-break="1"]');
+      // The wider measure moves item 1 to page 2 on a 1000 px page: none there for it.
+      const wider = units.map((unit, i) =>
+        i === 1 ? { ...unit, bottom: 1001 } : unit
+      );
+      const forPage = (rules: string) =>
+        rules
+          .split("\n")
+          .filter((rule) => {
+            const [, from, to] =
+              /min-height: (\d+)px\) and \(max-height: ([\d.]+)px/.exec(rule) ||
+              [];
+            return Number(from) <= 1000 && Number(to) >= 1000;
+          })
+          .join("");
+      expect(forPage(printed)).toContain('tr[data-ec-break="1"]');
+      expect(
+        forPage(stretchPrintRules(units, 4, layout, 1, 16, undefined, wider))
+      ).not.toContain('tr[data-ec-break="1"]');
     });
 
     it("zeroes a browser print's top and bottom page margins, and only for its run", () => {
