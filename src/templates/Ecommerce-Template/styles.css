@@ -1822,9 +1822,12 @@
  * the two meet on a single line.
  */
 @media print {
-  /* Chrome prints the 0.5 px rule as a whole pixel: a 1 px overlap puts both on one line. */
+  /* Chrome prints the 0.5 px rule as a whole pixel: a 1 px overlap puts both on one line,
+     a pixel of the page as laid out, whatever its zoom (at text scale 0.8 a -1 px overlap was
+     0.8 px and the two rules printed one under the other, a double line above TOTAL: user,
+     5 Nov 2026, quotation QUO10129). */
   .ec-items[data-ec-totals-split] {
-    margin-top: -1px;
+    margin-top: calc(-1px / var(--ec-print-zoom, 1));
   }
 
   /* One solid ground under the totals: painted cell by cell, the hairline seams between their
