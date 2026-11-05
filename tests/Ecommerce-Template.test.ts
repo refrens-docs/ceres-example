@@ -1444,7 +1444,7 @@ describe("Ecommerce template — files and CSS", () => {
 
   it("puts the item table and the totals under it on one rule in print", () => {
     expect(css).toMatch(
-      /\.ec-items\[data-ec-totals-split\] \{\s*margin-top: -1px;/
+      /\.ec-items\[data-ec-totals-split\] \{\s*margin-top: calc\(-1px \/ var\(--ec-print-zoom, 1\)\);/
     );
   });
 
