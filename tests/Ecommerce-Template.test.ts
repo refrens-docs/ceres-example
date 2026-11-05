@@ -511,6 +511,9 @@ describe("Ecommerce template — settings and data", () => {
     expect(once).not.toContain("ec-footer-fixed");
     expect(once).toContain('data-ceres-page-policy="first"');
     expect(once).toContain('data-ceres-page-policy="last"');
+    // The PDF service prints its "electronically generated" line on every unsigned page even
+    // then (real PDF, 5 Nov: two lines), so the template prints no copy of its own.
+    expect(once).not.toContain("electronically generated");
   });
 
   it("keeps the footer on every printed page when Long PDF is on", () => {

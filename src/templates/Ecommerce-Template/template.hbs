@@ -77,9 +77,6 @@
         </tr>
         {{#if view.serviceFooter}}{{#if @root.invoice.letterHeadFooter}}<tr class="ec-stamp-room is-bottom" aria-hidden="true"><td><img class="ec-stamp-image" src="{{@root.invoice.letterHeadFooter}}" alt="" /></td></tr>{{/if}}{{/if}}
     {{/if}}
-    {{#if view.ownSignatureNote}}
-        <tr class="ec-signature-note"><td><p>This is an electronically generated document, no signature is required.</p></td></tr>
-    {{/if}}
       <tr class="ec-page-margin" aria-hidden="true"><td></td></tr>
     </tfoot>
     <tbody>

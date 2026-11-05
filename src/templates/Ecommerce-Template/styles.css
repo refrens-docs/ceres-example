@@ -1790,27 +1790,6 @@
     height: calc(var(--ec-mark-room) / var(--ec-mark-shrink));
   }
 
-  /* The PDF service's own "electronically generated" line where it leaves its footer out
-     (footer on the last page only): centred at the foot of every page, 10 px (helpers.ts
-     ownSignatureNote). */
-  body[class~="isDibella"] .ec-doc:not(.is-pageless) .ec-page-frame > * > tr.ec-signature-note {
-    display: table-row;
-  }
-
-  .ec-page-frame > * > tr.ec-signature-note > td {
-    padding: 0;
-    border: 0;
-  }
-
-  .ec-page-frame > * > tr.ec-signature-note > td > p {
-    margin: 0;
-    padding-top: 12px;
-    color: var(--ec-ink);
-    font-size: calc(10px * var(--ec-text-scale, 1));
-    line-height: 1.4;
-    text-align: center;
-  }
-
   /* A group's Sub total closing the item list stays with the last item: the stretch space goes
      above it, under the item (user, 2026-11-02: the summary rows never stretch). */
   .ec-items tr + .ec-group-total-row {
@@ -1818,8 +1797,8 @@
   }
 }
 
-/* The stamp room and the signature note print in Refrens' PDF only (print rules above). */
-.ec-page-frame > * > tr:is(.ec-stamp-room, .ec-signature-note) {
+/* The stamp room prints in Refrens' PDF only (print rules above). */
+.ec-page-frame > * > tr.ec-stamp-room {
   display: none;
 }
 

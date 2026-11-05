@@ -4404,21 +4404,10 @@ export const buildEcommerceView = (root: unknown) => {
     // off; the letterhead footer stays, so the template then draws it in the PDF (as Viraj).
     serviceFooter: !visibility.footerOnLastPage && !hidesServiceFooter(state),
     letterheadEveryPage: !visibility.letterHeadOnFirstPage,
-    /*
-     * "This is an electronically generated document, no signature is required." Refrens' PDF
-     * service prints it at the foot of every page of an unsigned document, in its own page
-     * footer, which it leaves out for a custom template when it stamps no band at all
-     * (letterhead on the first page and footer on the last page only; with an every-page
-     * letterhead it draws its band and the line in it: two lines, user 2026-11-03) (user, 2026-11-03, as the Professional template): the template prints it then (not
-     * on a Long PDF, where the service still prints it); "Hide footer" drops it.
-     */
-    ownSignatureNote:
-      Boolean(visibility.footerOnLastPage) &&
-      Boolean(visibility.letterHeadOnFirstPage) &&
-      !options.pageless &&
-      ["", "NONE"].includes(text(invoice.signatureMethod).toUpperCase()) &&
-      !text(invoice.signature) &&
-      !hidesServiceFooter(state),
+    // "This is an electronically generated document, no signature is required." is the PDF
+    // service's own line: it prints it on every page of an unsigned document whatever the
+    // letterhead and footer settings (real PDF MMS/IN/26-27/082, 5 Nov), so the template never
+    // prints a copy (user, 2026-11-05: twice, keep the real one).
     pageless: options.pageless,
     // A Long PDF is one page as tall as its content: there is no page to stretch the table to.
     print: options.pageless ? { ...print, stretchTable: false } : print,
