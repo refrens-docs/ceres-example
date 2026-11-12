@@ -399,6 +399,9 @@
         "fxReturnType": {
           "type": "string"
         },
+        "isCessColumn": {
+          "type": "boolean"
+        },
         "isHidden": {
           "type": "boolean"
         },
@@ -406,6 +409,13 @@
           "type": "string"
         },
         "label": {
+          "type": "string"
+        },
+        "semanticType": {
+          "enum": [
+            "percentage",
+            "currency"
+          ],
           "type": "string"
         },
         "summarise": {
@@ -624,6 +634,9 @@
         "copy": {
           "type": "string"
         },
+        "countryOfSupply": {
+          "type": "string"
+        },
         "creditDiscount": {
           "type": "number"
         },
@@ -809,6 +822,13 @@
         "hideHashInDocumentNumber": {
           "type": "boolean"
         },
+        "hideNotes": {
+          "type": [
+            "boolean",
+            "string",
+            "number"
+          ]
+        },
         "hideTaxes": {
           "type": "boolean"
         },
@@ -965,6 +985,13 @@
         "notes": {
           "type": "string"
         },
+        "notesShowInInvoice": {
+          "type": [
+            "boolean",
+            "string",
+            "number"
+          ]
+        },
         "owner": {
           "$ref": "#/definitions/BusinessData"
         },
@@ -1080,11 +1107,32 @@
         "showBranding": {
           "type": "boolean"
         },
+        "showDueAmount": {
+          "type": [
+            "boolean",
+            "string",
+            "number"
+          ]
+        },
         "showExpenseNumber": {
           "type": "boolean"
         },
         "showItemNameFullWidth": {
           "type": "boolean"
+        },
+        "showNotes": {
+          "type": [
+            "boolean",
+            "string",
+            "number"
+          ]
+        },
+        "showNotesInInvoice": {
+          "type": [
+            "boolean",
+            "string",
+            "number"
+          ]
         },
         "showPaymentsTable": {
           "type": "boolean"
@@ -1423,6 +1471,9 @@
         "fxReturnType": {
           "type": "string"
         },
+        "isCessColumn": {
+          "type": "boolean"
+        },
         "isHidden": {
           "type": "boolean"
         },
@@ -1430,6 +1481,13 @@
           "type": "string"
         },
         "label": {
+          "type": "string"
+        },
+        "semanticType": {
+          "enum": [
+            "percentage",
+            "currency"
+          ],
           "type": "string"
         },
         "summarise": {
@@ -1562,6 +1620,9 @@
         "footerOnLastPage": {
           "type": "boolean"
         },
+        "hideCurrencyCode": {
+          "type": "boolean"
+        },
         "isDescriptionFullWidth": {
           "type": "boolean"
         },
@@ -1589,6 +1650,12 @@
         "showCgstSgst": {
           "type": "boolean"
         },
+        "showCountryOfSupply": {
+          "type": "boolean"
+        },
+        "showDueAmount": {
+          "type": "boolean"
+        },
         "showHsn": {
           "type": "boolean"
         },
@@ -1607,6 +1674,9 @@
         "showLogistics": {
           "type": "boolean"
         },
+        "showPlaceOfSupply": {
+          "type": "boolean"
+        },
         "showSku": {
           "type": "boolean"
         },
@@ -1622,10 +1692,25 @@
         "showTaxTable": {
           "type": "boolean"
         },
+        "showTaxes": {
+          "type": "boolean"
+        },
         "showThumbnailAsColumn": {
           "type": "boolean"
         },
+        "showTotals": {
+          "type": "boolean"
+        },
+        "showTotalsRow": {
+          "type": "boolean"
+        },
+        "showUnitAsColumn": {
+          "type": "boolean"
+        },
         "showUnitInName": {
+          "type": "boolean"
+        },
+        "showUnitInQuantity": {
           "type": "boolean"
         },
         "showUpi": {
@@ -1656,6 +1741,7 @@
         "contactStrip",
         "showIgst",
         "showCgstSgst",
+        "showTaxes",
         "isUtgst",
         "showTaxTable",
         "showHsnSummary",
@@ -1667,12 +1753,20 @@
         "showInlineClassification",
         "showSkuInName",
         "showUnitInName",
+        "showUnitInQuantity",
+        "showUnitAsColumn",
         "upiShrink",
         "letterHeadOnFirstPage",
         "footerOnLastPage",
         "itemNameFullWidth",
         "isDescriptionFullWidth",
+        "showTotals",
+        "showTotalsRow",
+        "showDueAmount",
+        "hideCurrencyCode",
         "showStatusTagInPrint",
+        "showCountryOfSupply",
+        "showPlaceOfSupply",
         "visibleColumnCount"
       ],
       "type": "object"

@@ -130,11 +130,12 @@ function loadDependencies(): Promise<void> {
   if (dependenciesPromise) return dependenciesPromise;
 
   dependenciesPromise = loadVendorManifest().then((manifest) => {
-    const dp = manifest["dompurify"];
+    const dp = manifest.dompurify;
     const tu = manifest["toastui-editor"];
 
     if (!dp?.js) throw new Error("Vendor manifest missing dompurify entry");
-    if (!tu?.js) throw new Error("Vendor manifest missing toastui-editor entry");
+    if (!tu?.js)
+      throw new Error("Vendor manifest missing toastui-editor entry");
 
     if (tu.css) loadCSS(`./${tu.css}`);
 
@@ -152,8 +153,8 @@ function loadDependencies(): Promise<void> {
  */
 function loadFallbackDependency(): Promise<void> {
   return loadVendorManifest().then((manifest) => {
-    const dp = manifest["dompurify"];
-    const mk = manifest["marked"];
+    const dp = manifest.dompurify;
+    const mk = manifest.marked;
 
     if (!dp?.js) throw new Error("Vendor manifest missing dompurify entry");
     if (!mk?.js) throw new Error("Vendor manifest missing marked entry");
@@ -257,6 +258,12 @@ function initViewer(
   try {
     const Viewer = toastui.Editor;
 
+    // Upgrading a fallback render: clear the plain text and its pre-wrap first.
+    if (container.dataset.mvInitialized === "fallback") {
+      container.replaceChildren();
+      container.style.removeProperty("white-space");
+    }
+
     new Viewer({
       el: container,
       initialValue: payload.sanitizedMarkdown,
@@ -306,10 +313,13 @@ function processWidgets(): void {
       "script[data-md-viewer]"
     ) as HTMLScriptElement | null;
 
-    if (!script) return;
-
-    const encoded = script.getAttribute("data-payload");
+    // The fallback render replaces the widget's content, this script included, so the payload
+    // is kept on the widget: the viewer can still take over once ToastUI has loaded.
+    const encoded =
+      script?.getAttribute("data-payload") ||
+      widget.getAttribute("data-mv-payload");
     if (!encoded) return;
+    widget.setAttribute("data-mv-payload", encoded);
 
     let payload: MarkdownViewerPayload;
 
@@ -417,6 +427,6 @@ try {
   console.error("MarkdownViewer registration failed:", error);
 }
 
-export { };
+export {};
 
 /* eslint-enable @typescript-eslint/ban-ts-comment, no-new, consistent-return */

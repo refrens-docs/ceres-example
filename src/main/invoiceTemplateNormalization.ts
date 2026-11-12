@@ -14,7 +14,9 @@ export interface InvoiceTemplateColumn {
   isHidden: boolean;
   dataType: string;
   fxReturnType: string;
+  isCessColumn?: boolean;
   summarise: boolean;
+  semanticType?: "percentage" | "currency";
 }
 
 export interface InvoiceTemplateVisibility {
@@ -29,6 +31,7 @@ export interface InvoiceTemplateVisibility {
   contactStrip: boolean;
   showIgst: boolean;
   showCgstSgst: boolean;
+  showTaxes: boolean;
   isUtgst: boolean;
   showTaxTable: boolean;
   showHsnSummary: boolean;
@@ -40,12 +43,20 @@ export interface InvoiceTemplateVisibility {
   showInlineClassification: boolean;
   showSkuInName: boolean;
   showUnitInName: boolean;
+  showUnitInQuantity: boolean;
+  showUnitAsColumn: boolean;
   upiShrink: boolean;
   letterHeadOnFirstPage: boolean;
   footerOnLastPage: boolean;
   itemNameFullWidth: boolean;
   isDescriptionFullWidth: boolean;
+  showTotals: boolean;
+  showTotalsRow: boolean;
+  showDueAmount: boolean;
+  hideCurrencyCode: boolean;
   showStatusTagInPrint: boolean;
+  showCountryOfSupply: boolean;
+  showPlaceOfSupply: boolean;
   visibleColumnCount: number;
 }
 
@@ -99,6 +110,48 @@ const COLUMN_CLASS_MAP: Record<string, string> = {
   cessamount: "col-cess",
 };
 
+const INDIA_GST_STATE_NAMES: Record<string, string> = {
+  "01": "Jammu and Kashmir",
+  "02": "Himachal Pradesh",
+  "03": "Punjab",
+  "04": "Chandigarh",
+  "05": "Uttarakhand",
+  "06": "Haryana",
+  "07": "Delhi",
+  "08": "Rajasthan",
+  "09": "Uttar Pradesh",
+  "10": "Bihar",
+  "11": "Sikkim",
+  "12": "Arunachal Pradesh",
+  "13": "Nagaland",
+  "14": "Manipur",
+  "15": "Mizoram",
+  "16": "Tripura",
+  "17": "Meghalaya",
+  "18": "Assam",
+  "19": "West Bengal",
+  "20": "Jharkhand",
+  "21": "Odisha",
+  "22": "Chhattisgarh",
+  "23": "Madhya Pradesh",
+  "24": "Gujarat",
+  "26": "Dadra and Nagar Haveli and Daman and Diu",
+  "27": "Maharashtra",
+  "29": "Karnataka",
+  "30": "Goa",
+  "31": "Lakshadweep",
+  "32": "Kerala",
+  "33": "Tamil Nadu",
+  "34": "Puducherry",
+  "35": "Andaman and Nicobar Islands",
+  "36": "Telangana",
+  "37": "Andhra Pradesh",
+  "38": "Ladakh",
+  "97": "Other Territory",
+  "99": "Centre Jurisdiction",
+};
+
+
 const asRecord = (value: unknown): UnknownRecord => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -151,6 +204,40 @@ const toNumberValue = (value: unknown, fallback = 0): number => {
   return fallback;
 };
 
+const toOptionalBoolean = (value: unknown): boolean | undefined => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "y", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "n", "off", ""].includes(normalized)) {
+      return false;
+    }
+  }
+  return undefined;
+};
+
+const getConfiguredFieldVisibility = (
+  invoice: FlattenedInvoicePayload,
+  key: string
+): boolean | undefined => {
+  const invoiceValueProps = asRecord(invoice.invoiceValueProps);
+  const matchingKey = Object.keys(invoiceValueProps).find(
+    (candidate) => candidate.toLowerCase() === key.toLowerCase()
+  );
+  if (!matchingKey) return undefined;
+
+  const setting = invoiceValueProps[matchingKey];
+  const directValue = toOptionalBoolean(setting);
+  if (directValue !== undefined) return directValue;
+
+  const settingRecord = asRecord(setting);
+  return (
+    toOptionalBoolean(settingRecord.visible) ??
+    toOptionalBoolean(settingRecord.showInInvoice)
+  );
+};
+
 const toNonEmptyString = (value: unknown): string | null => {
   const normalized = toStringValue(value);
   return normalized.length > 0 ? normalized : null;
@@ -159,6 +246,84 @@ const toNonEmptyString = (value: unknown): string | null => {
 const hasValue = (value: unknown): boolean => {
   const str = toStringValue(value);
   return str.length > 0 && str !== "null" && str !== "undefined";
+};
+
+const resolvePopulatedFieldVisibility = (
+  invoice: FlattenedInvoicePayload,
+  advanceOptions: UnknownRecord,
+  field: "countryOfSupply" | "placeOfSupply"
+): boolean => {
+  if (!hasValue(invoice[field])) return false;
+
+  const suffix =
+    field === "countryOfSupply" ? "CountryOfSupply" : "PlaceOfSupply";
+  const invoiceRecord = asRecord(invoice);
+  const configured = getConfiguredFieldVisibility(invoice, field);
+  const shown = toOptionalBoolean(
+    advanceOptions[`show${suffix}`] ?? invoiceRecord[`show${suffix}`]
+  );
+  const hidden = toOptionalBoolean(
+    advanceOptions[`hide${suffix}`] ?? invoiceRecord[`hide${suffix}`]
+  );
+
+  return configured ?? shown ?? (hidden === undefined ? true : !hidden);
+};
+
+const normalizeGstCode = (value: unknown): string => {
+  const match = toStringValue(value).match(/^0?(\d{1,2})(?:\D|$)/);
+  return match ? match[1].padStart(2, "0") : "";
+};
+
+const stateNameFromValue = (value: unknown): string => {
+  const normalized = toStringValue(value);
+  if (!normalized || /^\d{1,2}$/.test(normalized)) return "";
+
+  const prefixedName = normalized.match(/^0?\d{1,2}\s*[-:]\s*(.+)$/);
+  return toStringValue(prefixedName?.[1], normalized);
+};
+
+export const normalizeCountryOfSupply = (
+  invoice: FlattenedInvoicePayload
+): string =>
+  toStringValue(
+    pickFirstValue(invoice.countryOfSupply, asRecord(invoice.billedTo).country)
+  );
+
+export const normalizePlaceOfSupply = (
+  invoice: FlattenedInvoicePayload
+): string => {
+  const billedTo = asRecord(invoice.billedTo);
+  const placeOfSupply = toStringValue(
+    pickFirstValue(
+      invoice.placeOfSupply,
+      invoice.pos,
+      billedTo.gstState,
+      billedTo.state,
+      billedTo.stateCode
+    )
+  );
+
+  const supplyCountry = normalizeCountryOfSupply(invoice).toUpperCase();
+  const hasGstCode = /^0?\d{1,2}(?:\D|$)/.test(placeOfSupply);
+  if (supplyCountry && supplyCountry !== "IN" && hasGstCode) {
+    const destinationPlace = [billedTo.state, billedTo.city, supplyCountry]
+      .map((value) => toStringValue(value))
+      .find((value) => value && !/^0?\d{1,2}(?:\D|$)/.test(value));
+
+    return destinationPlace || placeOfSupply;
+  }
+
+  if (!/^\d{1,2}$/.test(placeOfSupply)) return placeOfSupply;
+
+  const code = normalizeGstCode(placeOfSupply);
+  const billedToCode = normalizeGstCode(
+    pickFirstValue(billedTo.stateCode, billedTo.gstState)
+  );
+  const billedToState =
+    stateNameFromValue(billedTo.state) || stateNameFromValue(billedTo.gstState);
+
+  if (billedToCode === code && billedToState) return billedToState;
+  return INDIA_GST_STATE_NAMES[code] || placeOfSupply;
 };
 
 const getColumnClass = (key: string): string => {
@@ -338,8 +503,79 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
     ownerCountry === "MY" &&
     (hsnView === "MERGE" || (hsnView === "DEFAULT" && !allowRenderHSN));
   const showSkuInName = Boolean(advanceOptions.showSkuInInvoice);
+  const rawUnitMode = toStringValue(
+    pickFirstValue(
+      advanceOptions.unitColumn,
+      advanceOptions.unitDisplay,
+      advanceOptions.showUnit
+    ),
+    "MERGE_QUANTITY"
+  )
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_");
+  const normalizedUnitMode = rawUnitMode.replace(/_/g, "");
+  const showUnitSetting =
+    pickFirstValue(
+      advanceOptions.showUnitInInvoice,
+      advanceOptions.showUnit
+    ) === undefined
+      ? undefined
+      : Boolean(
+          pickFirstValue(
+            advanceOptions.showUnitInInvoice,
+            advanceOptions.showUnit
+          )
+        );
+  const hideUnitSetting =
+    advanceOptions.hideUnit === undefined
+      ? undefined
+      : Boolean(advanceOptions.hideUnit);
+  const unitHidden = hideUnitSetting === true || showUnitSetting === false;
+  const explicitName =
+    advanceOptions.showUnitInName === undefined
+      ? undefined
+      : Boolean(advanceOptions.showUnitInName);
+  const explicitQuantity =
+    advanceOptions.showUnitInQuantity === undefined
+      ? undefined
+      : Boolean(advanceOptions.showUnitInQuantity);
+  const explicitColumn =
+    pickFirstValue(
+      advanceOptions.showUnitAsColumn,
+      advanceOptions.showUnitColumn
+    ) === undefined
+      ? undefined
+      : Boolean(
+          pickFirstValue(
+            advanceOptions.showUnitAsColumn,
+            advanceOptions.showUnitColumn
+          )
+        );
   const showUnitInName =
-    toStringValue(advanceOptions.unitColumn, "MERGE_QUANTITY") === "MERGE_NAME";
+    !unitHidden &&
+    (explicitName === true ||
+      (explicitQuantity !== true &&
+        explicitColumn !== true &&
+        explicitName !== false &&
+        normalizedUnitMode.includes("NAME")));
+  const showUnitAsColumn =
+    !unitHidden &&
+    !showUnitInName &&
+    (explicitColumn === true ||
+      (explicitColumn !== false &&
+        (normalizedUnitMode.includes("SEPARATE") ||
+          normalizedUnitMode.includes("COLUMN"))));
+  const showUnitInQuantity =
+    !unitHidden &&
+    !showUnitInName &&
+    !showUnitAsColumn &&
+    explicitQuantity !== false &&
+    (explicitQuantity === true ||
+      normalizedUnitMode.includes("QUANTITY") ||
+      normalizedUnitMode.includes("QTY") ||
+      !["HIDE", "HIDDEN", "NONE", "DONOTSHOW", "OFF"].includes(
+        normalizedUnitMode
+      ));
 
   // Structural only — no `hideTaxes` and no export suppression. The item-table columns are
   // a property of the document's shape, so they must not move when a user toggles a
@@ -366,6 +602,8 @@ const getTemplateLayoutContext = (invoice: FlattenedInvoicePayload) => {
     showInlineClassification,
     showSkuInName,
     showUnitInName,
+    showUnitInQuantity,
+    showUnitAsColumn,
   };
 };
 
@@ -493,6 +731,11 @@ export const normalizeInvoiceTemplateState = (
   // mapped.visibility and headers on mapped.columns can never disagree.
   const { showIgst, showCgstSgst } = context.taxVisibility;
 
+   const hideTaxes = Boolean(context.advanceOptions.hideTaxes);
+   const showTotals = !Boolean(context.advanceOptions.hideTotals);
+   const showTotalsRow =
+     showTotals && Boolean(invoice.showTotalsRow ?? true);
+
   return {
     invoice,
     advanceOptions: context.advanceOptions,
@@ -525,6 +768,7 @@ export const normalizeInvoiceTemplateState = (
         contactStrip: hasValue(contact.email) || hasValue(contact.phone),
         showIgst,
         showCgstSgst,
+        showTaxes: !hideTaxes,
         isUtgst: Boolean(pickFirstValue(invoice.utgst, invoice.isUtgst)),
         showTaxTable,
         showHsnSummary,
@@ -538,6 +782,8 @@ export const normalizeInvoiceTemplateState = (
         showInlineClassification: context.showInlineClassification,
         showSkuInName: context.showSkuInName,
         showUnitInName: context.showUnitInName,
+        showUnitInQuantity: context.showUnitInQuantity,
+        showUnitAsColumn: context.showUnitAsColumn,
         upiShrink: Boolean(asRecord(invoice.template).upiShrink),
         letterHeadOnFirstPage: Boolean(
           context.pdfOptions.letterHeadOnFirstPage
@@ -555,7 +801,23 @@ export const normalizeInvoiceTemplateState = (
             invoice.isDescriptionFullWidth
           )
         ),
+        showTotals,
+        showTotalsRow,
+        showDueAmount: Boolean(invoice.showDueAmount),
+        hideCurrencyCode: Boolean(
+          context.advanceOptions.hideCurrencyCode
+        ),
         showStatusTagInPrint: billType === "INVOICE" && status === "PAID",
+        showCountryOfSupply: resolvePopulatedFieldVisibility(
+          invoice,
+          context.advanceOptions,
+          "countryOfSupply"
+        ),
+        showPlaceOfSupply: resolvePopulatedFieldVisibility(
+          invoice,
+          context.advanceOptions,
+          "placeOfSupply"
+        ),
         visibleColumnCount:
           columns.filter((column) => !column.isHidden).length + 1,
       },
